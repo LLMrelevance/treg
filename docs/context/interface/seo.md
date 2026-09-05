@@ -83,6 +83,18 @@ The scope is **`_page()` callers**, not "every server-rendered page". `_legal_pa
 render their own HTML and remain uninstrumented — none is an ad destination. `/tutorial` is likewise
 out of scope; it is slated for removal. The `.md` variants are `text/plain` and cannot run scripts.
 
+That scope left a third class uncovered, and the same failure repeated on it (2026-09-06).
+`/people-search`, `/grokbot` and `/fable` are standalone hand-written HTML behind their own routes:
+off the shell, so `_page()` does not reach them, and absent from the hand-kept list in
+`test_every_public_landing_surface_loads_the_capture_script`, so nothing failed. All three are ad
+destinations — the Demand Gen campaign pointed S1, S2 and S3 at `/people-search` — and for three
+days 4,892 clicks landed on a page that could not capture a click id. The DB holds no GCLID from
+that window at all, which reads identically to an audience that simply does not convert: the
+measurement failure and the outcome it was meant to measure are indistinguishable from the numbers.
+All three now carry the tag and all three are in that test's list. **A new standalone landing page
+is only done when its path is in that list**; a page that is an ad destination and is neither a
+`_page()` caller nor listed there captures nothing, and says nothing about it.
+
 `/sitetrack.js` is deliberately NOT in the shell. It already shipped more widely than `adtrack.js`
 (it is on `tutorial.html` too), but it can load PostHog with pageview/session-recording config while
 `web/privacy.html` promises no analytics or session-replay scripts and lists no such processor.

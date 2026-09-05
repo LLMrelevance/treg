@@ -707,10 +707,22 @@ async def test_every_public_landing_surface_loads_the_capture_script(clients):
     organic visitor who signed up from it) was silently unattributed while the use-case pages worked.
     Asserting the whole set here means the next page added without the tag fails a test instead of
     quietly capturing nothing.
+
+    This list is the weak point, and it has already failed once: `/people-search`, `/grokbot` and
+    `/fable` each ship as their own hand-written HTML behind their own route, so they miss BOTH
+    guards — `_page()`, which carries the tag for everything off the shared shell, and this list,
+    which only holds what someone remembered to add. A Demand Gen campaign then ran three ad groups
+    into `/people-search` for three days: 4,892 clicks, no `treg_ad` cookie, no `org.ad_gclid`, and
+    `adsconv.queue()` no-opping by design — zero conversions uploaded, nothing in the logs, and no
+    way to tell a landing page that cannot convert from an audience that will not. When you add a
+    standalone landing page, add its path HERE in the same commit.
     """
     surfaces = [
         "/",
         "/resources",
+        "/people-search",
+        "/grokbot",
+        "/fable",
         "/use-cases/seo-data-for-ai-agents",
         "/use-cases/lead-enrichment-for-ai-agents",
         "/use-cases/social-trend-research-for-ai-agents",
