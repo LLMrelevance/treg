@@ -1872,6 +1872,45 @@ EXA = OAuthProvider(
     probe_json={"urls": ["https://example.com"], "text": {"maxCharacters": 1}},
 )
 
+CLORO = OAuthProvider(
+    service="cloro",
+    display_name="cloro",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="sk_live_…",
+    # cloro reads the key from Authorization. It accepts "Bearer <key>", "ApiKey <key>" and the bare
+    # key; Bearer is the documented form, so that is the one treg sends. Header, so the key never
+    # lands in a logged URL. Keys are `sk_live_` / `sk_test_` + 32 hex characters.
+    setup_url="https://dashboard.cloro.dev",
+    setup_action_label="Get your cloro API key",
+    setup_steps=(
+        "Sign in to the cloro dashboard and open API keys.",
+        "Create a key and copy it — the full key is shown only once.",
+    ),
+    setup_note=(
+        "Every monitor call spends credits from your cloro balance (Google 5, AI Mode / Gemini / "
+        "Grok / Perplexity 6, ChatGPT / Copilot 7, each including the +2 sync surcharge). The free "
+        "plan grants 500 credits a month. Connecting spends nothing — the probe is the free credit-"
+        "balance route."
+    ),
+    auth_uri="", token_uri="",
+    scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="SEO",
+    summary=(
+        "Ask ChatGPT, Gemini, Copilot, Perplexity, Grok and Google AI Mode a prompt from any country "
+        "and read the answer, its cited sources and its shopping cards as structured data — plus "
+        "Google Search and Google News SERPs."
+    ),
+    base_url="https://api.cloro.dev",
+    docs_url="https://cloro.dev/docs/api-reference/introduction",
+    # Credit balance: free, charges nothing, and separates a bad key from a good one distinctly.
+    # A well-formed but unknown key answers 401 INVALID_OR_EXPIRED_API_KEY, a malformed one 401
+    # INVALID_API_KEY_FORMAT, and no header at all 401 MISSING_API_KEY (all verified live
+    # 2026-09-05). A valid key answers 200 with the balance.
+    probe_path="/v1/credits",
+)
+
 
 # ---- more Enrichment API-key providers (2026-08 category expansion) ---------------------------
 # Eight providers added together to deepen Enrichment: company/people enrichment with prospecting
@@ -2676,7 +2715,7 @@ REGISTRY: dict[str, OAuthProvider] = {
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,
         SCRAPECREATORS,
         # SEO API-key providers
-        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA,
+        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA, CLORO,
         # more Enrichment API-key providers
         LUSHA, CORESIGNAL, DIFFBOT, THECOMPANIESAPI, LEADMAGIC, FIBER_AI, CRUSTDATA, AVIATO,
         COMPANYENRICH, OCEANIO, TOMBA, PREDICTLEADS, FINDYMAIL, BRANDDEV, ICYPEAS, LEADSFORGE,
