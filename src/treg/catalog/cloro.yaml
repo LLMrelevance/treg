@@ -4,7 +4,7 @@ source:
   openapi: https://cloro.dev/docs/api-reference/openapi.json
   llms: https://cloro.dev/docs/llms.txt
   curated: '2026-09-05'
-limits: "billed per credit from a monthly plan allowance; free plan grants 500 credits/month. Credits are charged only on a successful extraction — a failed request costs nothing. Rate and concurrency limits are per plan and reported in X-RateLimit-* response headers."
+limits: "billed per credit from a monthly plan allowance; free plan grants 500 credits/month. Credits are charged only on a successful extraction — a failed request costs nothing. Every billed response carries the exact charge in an X-Credits-Charged header and the running balance in X-Credits-Remaining, so a caller can reconcile per call without a second request. Rate and concurrency limits are per plan and reported in X-RateLimit-* response headers."
 pricing_url: https://cloro.dev/pricing
 
 endpoints:
