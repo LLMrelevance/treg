@@ -1889,17 +1889,17 @@ CLORO = OAuthProvider(
     ),
     setup_note=(
         "Every monitor call spends credits from your cloro balance (Google 5, AI Mode / Gemini / "
-        "Grok / Perplexity 6, ChatGPT / Copilot 7, each including the +2 sync surcharge). The free "
-        "plan grants 500 credits a month. Connecting spends nothing — the probe is the free credit-"
-        "balance route."
+        "Perplexity 6, ChatGPT / Copilot 7, each including the +2 sync surcharge; optional "
+        "include flags and US state targeting add more). The free plan grants 500 credits a "
+        "month. Connecting spends nothing — the probe is the free credit-balance route."
     ),
     auth_uri="", token_uri="",
     scopes={},
     client_id_setting="", client_secret_setting="",
     category="SEO",
     summary=(
-        "Ask ChatGPT, Gemini, Copilot, Perplexity, Grok and Google AI Mode a prompt from any country "
-        "and read the answer, its cited sources and its shopping cards as structured data — plus "
+        "Ask ChatGPT, Gemini, Copilot, Perplexity and Google AI Mode a prompt from any country and "
+        "read the answer, its cited sources and its shopping cards as structured data — plus "
         "Google Search and Google News SERPs."
     ),
     base_url="https://api.cloro.dev",
