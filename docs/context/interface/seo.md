@@ -91,9 +91,17 @@ destinations — the Demand Gen campaign pointed S1, S2 and S3 at `/people-searc
 days 4,892 clicks landed on a page that could not capture a click id. The DB holds no GCLID from
 that window at all, which reads identically to an audience that simply does not convert: the
 measurement failure and the outcome it was meant to measure are indistinguishable from the numbers.
-All three now carry the tag and all three are in that test's list. **A new standalone landing page
-is only done when its path is in that list**; a page that is an ad destination and is neither a
-`_page()` caller nor listed there captures nothing, and says nothing about it.
+All three now carry the tag, and the guard no longer depends on anyone remembering:
+`test_every_public_html_route_carries_the_capture_script` sweeps every flat GET route on the app,
+keeps whatever answers `200 text/html`, and requires the tag on all of it. Adding a route that
+serves HTML puts it in scope automatically — the sweep is verified to catch both a landing page
+that loses the tag and a brand-new route that never had one. Parameterised routes stay out of
+scope because they all render through `_page()`, which carries the tag structurally.
+
+The default is therefore inverted: a public HTML page carries capture unless `CAPTURE_EXEMPT` names
+it with a reason (legal and support pages, `/tutorial`, the connector setup page, FastAPI's Swagger
+shell, the superadmin panel). The sweep also fails on a stale exemption, so the list cannot outlive
+the pages it excuses.
 
 `/sitetrack.js` is deliberately NOT in the shell. It already shipped more widely than `adtrack.js`
 (it is on `tutorial.html` too), but it can load PostHog with pageview/session-recording config while

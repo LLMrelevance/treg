@@ -44,9 +44,12 @@ read-side Ads catalog calls (`oauth_providers.GOOGLE_ADS`), a separate credentia
    Which pages load `adtrack.js` is the whole feature's blast radius and it has been wrong twice —
    once for everything off `_page()` (2026-08-30), once for the standalone landing pages
    `/people-search`, `/grokbot` and `/fable` (2026-09-06, after 4,892 Demand Gen clicks landed on
-   the first of them). `test_every_public_landing_surface_loads_the_capture_script` in
-   `tests/test_adsconv.py` is the guard, and it is a hand-kept list: add every new ad destination
-   to it in the same commit. See `interface/seo.md` for the page-by-page scope.
+   the first of them). Both escapes were the same shape: a guard that only covered the pages
+   someone had listed. `tests/test_adsconv.py` now holds two — the named ad destinations in
+   `test_every_public_landing_surface_loads_the_capture_script`, and
+   `test_every_public_html_route_carries_the_capture_script`, which sweeps every flat GET route and
+   requires the tag on anything answering `200 text/html`, so a new page is in scope the moment its
+   route exists. See `interface/seo.md` for the page-by-page scope.
 2. **Store** (`application.signup._ad_attribution_from`, read at both signup doors: `register_user` (`POST /users`)
    and `create_org` (`POST /orgs`), since a browser visitor who clicked an ad can land on either).
    The cookie is decoded and persisted onto the new `Org`: `ad_gclid` (the historical column name,
