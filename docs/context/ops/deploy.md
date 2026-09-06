@@ -108,8 +108,19 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
   typo must neither stop the server booting nor pass silently and leave the operator believing they
   resized something. The range check is not pedantry — SQLAlchemy reads `pool_size=0` and
   `max_overflow=-1` as **unlimited**, and `pool_size=0` sets `_max_overflow=-1` too, so `-1` typed
-  to mean "no overflow" would uncap connections against the ~100 ceiling: the 2026-08-15 outage,
-  entered through the knob added to prevent outages.
+  to mean "no overflow" would uncap connections against the ~100 ceiling (`max_connections` on the
+  1c-2g plan reads **103**): the 2026-08-15 outage, entered through the knob added to prevent
+  outages.
+
+  **The live value outlives the code, so read it before trusting `POOL_SPECS`.** The reference
+  deployment ran `admin.pool_size=2,background.pool_size=4` from before the 2026-09-04 bulkhead
+  work until 2026-09-05 — pinning both minor pools BELOW the defaults that work had just raised
+  (`admin` to 3, `background` to the derived 13), including the exact `admin=2` whose post-mortem
+  is two bullets up. A `background` of 4 against 7 consumers needing 13 does not 503; it silently
+  drops audit rows. The knob being a dashboard edit rather than a deploy is what makes it useful
+  mid-incident and what lets it survive the fix. Today it reads
+  `api.pool_size=10,admin.pool_size=2,background.pool_size=4`; the two stale entries are still
+  there deliberately, so that the `api` change could be observed on its own.
 - **No statement timeout yet.** The pools bound how many connections a class of work can hold, not
   how long a query may run; `alembic/env.py` still has the only timeouts in the app. Adding per-pool
   `statement_timeout` is deliberately a SEPARATE change: it is a behavior change on every query,
@@ -120,10 +131,22 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
 - **Other Postgres pool hygiene:** `pool_pre_ping=True`, `pool_recycle=300`, and `pool_timeout=5` on
   every pool. A request that gets no slot in 5 s is answered `503 {"treg_saturated": true}` with
   `Retry-After: 2` (`bootstrap_handlers._pool_saturated`) instead of SQLAlchemy's default 30 s wait
-  and an anonymous 500. The API's 15 slots are plenty because a `/call/` holds no connection during
-  its upstream round trip — `call_tool` commits before `relay()`; holding one there deadlocked 15
-  concurrent calls for 30 s on 2026-08-24 (see
-  [proxy-model](../architecture/proxy-model.md) § Connection discipline).
+  and an anonymous 500. A `/call/` holds no connection during its upstream round trip —
+  `call_tool` commits before `relay()` (`require_member` commits before it returns the `Caller`, so
+  the request-scoped session is idle by then); holding one there deadlocked 15 concurrent calls for
+  30 s on 2026-08-24 (see [proxy-model](../architecture/proxy-model.md) § Connection discipline).
+- **The bulkhead isolates CONNECTIONS, not the database's CPU** — and that is why "the API's 15
+  slots are plenty" was wrong for a year. Three pools stop `admin` and `background` work from
+  taking `api`'s slots; they do nothing about the fact that all three share ONE Postgres with one
+  vCPU. A query that scans `callrecord` makes every ordinary 3 ms request query queue behind it,
+  so `api` checkouts stretch from milliseconds to seconds and 15 slots empty. Measured 2026-09-05:
+  db_pool faults ran all day (peak 714 in the 14:00 hour) while non-`/call/` routes sat at p50 3 ms
+  and only ~22 requests were in flight — an order of magnitude below what the pool arithmetic says
+  it should take, because the pool was never the constraint. The scans were: 2.94M-row / 1.68 GB
+  `callrecord` taking 80,932 sequential scans for 27 BILLION tuples, plus 1.60 BILLION tuples read
+  through `ix_callrecord_endpoint_id_id` because no index carried `created_at` (revision 0020
+  adds the pairs). **Reach for a pool size only after ruling out a scan;** raising it buys headroom
+  and hides the cause.
 - **SQLite aliases all three to one engine.** It has no pool to protect and file-level write locks
   it cannot share, so three engines against one file would only manufacture "database is locked".
   Tests therefore pin the ROUTING (which maker each module reaches for), not the isolation.
@@ -448,6 +471,27 @@ the ALTER, both instances starved, and the shared Postgres stayed wedged until a
   Postgres only). A contended
   deploy therefore FAILS CLEANLY — prod keeps serving the old code — and the right response is to
   redeploy at a quieter moment, not to raise the timeout.
+  **The one sanctioned exception is `CREATE INDEX CONCURRENTLY`, and only in its own revision.**
+  The 5 s floor exists because an `ALTER` takes `ACCESS EXCLUSIVE`: it queues behind live traffic
+  and every new query then queues behind IT — the 2026-08-15 wedge. A concurrent index build is not
+  in that class. Its `SHARE UPDATE EXCLUSIVE` conflicts with neither `SELECT` nor
+  `INSERT`/`UPDATE`/`DELETE`; it blocks no reads or writes while it builds, and a statement WAITING
+  for it holds nothing and blocks nobody. What it does contend with is **autovacuum**, which takes
+  the same lock and runs constantly on a large, write-heavy table — 0020 died on
+  `LockNotAvailableError` in 5 s against exactly that, on the first try, at 00:37 UTC. Such a
+  revision raises both timeouts inside its `autocommit_block` and restores `env.py`'s values before
+  the block ends; it must not raise them for anything else in the same revision.
+  **A killed concurrent build leaves an INVALID index** — present in `pg_class`, unusable by the
+  planner, and never repaired — so a rebuilt-by-hand `IF NOT EXISTS` silently skips it and the scan
+  it was meant to remove stays, with nothing failing. 0020's first attempt left exactly that. Such a
+  revision therefore checks `pg_index.indisvalid` per index: valid ⇒ skip, invalid ⇒ drop
+  concurrently and rebuild, absent ⇒ build.
+  **Merging a revision breaks the crons before the web deploy applies it.** The three cron services
+  auto-deploy from `main` while the web service does not, so between the merge and the pre-deploy
+  they run new code against the old schema and `verify_db` refuses them (`Database schema revision
+  N is behind this build`). It is bounded and self-correcting, and it cannot be rolled back by
+  pinning a cron to the old commit — Render refuses `deploys create --commit` on a cron job. Deploy
+  the web service IMMEDIATELY after merging a revision, or revert the merge.
 - The pools are per instance and a rolling deploy runs two: keep the SUM of `pool_size +
   max_overflow` across every entry in `POOL_SPECS` such that DOUBLE it stays under the database
   plan's connection ceiling. A guard test pins this and counts all three deliberately — splitting
