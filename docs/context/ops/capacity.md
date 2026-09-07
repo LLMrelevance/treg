@@ -52,6 +52,11 @@ aggregator on the *same* endpoint, typed 503). This fragment covers what is buil
 Scope: treg-owned platform credentials only. Tiers 1/2 (a caller's own tool or key) are never
 consulted or affected by anything here.
 
+MillionVerifier's platform slot has an acknowledged exhaustion-signature gap in
+`tests/test_capacity_overflow_routes.py::_UNRECORDED_SIGNATURE`: the supplied promotional account
+has not been exhausted. No capacity collector or overflow route is claimed. Verify the funded
+account's empty-credit response before adding a signature or enabling overflow.
+
 ## Pieces (`src/treg/domain/capacity/`)
 
 - **`collectors.py`** — the 31 providers' *free* balance/quota calls (`coroutine(client, key) →

@@ -23,6 +23,11 @@ related:
 
 # Running & deploying
 
+MillionVerifier platform calls require `TREG_PLATFORM_KEY_MILLIONVERIFIER` in the secret store
+and `millionverifier` in the existing `TREG_PLATFORM_PROVIDERS` allow-list. The listing adds
+the settings slot only; operators enable it on deployment and fund the account when its
+promotional credits run out. Teams can connect their own keys without platform configuration.
+
 ## Entry point (`__main__.py`)
 `python -m treg upgrade` runs the explicit release phase. `maintenance._upgrade_schema()` runs
 `alembic upgrade head` for an empty or stamped database. A non-empty unstamped database is now refused

@@ -1256,6 +1256,35 @@ HUNTER = OAuthProvider(
     probe_path="/account",  # free — consumes no search/verification/enrichment credits
 )
 
+MILLIONVERIFIER = OAuthProvider(
+    service="millionverifier",
+    display_name="MillionVerifier",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="your MillionVerifier API key",
+    token_location="query",
+    token_param="api",
+    token_format="{secret}",
+    setup_url="https://app.millionverifier.com/api",
+    setup_action_label="Get your MillionVerifier API key",
+    setup_steps=(
+        "Sign in to MillionVerifier and open Account settings → API Keys.",
+        "Add an API key if needed, make sure it is active, and copy it.",
+    ),
+    setup_note="Prepaid credits never expire. Risky (unknown and catch-all) results receive automatic credit returns for eligible accounts; the credits check is free.",
+    auth_uri="", token_uri="",
+    scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="Enrichment",
+    summary="Verify email deliverability and identify catch-all, disposable and role addresses.",
+    base_url="https://api.millionverifier.com",
+    docs_url="https://developer.millionverifier.com/",
+    probe_path="/api/v3/credits",
+    # Live 2026-09-08: HTTP 200 {result: error, error: apikey_not_found} for a garbage key.
+    # Do not require a truthy credits balance: a valid exhausted account can still connect.
+    token_reject_field="error",
+)
+
 MINIMAX = OAuthProvider(
     service="minimax",
     display_name="MiniMax",
@@ -2711,7 +2740,7 @@ REGISTRY: dict[str, OAuthProvider] = {
         GOOGLE_ADS, YOUTUBE,
         LINKEDIN, SLACK, X, TIKTOK, FACEBOOK, INSTAGRAM, META_ADS,
         # API-key providers
-        APOLLO, PDL, AKTA, HUNTER, CRUNCHBASE, MINIMAX, OPENROUTER, REPLICATE,
+        APOLLO, PDL, AKTA, HUNTER, MILLIONVERIFIER, CRUNCHBASE, MINIMAX, OPENROUTER, REPLICATE,
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,
         SCRAPECREATORS,
         # SEO API-key providers

@@ -31,6 +31,11 @@ pasted-key provider is **`connect_with_token`** (`POST /connections/token`) in
 [auth-secrets](../architecture/auth-secrets.md) + [api](../interface/api.md);
 this fragment is the *process*, not the mechanics reference.
 
+MillionVerifier (2026-09-08) follows this key-provider path: query `api` auth, free credits probe
+with an HTTP-200 `error` rejection, two single-host catalog jobs and an existing email-verification
+adapter. The bulk host uses a different auth parameter and is explicitly excluded in the surface
+map. See [catalog](../architecture/catalog.md) for the live credit evidence and pricing limits.
+
 ## The two kinds of provider
 - **API-key** (`auth_kind="key"`) — the user pastes a key; self-serve; **the fast path** (research → implement
   → live-test in one session). This is the workhorse and where almost all growth happens.
