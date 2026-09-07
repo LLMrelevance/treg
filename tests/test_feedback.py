@@ -150,7 +150,7 @@ def test_cli_feedback_sends_only_the_declared_fields(monkeypatch, capsys):
     ))
     monkeypatch.setattr("sys.stdin", io.StringIO("A sanitized suggestion.\n"))
     args = cli.build_parser().parse_args([
-        "feedback", "other", "-", "--call-id", "first", "--call-id", "second",
+        "feedback", "submit", "other", "-", "--call-id", "first", "--call-id", "second",
     ])
     args.fn(args, {"base_url": "https://self-hosted.example.test"})
     assert str(captured[0].url) == "https://self-hosted.example.test/feedback"
@@ -216,3 +216,103 @@ async def test_public_demo_token_cannot_submit_feedback(clients):
     })
     assert response.status_code == 403, response.text
     assert await rows() == []
+
+
+def test_cli_feedback_get_uses_the_configured_registry(monkeypatch, capsys):
+    captured = []
+
+    def handle(request):
+        captured.append(request)
+        return httpx.Response(200, json={"feedback_id": 7, "status": "received", "message": "Example"})
+
+    monkeypatch.setattr(cli, "_client", lambda cfg: httpx.Client(
+        transport=httpx.MockTransport(handle), base_url=cfg["base_url"],
+    ))
+    args = cli.build_parser().parse_args(["feedback", "get", "7"])
+    args.fn(args, {"base_url": "https://self-hosted.example.test"})
+    assert captured[0].method == "GET"
+    assert str(captured[0].url) == "https://self-hosted.example.test/feedback/7"
+    assert json.loads(capsys.readouterr().out)["message"] == "Example"
+
+
+@pytest.mark.parametrize("status,code,hint", [
+    (401, "authentication_required", "treg login"),
+    (403, "access_denied", "active team"),
+    (404, "not_found", "ID"),
+    (422, "invalid_feedback", "submit --help"),
+    (429, "rate_limited", "later"),
+    (500, "submission_unconfirmed", "whether feedback was saved"),
+])
+def test_cli_feedback_errors_are_actionable_without_echoing_input(monkeypatch, capsys, status, code, hint):
+    private = "private-person@example.test"
+    monkeypatch.setattr(cli, "_client", lambda cfg: httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(status, json={
+            "detail": [{"input": private, "msg": private}],
+        })), base_url="https://registry.example.test",
+    ))
+    args = cli.build_parser().parse_args(["feedback", "submit", "other", "A sanitized report."])
+    with pytest.raises(SystemExit) as exc:
+        args.fn(args, {})
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    body = json.loads(output.out)
+    assert body["error"] == code
+    assert hint in body["message"]
+    assert private not in output.out + output.err
+
+
+@pytest.mark.parametrize("message,length", [("  ", 0), ("x" * 2001, 2001)])
+def test_cli_feedback_validates_message_before_sending(monkeypatch, capsys, message, length):
+    monkeypatch.setattr(cli, "_client", lambda cfg: pytest.fail("must not send invalid feedback"))
+    args = cli.build_parser().parse_args(["feedback", "submit", "other", message])
+    with pytest.raises(SystemExit):
+        args.fn(args, {})
+    body = json.loads(capsys.readouterr().out)
+    assert body["error"] == "invalid_message"
+    assert body["actual_length"] == length
+    assert body["max_length"] == 2000
+
+
+@pytest.mark.parametrize("action,code", [("submit", "submission_unconfirmed"), ("get", "request_failed")])
+def test_cli_feedback_network_errors_do_not_claim_a_submission_failed(monkeypatch, capsys, action, code):
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        raise httpx.ReadTimeout("private transport details", request=request)
+
+    monkeypatch.setattr(cli, "_client", lambda cfg: httpx.Client(
+        transport=httpx.MockTransport(handle), base_url="https://registry.example.test",
+    ))
+    tail = ["other", "Example"] if action == "submit" else ["7"]
+    args = cli.build_parser().parse_args(["feedback", action, *tail])
+    with pytest.raises(SystemExit):
+        args.fn(args, {})
+    output = capsys.readouterr()
+    assert json.loads(output.out)["error"] == code
+    assert "private transport details" not in output.out + output.err
+    assert len(calls) == 1
+
+
+def test_cli_feedback_without_arguments_shows_help_without_network(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_client", lambda cfg: pytest.fail("help must not use the network"))
+    args = cli.build_parser().parse_args(["feedback"])
+    args.fn(args, {})
+    output = capsys.readouterr().out
+    assert "submit" in output and "get" in output
+
+
+def test_cli_feedback_keeps_category_first_shorthand(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_load_config", lambda: {})
+    monkeypatch.setattr(cli, "cmd_feedback", lambda args, cfg: calls.append((args.category, args.message)))
+    cli.main(["feedback", "quality", "Example"])
+    assert calls == [("quality", "Example")]
+
+
+def test_cli_feedback_stdin_never_waits_for_interactive_input(monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
+    args = cli.build_parser().parse_args(["feedback", "submit", "other", "-"])
+    with pytest.raises(SystemExit):
+        args.fn(args, {})
+    assert json.loads(capsys.readouterr().out)["error"] == "stdin_required"

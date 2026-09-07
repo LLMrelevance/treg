@@ -40,7 +40,7 @@ Multi-tenant: a token = a (user, org) membership; resources are org-scoped.
 Base URL: {BASE}
 Repo: https://github.com/superdesigndev/treg
 
-Feedback: `treg feedback <quality|pricing|friction|other> "message"`, or the MCP `feedback` tool.
+Feedback: `treg feedback submit <quality|pricing|friction|other> "message"`, or the MCP `feedback` tool.
 Include call IDs when available and omit private information. Instructions: `{BASE}/feedback.md`.
 
 ## The one mechanic: /call/

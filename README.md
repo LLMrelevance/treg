@@ -236,7 +236,7 @@ treg org access <member> --tools a,b          # per-member tool access (admin+)
 
 ## Going deeper
 
-- **Feedback:** `treg feedback friction "The pagination example is unclear."`
+- **Feedback:** `treg feedback submit friction "The pagination example is unclear."`
   Share problems or suggestions without private information. See [feedback instructions](https://treg.to/feedback.md).
 
 - [`USAGE.md`](USAGE.md) — the full `treg` CLI reference.

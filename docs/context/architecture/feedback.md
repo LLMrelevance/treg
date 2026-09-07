@@ -43,7 +43,10 @@ attribution too. There is no external notification, issue sync, public feed, or 
 `Feedback` participates in `ORG_SCOPED_MODELS`, so team deletion removes its reports.
 
 CLI `cmd_feedback` sends the same payload to its configured registry, reading a prepared message
-from stdin when the message argument is `-`. Both MCP surfaces expose `feedback` with an enum in
+from stdin when the message argument is `-` (a terminal is rejected instead of blocking).
+`cmd_feedback_get` retrieves a report through the same team-scoped HTTP read. The CLI rejects
+empty or oversized messages locally and emits structured errors without echoing rejected input;
+transport failures leave submission outcomes explicitly unconfirmed. Both MCP surfaces expose `feedback` with an enum in
 their input schema, relay to the same HTTP intake, and declare a non-destructive, non-idempotent
 local write. Their existing call permissions and transport boundaries remain distinct.
 
