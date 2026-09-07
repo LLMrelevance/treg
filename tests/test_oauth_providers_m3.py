@@ -50,6 +50,7 @@ def test_every_provider_is_registered():
         "apollo", "pdl", "akta", "hunter", "crunchbase", "tikhub", "brightdata", "semrush", "justoneapi",
         "scrapecreators",
         "dataforseo", "seranking", "moz", "majestic", "serpstat", "exa",
+        "cloro",
         "lusha", "coresignal", "diffbot", "thecompaniesapi", "leadmagic", "fiber-ai",
         "companyenrich", "oceanio", "tomba", "predictleads", "findymail", "branddev",
         "icypeas", "leadsforge", "influencersclub", "crustdata", "aviato",
