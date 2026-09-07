@@ -158,6 +158,10 @@ Notes:
     still sent to the others, and the answer names it in `X-Treg-Ignored-Filters` / `_treg.ignored_filters`
     — post-filter, or send `X-Treg-Route-Strict-Filters: 1` to get a 422 (unbilled) instead of a looser
     answer. `catalog_get treg.people.email.find` shows the plan and prices.
+  - **A found contact is not a confirmed one.** An email or phone find returns the provider's best
+    match; only `output.verified: true` means it checked the mailbox. When it is not, the answer
+    carries `_treg.advice` naming the verify step (`treg.people.email.verify`, a fraction of a cent)
+    — run it before outreach, and never re-send the same find: every hit bills, repeats included.
 - An endpoint with no published price is refused rather than served free; connect your own key.
 
 ## Task - generate a video or an image

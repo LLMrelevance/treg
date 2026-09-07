@@ -217,6 +217,10 @@ apply a filter you sent, the answer says so in `X-Treg-Ignored-Filters` and `_tr
 (post-filter the rows, or say why they are off); send `X-Treg-Route-Strict-Filters: 1` to be refused
 with a 422 (nothing charged) instead of getting the looser answer. `catalog_get` on the routed id
 shows the ranked plan and prices before you spend.
+A found contact is not a confirmed one: an email or phone find is the provider's best match, and
+only `output.verified: true` means it checked the mailbox. Otherwise the answer carries
+`_treg.advice` naming the verify step (`treg.people.email.verify`, a fraction of a cent) — run it
+before outreach, and never re-send the same find: every hit bills, repeats included.
 Call a specific provider's endpoint when you need a particular one.
 
 <!--/routed-->

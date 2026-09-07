@@ -508,6 +508,15 @@ shared plan" - `cost_view`, holds, caps and settlement needed zero changes. What
   method: `_resolve_marketplace_call` rejects a mismatch before relay. The only method the provider
   can reject is therefore treg's recorded method, so settling a `per_call` hold would charge the
   team for catalog metadata treg owns. `_NOT_THE_CALLERS_FAULT` makes that path release the hold.
+- **A caller-input 4xx (400/404/422) under `per_call` bills only what the provider reports.**
+  The estimate prices a served call; a rejection served nothing, and no rate card says a vendor
+  takes a credit for a request it bounced at validation. `_platform_settle` therefore settles such
+  a hold only when the body carries the vendor's own non-zero charge (`credits_charged`,
+  `chargeInfo.creditsCharged`, `cost`…) and releases it otherwise with reason
+  `rejected_unbilled_<status>`. Found 2026-09-06: Fiber's 400 "body/identifier Required" and 404
+  "profile not found" settled twenty $0.04 holds against one team at the estimate
+  (`test_a_4xx_bills_only_what_the_provider_reports`). Fiber now reports through
+  `chargeInfo.creditsCharged` (`charged-now` only; a poll repeats its job's charge).
 - **A 4xx that the signature table reads as OUR account running dry is never billable**, whatever
   its status: Apollo says "out of credits" with a 422, which `per_call` would otherwise charge to
   the caller as an input error - and, once overflow serves the same request through an aggregator,

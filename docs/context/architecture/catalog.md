@@ -1374,7 +1374,11 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   `{linkedin_url}`), `derive` rules so the two name shapes match the same adapters, a small
   *output* core (`email` required; `confidence`, names, `verified` optional) and `miss` in
   canonical terms. `raw` — the winning provider's body — is always returned and never documented
-  as stable.
+  as stable. `advice_unverified` (email and phone finds) is one sentence the router attaches as
+  `_treg.advice` to a hit whose `verified` is not true — a found contact is not a confirmed one
+  (Hunter's `accept_all`, LeadMagic's personal finder, every phone provider), and a team that sent
+  to such hits unverified bounced on most of them (2026-09-06). A suggestion only: treg never
+  chains the verify call, which would double every hit's price and change what the find bills.
 - **Adapters** — `adapters.yaml`, one per endpoint: `accepts` (identity variants), `in` (contract
   field → `queryParams.x` / `body.x`), `const` (fixed provider params), `out` (core field →
   expression over the body), `miss`. The expression language (`domain/catalog/routing/paths.py`)
@@ -1410,7 +1414,9 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   reserve, relay, settle, audit row and cancellation compensation are the ordinary ones. Vendor
   4xx (not 402/408/429) = usually the caller's fault, but scrapers answer 400 for their own outages
   (tikhub, live 2026-08-28), so the waterfall goes on ONLY to candidates that bill nothing for a
-  rejected request — per_success, free, the org's own key, or per_call ≤ 1¢ (`CHEAP_RETRY_MICRO`)
+  rejected request — per_success, free, the org's own key, or per_call ≤ 1¢ (`CHEAP_RETRY_MICRO`;
+  since 2026-09-07 a per_call rejection settles only at a charge the vendor itself reports, so this
+  is a bound on the reported-charge risk, not on the estimate — see money.md)
   — never the same provider again, within the error bound; if every one rejects it, the caller
   gets `route_caller_fault` naming each attempt. A 4xx the endpoint's YAML declares as its
   "no result" status (`miss: {status: 404}`, see "`miss` semantics ride on the endpoint") is a
