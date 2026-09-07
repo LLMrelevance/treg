@@ -673,6 +673,15 @@
       "GET",
       "HEAD"
     ],
+    "name": "astra_page",
+    "path": "/astra"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "people_search_page",
     "path": "/people-search"
   },
