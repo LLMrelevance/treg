@@ -16,6 +16,11 @@ sources:
   - src/treg/alembic/versions/0017_async_task_record.py
   - src/treg/alembic/versions/0018_async_resource_ownership.py
   - src/treg/alembic/versions/0019_async_poll_failures.py
+  - src/treg/alembic/versions/0020_callrecord_created_at_indexes.py
+  - src/treg/alembic/versions/0021_ledgerentry_org_created_at_index.py
+  - src/treg/alembic/versions/0022_org_spent_today_counter.py
+  - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
+  - src/treg/alembic/versions/0024_membership_calls_today_counter.py
   - src/treg/alembic/versions/0011_callrecord_archive_link.py
   - src/treg/alembic/versions/0015_idempotentcall_membership_cascade.py
   - src/treg/maintenance.py
@@ -91,8 +96,10 @@ uses this metadata, never the encrypted token's shape.
 - **`Membership`** - links a user to an org: `user_id`, `org_id`, `role` (owner|admin|member),
   `token_hash` (SHA-256 of the bearer token, shown once), `webhook_url` (health alerts POST here),
   `daily_call_cap` (per-user, per-day usage cap; **-1 = unlimited**, the default - see
-  `api._enforce_daily_cap`); unique `(user_id, org_id)`. **A token = a `(user, org)` pair.** `ROLE_RANK`
-  orders the roles.
+  `governance/usage.enforce_daily_cap`) with `calls_today` / `calls_today_day`, the counter that cap
+  is checked against (one conditional UPDATE per capped event, revision 0024; only capped members are
+  counted, the roster reads the journal); unique `(user_id, org_id)`. **A token = a `(user, org)`
+  pair.** `ROLE_RANK` orders the roles.
 - **`Invite`** - a one-time join code: `org_id, email, role, code_hash (idx), status`
   (pending|accepted|revoked), `invited_by`. Carries a SECOND split secret, `email_token_hash (idx,
   nullable)` - the inbox-only sign-in token embedded ONLY in the invite email's link (the
@@ -138,6 +145,39 @@ uses this metadata, never the encrypted token's shape.
   Its `kind` is `call`, `local_run`, or `async_poll` for an authorized free platform status read.
   Poll rows remain available by call reference and in admin diagnostics, but `/calls` excludes
   them before pagination. No migration or historical reclassification is required.
+
+  **Its indexes are the platform's throughput.** It is the largest table (2.94M rows / 1.68 GB on
+  prod 2026-09-06) and every question asked of it is "… since <time>", so a `created_at` that no
+  index carried meant the planner chose an index for the other column and filtered the date in
+  memory - reading an endpoint's or an org's WHOLE history to answer a 30-day one. Revision 0020
+  adds `(endpoint_id, created_at)` for the catalog observation refresh (`domain/catalog/stats.py`,
+  which had read 1.60 BILLION tuples across 570k scans) and `(org_id, created_at)` for the
+  per-member daily counts (`routers/orgs.py`, 295M across 70k); 0016 already pairs
+  `(endpoint_id, id)` for the newest-N feed and 0012 a partial index on `cached`. The cost of
+  getting this wrong is not a slow page: all three connection pools share one Postgres, so a scan
+  here queues every other query and the API pool empties into `503 treg_saturated` - see
+  [deploy](../ops/deploy.md) § Three pools. The table has no retention sweep yet, so it only grows.
+
+  **`LedgerEntry` is the other one, and it was the larger.** It is append-only and never pruned
+  (4.38M rows / 2.3 GB on prod 2026-09-06, ~400k rows a day), and `ledger.spent_today` - the
+  fail-closed daily cap - reads it on EVERY metered call, inside the reserve transaction, on an
+  api-pool connection. With only single-column indexes the planner walked the whole platform's day
+  through `ix_ledgerentry_created_at` and filtered the org in memory: 322k rows discarded and 381k
+  buffer touches per call, 56-106 s once the day's pages had been evicted from a 512 MB cache, and
+  the heap had read 6.5 BILLION blocks - four times `callrecord`. Revision 0021 adds
+  `(org_id, created_at)`, which also serves `entries_of` (the `/billing` page, previously a
+  backward walk of the whole `created_at` index). That fixed light orgs and `/billing` but not the
+  two orgs writing half the day - their rows are on every page of the day, and the planner kept
+  walking it (395k buffer touches per call after 0021). So the cap no longer reads this table at
+  all: revision 0022 adds `Org.spent_today_micro` / `spent_today_day`, kept by `domain/money`
+  inside the balance UPDATE and read with one primary-key lookup; the journal aggregate survives
+  as `spent_today_from_ledger` for reconciliation. The same shape on `callrecord` - the per-user
+  daily call cap, `count_today`, which BitmapAnd-ed a member's whole history through
+  `ix_callrecord_user_email` (2.6 s of 3.0 s for a 287k-row member) - gets
+  `(org_id, user_email, created_at)` in revision 0023, and then the same answer as the ledger: the
+  index-only scan still fetched the heap for today's not-yet-vacuumed pages (110k heap fetches,
+  2.8 s), so revision 0024 moves the gate to `Membership.calls_today` and the journal count is
+  left to the roster and `/usage/me`.
 
   `refused_by` distinguishes a treg refusal (`auth`, `policy`, `balance`, `cap`, `resolution`,
   `request`, and other mechanism-specific values) from an upstream answer, where it is null.
@@ -361,7 +401,7 @@ key, including first sightings that never recurred to carry their own count out.
 the shared queue is genuinely backing up (`_FAULT_QUEUE_SHARE` of `_MAX_PENDING`) - the congestion the
 throttle was ever meant to prevent, rather than a wall-clock rate that fired against an empty queue.
 
-**Losing data is ERROR, not WARNING.** `audit._write`, `audit._schedule`'s back-pressure shed, and
+**Losing data is ERROR, not WARNING.** `audit._write_batch`, `audit._enqueue`'s back-pressure shed, and
 `archive`'s `_store`/`_touch_write` drops all log at ERROR, because `FaultCaptureHandler` starts at ERROR:
 below it the loss reaches container stdout and nothing else, so it can neither be alerted on nor found
 without already suspecting it. Degradations that cost nothing (an archive lookup falling back to a live

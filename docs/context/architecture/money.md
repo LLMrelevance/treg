@@ -508,6 +508,15 @@ shared plan" - `cost_view`, holds, caps and settlement needed zero changes. What
   method: `_resolve_marketplace_call` rejects a mismatch before relay. The only method the provider
   can reject is therefore treg's recorded method, so settling a `per_call` hold would charge the
   team for catalog metadata treg owns. `_NOT_THE_CALLERS_FAULT` makes that path release the hold.
+- **A caller-input 4xx (400/404/422) under `per_call` bills only what the provider reports.**
+  The estimate prices a served call; a rejection served nothing, and no rate card says a vendor
+  takes a credit for a request it bounced at validation. `_platform_settle` therefore settles such
+  a hold only when the body carries the vendor's own non-zero charge (`credits_charged`,
+  `chargeInfo.creditsCharged`, `cost`…) and releases it otherwise with reason
+  `rejected_unbilled_<status>`. Found 2026-09-06: Fiber's 400 "body/identifier Required" and 404
+  "profile not found" settled twenty $0.04 holds against one team at the estimate
+  (`test_a_4xx_bills_only_what_the_provider_reports`). Fiber now reports through
+  `chargeInfo.creditsCharged` (`charged-now` only; a poll repeats its job's charge).
 - **A 4xx that the signature table reads as OUR account running dry is never billable**, whatever
   its status: Apollo says "out of credits" with a 422, which `per_call` would otherwise charge to
   the caller as an input error - and, once overflow serves the same request through an aggregator,
@@ -623,9 +632,12 @@ a compliant figure and together exceed the cap. Overshoot is bounded by `concurr
 estimate`, and that is acceptable **only** because the hard gates sit behind it - the org balance and
 the per-org daily cap.
 
-Making it exact would need a second materialized authority on spend: reset daily, decremented on
-release, corrected on settle divergence. Four new ways to disagree with `domain/money`, which is the one
-module allowed to move money. Not worth it. Never document these caps to builders as hard limits.
+Making it exact would need a second materialized authority on spend per tag: reset daily, decremented
+on release, corrected on settle divergence. Four new ways to disagree with `domain/money`, which is the
+one module allowed to move money. Not worth it for tag caps. (The per-org daily cap DOES have exactly
+such a counter, `Org.spent_today_micro`, since 2026-09-06 - kept by `domain/money` itself, inside the
+balance UPDATE, so there is no second writer to disagree with; see below.) Never document these caps
+to builders as hard limits.
 
 ### Refusal bodies are not the org's
 
@@ -660,6 +672,24 @@ the entire point of giving them a scoped token.
 and the deployment's `platform_daily_cap_usd` ceiling (default $500/day). The team can lower its
 limit and inspect it through `GET /orgs/{id}/settings`. A request above the platform ceiling is
 refused, not silently clamped.
+
+The check itself, `ledger.spent_today`, is the most-run query on the platform: every metered call,
+inside the reserve transaction, on an api-pool connection, fail-closed. Its cost is therefore the
+platform's throughput, and it is ONE primary-key read of `Org.spent_today_micro` /
+`spent_today_day` (revision 0022). `domain/money` keeps that counter inside the same UPDATE that
+moves the balance: reserve adds the charged estimate, settle adds what was consumed and removes
+the estimate it replaces, release removes the estimate - in each case only when the hold was
+opened today, because a hold opened yesterday was yesterday's commitment. The first movement of a
+new UTC day resets the counter to that movement (`_spent_today_values`, one CASE expression).
+`spent_today_from_ledger` computes the same number from the journal over `(org_id, created_at)`
+(revision 0021) for reconciliation; `tests/test_daily_spend_counter.py` asserts the two agree
+through reserve, settle (under and over the estimate), release and the day boundary.
+
+Why a counter and not an index: until 2026-09-06 the check was that journal aggregate, and for an
+org that writes a large share of the platform's day its rows sit on nearly every heap page of the
+day, so no index makes the aggregate cheaper than reading the day - measured 395k buffer touches
+per call, 56-171 s once those pages were cold, holding an api-pool slot throughout. That was the
+API-pool saturation (see [deploy](../ops/deploy.md) § Three pools).
 
 ## Referrals
 
