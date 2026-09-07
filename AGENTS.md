@@ -53,7 +53,7 @@ agents then built against a constitution that was wrong.
 |---|---|---|
 | `routers/` | HTTP and MCP translation in, response shape out | business rules, query orchestration, money |
 | `application/` | use-case sequencing, transaction boundaries, compensation, cross-domain composition | empty wrappers around one-domain CRUD |
-| `domain/` | rules explainable and testable alone: `identity`, `governance`, `connections`, `tools`, `catalog`, `capacity`, `money` | routers, application, concrete SDKs |
+| `domain/` | rules explainable and testable alone: `identity`, `governance`, `connections`, `tools`, `catalog`, `capacity`, `money`, `asynctasks`, `feedback` | routers, application, concrete SDKs |
 | `infra/` | DB engine and sessions, crypto, upstream relay and SSRF, ratestore, email, Stripe | decisions |
 
 - Domains do not import each other, with three sanctioned edges: `governance -> identity`,

@@ -33,6 +33,7 @@ sources:
   - src/treg/domain/connections/oauth_flow.py
   - src/treg/domain/connections/refresh.py
   - src/treg/domain/money/__init__.py
+  - src/treg/domain/feedback.py
   - src/treg/domain/asynctasks/__init__.py
   - src/treg/domain/capacity/__init__.py
   - src/treg/infra/upstream/__init__.py
@@ -135,3 +136,8 @@ aggregator envelopes and the money primitives, and the aggregator adapters stay 
 aggregator envelopes live under `treg.infra.upstream.aggregators` and inherit the upstream contract
 (no HTTP adapters, no routers); the capacity domain's `verify` module may import them because they are
 pure envelope code, not a web framework.
+
+The feedback domain (`treg.domain.feedback`) owns durable report inserts and queries. Its contract
+forbids direct imports of API, bootstrap, routers, application orchestration, sibling domains,
+best-effort audit, FastAPI, and Starlette. Shared models and SQLAlchemy remain available; transaction
+commits and call-reference verification belong to `treg.application.feedback`.

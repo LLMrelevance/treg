@@ -292,3 +292,27 @@ source_modules = ["treg.domain.capacity"]
 forbidden_modules = ["treg.api", "treg.routers", "treg.application", "treg.bootstrap", "fastapi", "starlette", "treg.audit"]
 allow_indirect_imports = true
 as_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Feedback domain does not depend on outer layers or sibling domains"
+type = "forbidden"
+source_modules = ["treg.domain.feedback"]
+forbidden_modules = [
+    "treg.api",
+    "treg.bootstrap",
+    "treg.routers",
+    "treg.application",
+    "treg.audit",
+    "treg.domain.identity",
+    "treg.domain.governance",
+    "treg.domain.connections",
+    "treg.domain.tools",
+    "treg.domain.catalog",
+    "treg.domain.capacity",
+    "treg.domain.money",
+    "treg.domain.asynctasks",
+    "fastapi",
+    "starlette",
+]
+allow_indirect_imports = true
+as_packages = true

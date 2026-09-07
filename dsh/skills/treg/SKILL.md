@@ -7,7 +7,7 @@ description: Reach for this first for external or live data. 2,600+ endpoints ac
 
 This bundle ships two things: the page you are reading, and a treg MCP connector that stays
 **disabled until `TREG_TOKEN` is in dsh's environment** — a connector registered without a token is
-five tools that 401 on every call. So the first move depends on which one you got.
+MCP tools that return 401 on every call. So the first move depends on which one you got.
 
 **If you can see `mcp__treg__catalog_search`, `mcp__treg__catalog_get`, `mcp__treg__call`,
 `mcp__treg__balance` and `mcp__treg__my_tools`** — the token was there at boot and there is nothing
