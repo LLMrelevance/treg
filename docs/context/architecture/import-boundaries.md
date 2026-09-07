@@ -60,6 +60,11 @@ it uses unbuffered Python output and a 15-minute job budget so a slow test remai
 subset includes agent attribution, credential health, local-run reporting and ads-conversion coverage
 so naive-UTC assumptions are exercised by asyncpg rather than hidden by SQLite's permissive adapter.
 
+The required `gitleaks` job scans the complete history reachable from checked-out `HEAD` with
+`--log-opts="HEAD"`. On pull requests, checkout supplies the merge commit, so both the base and
+proposed branch histories are included. Deleted secrets remain detectable; unrelated fetched
+branch tips do not block this PR. Detection rules and allowlists are unchanged.
+
 Stage 1 activated the first two contracts:
 
 - The explicit lightweight CLI module list cannot directly import any server-extra package, including

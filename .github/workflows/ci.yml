@@ -149,4 +149,6 @@ jobs:
             | tar -xz gitleaks
           sudo mv gitleaks /usr/local/bin/
       - name: Scan for secrets
-        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact
+        # HEAD is the PR merge commit (both parents) or the pushed main commit. Scan all
+        # reachable history, including deleted secrets, without unrelated fetched branch tips.
+        run: gitleaks detect --source . --config .gitleaks.toml --log-opts="HEAD" --verbose --redact
