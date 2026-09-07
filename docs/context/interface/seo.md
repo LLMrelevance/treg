@@ -132,6 +132,18 @@ attribution — `treg_ad` and `/adtrack.js` are already documented in that polic
 alone changes nothing about it. `tests/test_agent_pages.py` asserts exactly one `adtrack.js` per
 path so a new route off `_page()` cannot drop it.
 
+The hand-written marketing pages are the other half of that decision, and they get the opposite
+default: a standalone landing page *does* load `/sitetrack.js`, because without it the page emits no
+pageview and cannot be measured at all. That escaped once too (2026-09-07): `/grokbot` shipped with
+`/adtrack.js` and `/gtag.js` but not `/sitetrack.js`, so a week of launch traffic produced zero
+`$pageview`s and the route simply did not exist in a per-landing-page funnel — indistinguishable
+from a page nobody visited. `tests/test_sitetrack.py` now guards the hand-written surface the same
+way `test_adsconv.py` guards ad capture: a named list of marketing surfaces fetched over HTTP, plus
+a file-level invariant that any `web/*.html` carrying an ad script tag also carries the analytics
+one, so a page copied from an existing landing is in scope the moment it exists. Script paths are
+root-absolute (`/sitetrack.js`, never `sitetrack.js`); the relative form on `/people-search` and
+`/fable` only resolved because those routes are slashless, and the same test forbids it.
+
 ## The public catalog is the marketplace, not a copy of it
 
 The first cut of this hand-built `/catalog` pages in Python string templates. They shared the API
