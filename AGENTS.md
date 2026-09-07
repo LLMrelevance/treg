@@ -72,14 +72,15 @@ agents then built against a constitution that was wrong.
   commit by design; a few other domain commits remain. Do not add another; move one out when you
   touch it.
 - **Table ownership.** One writer module per table; cross-domain reads are fine. Three recorded
-  exceptions: only money writes `org.balance_micro` and the auto-top-up fields; the call runtime
-  may persist an OAuth token refresh into `secret`; audit writes `callrecord`, domains only read it.
+  exceptions: only money writes `org.balance_micro`, the daily-spend counter (`spent_today_*`) and
+  the auto-top-up fields; the call runtime may persist an OAuth token refresh into `secret`; audit
+  writes `callrecord`, domains only read it.
 - **The call runtime is self-contained.** `src/treg/application/call/` depends on no management
   code (routes, login, OAuth consent, Stripe top-up), reads only membership, deny rules,
   credentials, catalog prices and balances, and writes only what `tests/test_call_architecture.py`
   allowlists (the ledger entries, idempotency claims, OAuth refresh, audit and telemetry, first-call
-  markers, tag budgets, capacity marks, overflow spend). Extend the test's allowlist in the same PR
-  as any new write, and expect the reviewer to ask why.
+  markers, tag budgets, capacity marks, overflow spend, the member's daily-cap slot). Extend the
+  test's allowlist in the same PR as any new write, and expect the reviewer to ask why.
 - **Money.** Everything is **integer micro-USD** - never floats, never cents. The Stripe SDK lives
   only in `infra/stripe.py`, orchestration in `application/billing.py`, and `reconcile.py` is
   read-only. See `docs/context/architecture/money.md`.

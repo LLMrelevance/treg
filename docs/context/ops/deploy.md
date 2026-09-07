@@ -72,7 +72,7 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
   |---|---|---|---|
   | `api` | `session_maker` | 5 + 10 | every request handler, via `get_session` or directly |
   | `admin` | `admin_session_maker` | 3 + **0** | `/admin/*` only, via `get_admin_session` |
-  | `background` | `background_session_maker` | 13 + **0** | audit, archive writes, ads worker, the observation reader, the error-evidence sweep |
+  | `background` | `background_session_maker` | 8 + **0** | audit (one batching writer), archive writes (two), ads worker, the observation reader, the error-evidence sweep |
 
   Each class of work can exhaust only its own slots. Before this there was ONE pool of 15, and on
   2026-09-03 a single admin browser tab polling `/admin/archive/panel` (every 5 s, no in-flight
@@ -81,6 +81,31 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
   would have prevented it — a semaphore bounds only the module that remembers to take one
   (`audit.py` did, `archive.py` did not), while a pool bounds every module routed to it. Overflow
   is **0** on both minor pools for the same reason: it is the escape hatch a bulkhead must not have.
+
+  **Every number above is PER PROCESS, and the reference deployment runs two.** Render sets
+  `WEB_CONCURRENCY=2` on the web service's 2c-4g plan (not a dashboard variable - injected at
+  runtime, and absent on the crons) and uvicorn honors it: the boot log shows `Started parent
+  process` then two `Started server process` lines. Each worker opens its own three pools, runs its
+  own copy of every in-process background task (ads, archive refresh, prune, the gauge), and a
+  rolling deploy runs two instances for about a minute. So the budget is
+  `per_process × 2 workers × 2 instances` against `max_connections` (103 on the 1c-2g plan), and
+  `infra/db.connection_budget` logs it at boot:
+
+  | specs | per process | per instance | deploy peak | 103? |
+  |---|---|---|---|---|
+  | code defaults 15 + 3 + 13 (until 2026-09-07) | 31 | 62 | **124** | over |
+  | code defaults 15 + 3 + 8 (since 2026-09-07) | 26 | 52 | 104 | over by one |
+  | dashboard override 15 + 2 + 4 | 21 | 42 | 84 | fits |
+
+  That is the post-mortem of the 2026-09-04 defaults: `background = 13` did not overload the
+  database, it opened 124 connections at every deploy and restart until the override cut it to 84.
+  Every earlier passage in this file that multiplied by two instances only was counting half the
+  connections. Any resize must clear the deploy-peak column first; within it there are 2 spare
+  per process today (23 → 92). Batching the audit writer (4 → 1) and halving the archive semaphore
+  (4 → 2) on 2026-09-07 cut the derived `background` from 13 to 8, so a pool of 6 now serves every
+  consumer but two archive writers at once and still fits (15 + 2 + 6 = 23 → 92); the way to more
+  is `WEB_CONCURRENCY=1`, a larger database plan, or a pooler -
+  not a bigger number in the override.
 
   Two sizing rules, both learned by getting them wrong first:
 
@@ -116,11 +141,36 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
   deployment ran `admin.pool_size=2,background.pool_size=4` from before the 2026-09-04 bulkhead
   work until 2026-09-05 — pinning both minor pools BELOW the defaults that work had just raised
   (`admin` to 3, `background` to the derived 13), including the exact `admin=2` whose post-mortem
-  is two bullets up. A `background` of 4 against 7 consumers needing 13 does not 503; it silently
-  drops audit rows. The knob being a dashboard edit rather than a deploy is what makes it useful
+  is two bullets up. A `background` of 4 against 7 consumers needing 13 (8 since 2026-09-07) does
+  not 503; it silently drops audit rows. The knob being a dashboard edit rather than a deploy is what makes it useful
   mid-incident and what lets it survive the fix. Today it reads
-  `api.pool_size=10,admin.pool_size=2,background.pool_size=4`; the two stale entries are still
-  there deliberately, so that the `api` change could be observed on its own.
+  `admin.pool_size=2,background.pool_size=4` - and those two entries are no longer "stale": with
+  two uvicorn workers (§ above) they are what keeps a rolling deploy at 84 connections instead of
+  124, so removing them is not a cleanup, it is the 2026-09-04 outage again. `api.pool_size=10` was
+  added on 2026-09-05 and removed on 2026-09-06: against a database that is waiting on DISK (below),
+  five more slots meant five more readers of the same cold pages, and the worst hour on record
+  (2,136 pool faults at 11:00, on a third of the previous day's traffic) followed.
+- **The pools are measured, not argued about: `db_pool_gauge`.** `bootstrap.pool_gauge` samples
+  `infra/db.pool_snapshot()` once a second and emits one PostHog event a minute per instance:
+  `<pool>_peak` (most connections that pool had checked out in the minute), `<pool>_capacity`
+  (`pool_size + max_overflow`) and `<pool>_headroom`. Telemetry, not a database consumer, so it is
+  not in `ROLE_BACKGROUND_TASKS` and runs in every role. Read it like this: a pool whose peak sits
+  at capacity is one whose waiters are timing out (`api`: `503 treg_saturated`; `background`: an
+  audit or archive row dropped after `pool_timeout`); a pool whose peak never nears capacity is
+  holding connections nothing uses. **Resize from the gauge, never from the arithmetic** - the
+  arithmetic got both minor pools wrong once each (above), and the 2026-09-05 `api` raise made the
+  saturation it meant to fix worse. The protocol: one pool at a time, one override at a time, each
+  setting across at least one full daily peak (the 01:00-04:00 UTC batch window), judged by the same
+  hour on consecutive days on three numbers - db_pool faults, `/call/` 503 rate, and the gap between
+  `tool_called` events and `callrecord` rows (dropped audit). A change that raises the 503 rate at
+  equal traffic is reverted, not tuned around.
+
+    ```
+    SELECT toStartOfHour(timestamp) h, max(toFloat(properties.background_peak)) bg_peak,
+           any(properties.background_capacity) bg_cap, max(toFloat(properties.api_peak)) api_peak
+    FROM events WHERE event = 'db_pool_gauge' AND timestamp > now() - INTERVAL 2 DAY
+    GROUP BY h ORDER BY h DESC
+    ```
 - **No statement timeout yet.** The pools bound how many connections a class of work can hold, not
   how long a query may run; `alembic/env.py` still has the only timeouts in the app. Adding per-pool
   `statement_timeout` is deliberately a SEPARATE change: it is a behavior change on every query,
@@ -147,6 +197,23 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
   through `ix_callrecord_endpoint_id_id` because no index carried `created_at` (revision 0020
   adds the pairs). **Reach for a pool size only after ruling out a scan;** raising it buys headroom
   and hides the cause.
+
+  That diagnosis was half right. Re-measured 2026-09-06 with wait events instead of response
+  times: 88 % of active backends sat in `IO DataFileRead` / `IPC BufferIO` (waiting for a page, or
+  for ANOTHER backend reading the same page), 18 of 879 samples were on CPU. The database is not
+  CPU-bound; it is a 512 MB buffer cache in front of 35 GB, and the query holding the pool was
+  not on `callrecord` at all: 674 of 879 active samples were `ledger.spent_today` on
+  `ledgerentry`, the fail-closed daily cap that runs inside EVERY metered call's reserve
+  transaction on an api-pool connection, scanning the whole platform's day because no index paired
+  `org_id` with `created_at` (revision 0021 adds it; `ledgerentry` had read 6.5 BILLION heap
+  blocks, four times `callrecord`). Whenever a large scan evicts the day's ledger pages - the
+  30-day observation refresh, the `/billing` page's backward index walk, the per-call
+  `idempotentcall` sweep, a concurrent index build - every in-flight `spent_today` stalls together
+  for tens of seconds, and 20 slots are gone. 0021 fixed light orgs and `/billing` only: the two
+  orgs writing half the day sit on every page of the day and the planner kept walking it, so
+  revision 0022 moved the cap to a counter on the org row (one primary-key read) and 0023 gave the
+  per-user cap its triple on `callrecord`. Two lessons: **sample `wait_event_type`, not
+  latency**, and on a disk-bound database a bigger pool is more contention, not more throughput.
 - **SQLite aliases all three to one engine.** It has no pool to protect and file-level write locks
   it cannot share, so three engines against one file would only manufacture "database is locked".
   Tests therefore pin the ROUTING (which maker each module reaches for), not the isolation.
@@ -241,6 +308,18 @@ bound to a closed maintenance loop. Calling `maintenance.upgrade()` directly doe
   code is exposed only through `Settings.expose_dev_code`, which requires `email_dev_mode` **and** a
   **local sqlite** `database_url` — so even a stray `TREG_EMAIL_DEV_MODE=true` on Postgres (a real deploy)
   can never leak a login code.
+- `blocked_email_domains` (`TREG_BLOCKED_EMAIL_DOMAINS`, default empty) - the OPS tier of the
+  email-domain blocklist: comma-separated domains ADDED to the code tier (treg's confirmed farm
+  roots and the throwaway-mail keyword rules in `domain/identity/access.py`), refused at every
+  identity door and at both team-creating doors (`POST /users` and `POST /orgs`). Example:
+  `newfarm.io,other-farm.net`. Case-insensitive; a listed domain also blocks its subdomains; a
+  leading `@` or `.` and surrounding whitespace are tolerated; a dotless entry (`com`) is ignored.
+  The signup-grant-farm brake: edit it in the Render dashboard the moment a new root appears, no
+  redeploy; promote a root into the code tier in the next PR. Empty adds nothing (the code tier
+  stays in force). Existing accounts on a listed domain must be suspended separately (`/admin`);
+  the list only stops new sessions and new teams. Each block writes one
+  `event=signup_blocked_domain door=... domain=...` log line, so a wave is countable. See
+  [multi-tenancy](../architecture/multi-tenancy.md).
 - `run_proof` (`TREG_RUN_PROOF`) — the **isolated-runner proof** for `treg run --local`. A local run whose
   grant would return a secret the caller does **not** own (a shared-key tool a member may run but not read)
   must present this value in the `X-Treg-Run-Proof` header — a value held **only** by the root-installed
@@ -317,13 +396,15 @@ UTC (SQLite is lax and hid this; it only bites on Postgres — the deploy target
 and in the serial Postgres CI migration set. `env.py` bounds Postgres lock and statement wait time so
 a contended migration fails before it queues the serving database behind DDL.
 
-**Audit back-pressure (`audit.py`).** Audit rows are written off the request path (fire-and-forget), and
-each write opens a DB connection — from the **background** pool since 2026-09-03, so a burst here can no
-longer starve real requests, only other background work. Two limits still apply inside it: a loop-bound
-semaphore caps concurrent audit writes at `_MAX_CONCURRENT_WRITES` (queueing in-process rather than
-holding a pooled connection, and keeping `drain()` deterministic on SQLite, where all three makers share
-one engine), and under an extreme burst the writer **sheds** load — it drops any audit row past
-`_MAX_PENDING` rather than let the pending set grow without bound. Audit must never OOM or wedge the
+**Audit back-pressure (`audit.py`).** Audit rows are written off the request path (fire-and-forget):
+`record_call` appends to an in-process queue and ONE writer task per process drains it `_BATCH` rows
+per INSERT on a **background**-pool connection (since 2026-09-07; before that four writers each took
+one row per session, which cost four slots per process for millisecond inserts). A burst can therefore
+never starve real requests, only other background work. Two limits still apply: a loop-bound semaphore
+holds the writer to `_MAX_CONCURRENT_WRITES` (1), which keeps `drain()` deterministic on SQLite, where
+all three makers share one engine, and under an extreme burst `_enqueue` **sheds** load — it drops any
+audit row past `_MAX_PENDING` queued rows rather than let the queue grow without bound. A batch the
+database refuses is retried row by row, so one bad row costs one row. Audit must never OOM or wedge the
 server. Shedding is the *only* loss that should ever happen: `record_call` splats its telemetry dict
 into `CallRecord(**fields)`, so a key with no matching column used to raise inside `_write`, where the
 except swallowed it, and the whole row disappeared — a telemetry field deployed one commit ahead of its
@@ -332,6 +413,14 @@ ones), and `_write`'s swallow logs the traceback at **ERROR** — as does the ba
 is the whole point: `FaultCaptureHandler` starts at ERROR, so at WARNING a lost row reached container
 stdout and nothing else, and the only way to learn audit was dropping was to already suspect it and go
 grep. **A quiet audit table is now a bug you can alert on**, not one you find out about weeks later.
+
+**Archive memory bound (`archive.py`).** Each pending archive recording holds its `body` bytes in a
+task closure — up to `_MAX_PENDING` (512) tasks × `archive_max_body_bytes` (2 MB) = 1 GB worst case.
+After #363 reduced `_MAX_CONCURRENT_WRITES` from 4 to 2, backlog built faster than it drained under
+heavy `/call` + MCP traffic, and the 2026-09-07T00:43:06Z OOM killed the web service at 4 GB.
+`_MAX_PENDING_BYTES` (256 MB) now caps total body bytes in pending work: `record()` sheds when
+EITHER the task count OR the bytes threshold is exceeded. The done callback releases bytes when a
+task completes; a regression test pins the bound.
 
 The proxy is thin and IO-bound (a relay, low CPU/memory), so cheap machines scale it.
 
