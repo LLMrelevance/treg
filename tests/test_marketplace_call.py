@@ -30,8 +30,9 @@ from treg.application.call import settle as call_settle
 from treg.application.call import service as call_service
 from treg.application.call.types import ResolutionFailed, UpstreamResponse
 from treg.config import get_settings
+from sqlalchemy import select
 from treg.infra.db import session_maker
-from treg.models import Org
+from treg.models import LedgerEntry, Org
 
 EP = "tikhub.tiktok.video.comments"          # GET /api/v1/tiktok/web/fetch_post_comment, aweme_id required
 EP_PATH = "/api/v1/tiktok/web/fetch_post_comment"
@@ -511,16 +512,31 @@ async def test_network_error_releases_the_hold(clients: AsyncClient, platform_on
     assert [e["kind"] for e in await _entries(clients)][:2] == ["release", "reserve"]
 
 
-async def test_per_success_4xx_releases_but_per_call_4xx_settles(clients: AsyncClient, platform_on, monkeypatch):
-    """Whether a rejected request costs money is the endpoint's own billing rule (cost.type), not ours:
-    under `per_success` the provider produced nothing, under `per_call` it charged for the attempt."""
+async def test_a_4xx_bills_only_what_the_provider_reports(clients: AsyncClient, platform_on, monkeypatch):
+    """A rejected request is billed on the provider's word, never on the estimate. `per_success`
+    releases whatever the body says (nothing was produced). `per_call` MAY bill a caller-input
+    rejection — but only when the vendor's own charge field says it took something: a 400 with no
+    charge in the body releases the hold (Fiber's "body/identifier Required" and "profile not
+    found" billed twenty $0.04 calls to one team on 2026-09-06 under the old settle-at-the-estimate
+    rule), while scrapecreators reporting `credits_charged: 1` on the same status settles at that."""
     monkeypatch.setattr(call_service, "relay", _fake_relay(400, b'{"error":"bad aweme_id"}'))
     before = await _balance(clients)
     assert (await clients.get(f"/call/{EP}?aweme_id=nope")).status_code == 400
     assert await _balance(clients) == before, "per_success: a rejected request is not billable"
 
+    r = await clients.get(f"/call/{EP_CALL}?group_id=1")
+    assert r.status_code == 400
+    assert r.headers.get("X-Treg-Cost-Micro") == "0"
+    assert await _balance(clients) == before, "per_call, no charge reported: the hold is released"
+    assert [e["kind"] for e in await _entries(clients)][:2] == ["release", "reserve"]
+    async with session_maker() as db:
+        rel = (await db.execute(select(LedgerEntry).where(LedgerEntry.kind == "release")
+                                .order_by(LedgerEntry.created_at.desc()))).scalars().first()
+    assert rel.meta.get("reason") == "rejected_unbilled_400"
+
+    monkeypatch.setattr(call_service, "relay", _fake_relay(400, b'{"error":"bad group","credits_charged":1}'))
     assert (await clients.get(f"/call/{EP_CALL}?group_id=1")).status_code == 400
-    assert await _balance(clients) == before - EP_CALL_MICRO, "per_call: the attempt is billable"
+    assert await _balance(clients) == before - EP_CALL_MICRO, "per_call, charge reported: the caller pays that"
 
 
 async def test_dataforseo_settles_at_the_cost_it_reports(clients: AsyncClient, platform_on, monkeypatch):
@@ -662,6 +678,16 @@ def test_observed_cost_counts_resources_for_billed_oauth_reads():
     assert call_settle._observed_cost_micro(x, b"not json") is None, "unreadable body settles at the estimate"
     write = _mk("x", tier="tool", billed_oauth=True, cost_type="per_call", unit_micro=0)
     assert call_settle._observed_cost_micro(write, b'{"data": {"id": "1"}}') is None, "per_call settles at the estimate"
+
+    # fiber-ai reports `chargeInfo.creditsCharged` on every envelope at $0.02/credit (fx.yaml):
+    # a 2-credit profile fetch, a free identity resolve, and — the case that matters — an error
+    # body with no `chargeInfo`, which settles as unreported so a per_call 400/404 releases.
+    # A poll's "charged-for-async-process" repeats its job's charge and is NOT honoured.
+    fiber = _mk("fiber-ai")
+    assert call_settle._observed_cost_micro(fiber, b'{"output": {}, "chargeInfo": {"method": "charged-now", "creditsCharged": 2}}') == 40_000
+    assert call_settle._observed_cost_micro(fiber, b'{"output": {}, "chargeInfo": {"method": "charged-now", "creditsCharged": 0}}') == 0
+    assert call_settle._observed_cost_micro(fiber, b'{"message": "body/identifier Required", "statusCode": 400}') is None
+    assert call_settle._observed_cost_micro(fiber, b'{"chargeInfo": {"method": "charged-for-async-process", "creditsCharged": 5}}') is None
 
     # leadmagic reports `credits_consumed` too — including 0 on a 2xx miss (observed at verify
     # time) and fractions (email verify = 0.25 credits). $0.025/credit (fx.yaml).
@@ -1410,7 +1436,8 @@ def test_the_billability_truth_table():
         (401, "per_call", False), (402, "per_call", False), (403, "per_call", False),
         (405, "per_call", False), (407, "per_call", False), (408, "per_call", False),
         (429, "per_call", False), (429, "per_success", False), (429, "per_result", False),
-        # the caller's own input: billed under per_call only
+        # the caller's own input: MAY bill under per_call only — and then only at the charge the
+        # provider reports (`test_a_4xx_bills_only_what_the_provider_reports`)
         (400, "per_call", True), (404, "per_call", True), (422, "per_call", True),
         (400, "per_success", False), (400, "per_result", False),
         (503, "per_call", False), (503, "per_success", False),

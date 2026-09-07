@@ -1410,7 +1410,9 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   reserve, relay, settle, audit row and cancellation compensation are the ordinary ones. Vendor
   4xx (not 402/408/429) = usually the caller's fault, but scrapers answer 400 for their own outages
   (tikhub, live 2026-08-28), so the waterfall goes on ONLY to candidates that bill nothing for a
-  rejected request — per_success, free, the org's own key, or per_call ≤ 1¢ (`CHEAP_RETRY_MICRO`)
+  rejected request — per_success, free, the org's own key, or per_call ≤ 1¢ (`CHEAP_RETRY_MICRO`;
+  since 2026-09-07 a per_call rejection settles only at a charge the vendor itself reports, so this
+  is a bound on the reported-charge risk, not on the estimate — see money.md)
   — never the same provider again, within the error bound; if every one rejects it, the caller
   gets `route_caller_fault` naming each attempt. A 4xx the endpoint's YAML declares as its
   "no result" status (`miss: {status: 404}`, see "`miss` semantics ride on the endpoint") is a
