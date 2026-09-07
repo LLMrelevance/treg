@@ -163,6 +163,14 @@ Rung 3 only applies where treg has both a key and a published price for that end
 unpriced is refused rather than served, and you are told to connect your own key. Your own key is
 never billed to the balance.
 
+## Feedback
+
+`treg feedback <quality|pricing|friction|other> "message"` submits a problem or suggestion to the
+configured registry, under the active team. Add `--call-id ID` (repeatable) or `--endpoint-id ID`
+when available. Message `-` reads a prepared, sanitized description from stdin. The command
+returns a `feedback_id`. Omit private information and raw requests, responses or logs.
+See `treg feedback --help` and your registry's `/feedback.md` for details.
+
 ## Balance & top-up
 
 Only calls on **treg's key** (rung 3 above) cost balance. Everything else — your own keys, your own

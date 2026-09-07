@@ -40,6 +40,9 @@ Multi-tenant: a token = a (user, org) membership; resources are org-scoped.
 Base URL: {BASE}
 Repo: https://github.com/superdesigndev/treg
 
+Feedback: `treg feedback <quality|pricing|friction|other> "message"`, or the MCP `feedback` tool.
+Include call IDs when available and omit private information. Instructions: `{BASE}/feedback.md`.
+
 ## The one mechanic: /call/
 
 Two shapes, one endpoint, one token.
@@ -388,15 +391,17 @@ treg is also an **MCP server** at `{BASE}/mcp/`, two ways to authenticate it:
   Code, Cursor — can instead connect with a link + consent screen. Choose **OAuth** when the client
   asks; the token is issued to the team you pick.
 
-Five tools, the same ones for every client:
+A small tool set, the same for every client:
 
     catalog_search   find endpoints by what you want to DO, with prices
     catalog_get      one endpoint in full: params, cost, reliability, siblings
     call             call a catalog endpoint by id, or one of your team's own tools
     balance          the team's prepaid balance
     my_tools         what your team registered that you can call without the key
+    catalog_request  request a missing capability
+    feedback         share a problem or suggestion (omit private information)
 
-All five need a credential, and the challenge comes EARLY: every id-bearing JSON-RPC request,
+All need a credential, and the challenge comes EARLY: every id-bearing JSON-RPC request,
 `initialize` included, is answered with **401** and a `WWW-Authenticate` header naming
 `{BASE}/.well-known/oauth-protected-resource`. That header is how a client discovers where to
 authorize, and challenging the first request is what makes it run OAuth before the session proceeds

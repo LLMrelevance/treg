@@ -2933,6 +2933,11 @@ async def skill_md():
     return _serve_md("skill.md")
 
 
+@app.get("/feedback.md", include_in_schema=False)
+async def feedback_md():
+    return _serve_md("feedback.md")
+
+
 @app.get("/favicon.svg", include_in_schema=False)
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():

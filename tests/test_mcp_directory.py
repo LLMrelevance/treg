@@ -180,7 +180,7 @@ async def test_v2_declares_exact_directory_contract():
     tools = {tool.name: tool for tool in await mcp.directory_mcp.list_tools()}
     assert list(tools) == [
         "catalog_search", "catalog_get", "catalog_call_read", "catalog_call_write", "balance",
-        "catalog_request",
+        "catalog_request", "feedback",
     ]
     expected_titles = {
         "catalog_search": "Search Treg Catalog",
@@ -189,6 +189,7 @@ async def test_v2_declares_exact_directory_contract():
         "catalog_call_write": "Call a Write Endpoint",
         "balance": "Check Treg Balance",
         "catalog_request": "Request a Catalog Capability",
+        "feedback": "Submit Feedback",
     }
     assert {name: tool.title for name, tool in tools.items()} == expected_titles
     assert {name: tool.annotations.title for name, tool in tools.items()} == expected_titles
@@ -288,6 +289,7 @@ async def test_v2_serializes_the_scanner_facing_contract(clients):
         "catalog_call_write": "Call a Write Endpoint",
         "balance": "Check Treg Balance",
         "catalog_request": "Request a Catalog Capability",
+        "feedback": "Submit Feedback",
     }
     assert set(tools) == set(expected_titles)
     assert {name: tool["annotations"]["title"] for name, tool in tools.items()} == expected_titles

@@ -12,6 +12,13 @@ related:
 
 # The `treg` CLI
 
+## Feedback
+
+`cmd_feedback` implements `treg feedback <category> <message> [--call-id ID] [--endpoint-id ID]`.
+The category choices and help description come from the lightweight `feedback_contract` module.
+`--call-id` repeats; message `-` reads stdin. `_client` applies the configured registry and team,
+and `_show` prints the receipt or exits nonzero on failure. See [feedback](../architecture/feedback.md).
+
 ## Instagram grants
 
 `TREG_OAUTH_REVIEW_PENDING` and provider-registry metadata control the CLI's effective default and

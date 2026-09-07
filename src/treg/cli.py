@@ -41,6 +41,7 @@ from urllib.parse import parse_qsl, quote, urlsplit
 import httpx
 
 from . import agents as _agents
+from .feedback_contract import FEEDBACK_CATEGORIES, FEEDBACK_DESCRIPTION
 # One source of truth for the proxy's default port (help text below). Importing the module is cheap —
 # it pulls only stdlib plus httpx, which the CLI already has; `cryptography` stays lazy inside it.
 from .localproxy import DEFAULT_PORT as _PROXY_DEFAULT_PORT
@@ -4947,6 +4948,17 @@ def _catalog_search(query: str, args, cfg) -> None:
     _dim(f"\ntreg catalog get {rows[0]['id']}   # params, cost, example response")
 
 
+def cmd_feedback(args, cfg) -> None:
+    message = sys.stdin.read() if args.message == "-" else args.message
+    body = {"category": args.category, "message": message}
+    if args.call_id:
+        body["call_ids"] = args.call_id
+    if args.endpoint_id:
+        body["endpoint_id"] = args.endpoint_id
+    with _client(cfg) as client:
+        _show(client.post("/feedback", json=body))
+
+
 def _catalog_request(text: str, cfg) -> None:
     """File a "the catalog doesn't have X" report — the demand signal that steers which provider
     gets keyed next. Open endpoint (rate-limited server-side); a configured token just adds
@@ -5330,6 +5342,7 @@ HELP_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         ("call", "Call a tool: a catalog endpoint by id, or one of your own by URL."),
         ("balance", "Prepaid balance: credit left, calls in flight, recent spend."),
         ("topup", "Add funds, or set up automatic top-ups."),
+        ("feedback", "Share a problem or suggestion about treg."),
     ]),
     ("YOUR OWN TOOLS — what your team already has", [
         ("tool", "Manage tools (endpoint or CLI)."),
@@ -5954,6 +5967,17 @@ def build_parser() -> argparse.ArgumentParser:
     # instructions), but it is deliberately absent from --help: we only teach scan/upload.
     im = sub.add_parser("import", description="(deprecated) old name for `treg upload`.", formatter_class=_RAWFMT)
     _upload_args(im)
+
+    fb = mk(sub, "feedback", FEEDBACK_DESCRIPTION,
+            'treg feedback friction "The pagination example is unclear."',
+            'treg feedback quality "The returned data is outdated." --call-id CALL_ID',
+            'treg feedback other - < sanitized-feedback.txt')
+    fb.add_argument("category", choices=FEEDBACK_CATEGORIES, help="the kind of feedback")
+    fb.add_argument("message", help="a short, sanitized description; - reads it from stdin")
+    fb.add_argument("--call-id", action="append", help="related treg call ID (repeat for several)")
+    fb.add_argument("--endpoint-id", help="public catalog endpoint ID, if no call ID is available")
+    fb.epilog += "\nMore: <your registry base URL>/feedback.md"
+    fb.set_defaults(fn=cmd_feedback)
 
     # ---- balance ----
     bal = mk(sub, "balance", "Your team's prepaid balance: credit left, calls in flight, recent spend.",

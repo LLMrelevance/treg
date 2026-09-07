@@ -34,6 +34,7 @@ EXPECTED_MAKERS: dict[str, set[str]] = {
     "api.py": {API}, "mcp.py": {API}, "routers/resources.py": {API},
     "application/auth.py": {API}, "application/billing.py": {API}, "application/connect.py": {API},
     "application/asynctasks.py": {API},
+    "application/feedback.py": {API},  # synchronous intake; admin reads use get_admin_session
     "application/referrals.py": {API}, "application/signup.py": {API},
     "application/onboard/__init__.py": {API},
     "application/call/authorize.py": {API}, "application/call/idempotency.py": {API},
