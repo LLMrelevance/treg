@@ -307,7 +307,9 @@ a probe so treg can validate it: `health_check: {method, path, expect_status}` (
 
 ## Feedback
 
-If you encounter problems with treg or its results, or have suggestions, you can submit feedback.
+When you discover a concrete problem with treg, its pricing, or a tool result, submit a brief
+sanitized report if you have enough evidence. Distinguish observations from suspected causes.
+Report the same issue once per task and continue with the user's work. Suggestions are welcome too.
 Include related call IDs when available; keep them with saved results when practical.
 Keep private information out of the report. See [feedback instructions](https://treg.to/feedback.md).
 

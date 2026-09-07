@@ -92,8 +92,9 @@ per-registry submission runbook.
 ## Feedback
 
 The consumer skill also names feedback as a loading trigger and links to `{BASE}/feedback.md`.
-Its short feedback paragraph asks callers to retain call IDs when practical and omit private
-information. Detailed instructions live in `web/feedback.md`; the HTTP, CLI and two MCP entry
+Its short feedback paragraph asks callers to report concrete problems when they have enough
+evidence, distinguish observations from suspected causes, and report each issue once per task.
+It also asks callers to retain call IDs when practical and omit private information. Detailed instructions live in `web/feedback.md`; the HTTP, CLI and two MCP entry
 points share the contract in [feedback](../architecture/feedback.md).
 
 ## `/integrate.md` - the BUILDER skill
