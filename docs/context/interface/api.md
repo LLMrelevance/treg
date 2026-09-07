@@ -61,6 +61,13 @@ related:
 
 # The API
 
+## Feedback
+
+`routers.feedback` owns authenticated `POST /feedback`, team-scoped `GET /feedback/{feedback_id}`,
+and super-admin `GET /admin/feedback`. The intake's transaction belongs to `application.feedback`;
+the routes are in the control role. `routers.web.feedback_md` serves the compact instructions.
+See [feedback](../architecture/feedback.md) for the contract and provenance boundaries.
+
 ## Composition
 
 `api.router` preserves public registration order while concern routers contribute ordered route blocks.

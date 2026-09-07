@@ -61,6 +61,11 @@ can finalize the original task independently; the terminal-state guard prevents 
 
 ## Registry tables
 
+- **`Feedback`** - durable team-scoped problem reports and suggestions. Contains the submitted
+  category/message/references, authenticated org and user attribution, and the references verified
+  against that team's call records or ledger. Revision `0025`; `domain.feedback` owns inserts;
+  `application.feedback` commits. Team deletion removes these rows. See [feedback](feedback.md).
+
 `src/treg/models.py` is authoritative for columns, indexes and defaults. This section records
 ownership and behavior that a field declaration alone does not explain.
 [Multi-tenancy](multi-tenancy.md) defines org scoping and role gates.

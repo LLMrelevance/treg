@@ -100,6 +100,7 @@ jobs:
           tests/test_ledger_claim_review.py
           tests/test_asynctasks.py
           tests/test_alembic_baseline.py
+          tests/test_feedback.py
           tests/test_archive.py
           tests/test_call_cancellation.py
           tests/test_call_pool_discipline.py
@@ -148,4 +149,6 @@ jobs:
             | tar -xz gitleaks
           sudo mv gitleaks /usr/local/bin/
       - name: Scan for secrets
-        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact
+        # HEAD is the PR merge commit (both parents) or the pushed main commit. Scan all
+        # reachable history, including deleted secrets, without unrelated fetched branch tips.
+        run: gitleaks detect --source . --config .gitleaks.toml --log-opts="HEAD" --verbose --redact

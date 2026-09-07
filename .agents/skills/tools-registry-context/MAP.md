@@ -63,6 +63,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/alembic/versions/0022_org_spent_today_counter.py` | architecture/data-model.md |
 | `src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py` | architecture/data-model.md |
 | `src/treg/alembic/versions/0024_membership_calls_today_counter.py` | architecture/data-model.md |
+| `src/treg/alembic/versions/0025_feedback.py` | architecture/feedback.md |
 | `src/treg/analytics.py` | architecture/data-model.md |
 | `src/treg/api.py` | architecture/archive.md, architecture/money.md, architecture/multi-tenancy.md, architecture/proxy-model.md, architecture/super-admin.md, interface/api.md, interface/dashboard.md, interface/landing-sandbox.md, interface/seo.md |
 | `src/treg/application/__init__.py` | architecture/import-boundaries.md |
@@ -83,6 +84,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/application/call/settle.py` | architecture/import-boundaries.md, architecture/money.md, architecture/proxy-model.md, interface/api.md |
 | `src/treg/application/call/types.py` | architecture/import-boundaries.md, architecture/proxy-model.md, interface/api.md |
 | `src/treg/application/connect.py` | architecture/auth-secrets.md, architecture/composition.md, guides/expanding-a-category.md, interface/api.md |
+| `src/treg/application/feedback.py` | architecture/feedback.md |
 | `src/treg/application/onboard.py` | interface/api.md |
 | `src/treg/application/onboard/__init__.py` | interface/landing-sandbox.md, interface/onboarding.md |
 | `src/treg/application/onboard/demo.py` | interface/onboarding.md |
@@ -189,6 +191,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/domain/connections/authorization.py` | architecture/auth-secrets.md, architecture/import-boundaries.md, architecture/instagram-oauth.md, guides/expanding-a-category.md |
 | `src/treg/domain/connections/oauth_flow.py` | architecture/auth-secrets.md, architecture/import-boundaries.md, architecture/instagram-oauth.md, guides/expanding-a-category.md |
 | `src/treg/domain/connections/refresh.py` | architecture/auth-secrets.md, architecture/import-boundaries.md |
+| `src/treg/domain/feedback.py` | architecture/feedback.md, architecture/import-boundaries.md |
 | `src/treg/domain/governance/__init__.py` | architecture/import-boundaries.md |
 | `src/treg/domain/governance/access.py` | architecture/import-boundaries.md, architecture/multi-tenancy.md, architecture/proxy-model.md, interface/api.md |
 | `src/treg/domain/governance/budgets.py` | architecture/import-boundaries.md, architecture/money.md, architecture/multi-tenancy.md, interface/api.md |
@@ -209,6 +212,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/domain/tools/bundles.py` | architecture/auth-secrets.md, architecture/multi-tenancy.md |
 | `src/treg/egress.py` | architecture/local-run.md |
 | `src/treg/email.py` | interface/api.md, ops/deploy.md |
+| `src/treg/feedback_contract.py` | architecture/feedback.md |
 | `src/treg/fsjail.py` | architecture/local-run.md |
 | `src/treg/health.py` | architecture/auth-secrets.md |
 | `src/treg/infra/__init__.py` | architecture/money.md |
@@ -245,6 +249,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/routers/call.py` | architecture/composition.md, architecture/instagram-oauth.md, architecture/money.md, architecture/proxy-model.md, interface/api.md |
 | `src/treg/routers/catalog.py` | architecture/catalog.md, interface/api.md |
 | `src/treg/routers/connections.py` | architecture/auth-secrets.md, architecture/composition.md, guides/expanding-a-category.md, interface/api.md |
+| `src/treg/routers/feedback.py` | architecture/feedback.md |
 | `src/treg/routers/onboard.py` | architecture/composition.md, interface/api.md, interface/landing-sandbox.md, interface/onboarding.md |
 | `src/treg/routers/orgs.py` | architecture/composition.md, architecture/money.md, architecture/multi-tenancy.md, interface/api.md |
 | `src/treg/routers/referrals.py` | architecture/composition.md, architecture/money.md, interface/api.md |
@@ -263,6 +268,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/web/claude-connector.html` | architecture/mcp-oauth.md |
 | `src/treg/web/connect-demo.html` | architecture/mcp-oauth.md |
 | `src/treg/web/fable-gtm.html` | interface/seo.md |
+| `src/treg/web/feedback.md` | architecture/feedback.md |
 | `src/treg/web/grokbot.html` | interface/seo.md |
 | `src/treg/web/gtag.js` | architecture/ads-conversions.md |
 | `src/treg/web/index.html` | architecture/instagram-oauth.md, interface/dashboard.md, interface/landing-sandbox.md, interface/onboarding.md, interface/seo.md |
@@ -303,6 +309,7 @@ Regenerate via `scripts/build-map.py`.
 | `tests/test_catalog_api.py` | architecture/catalog.md |
 | `tests/test_catalog_validate.py` | architecture/catalog.md |
 | `tests/test_error_capture.py` | architecture/proxy-model.md |
+| `tests/test_feedback.py` | architecture/feedback.md |
 | `tests/test_import_lightness.py` | architecture/import-boundaries.md |
 | `tests/test_instagram_oauth_architecture.py` | architecture/instagram-oauth.md |
 | `tests/test_marketplace_call.py` | architecture/mcp-oauth.md, architecture/proxy-model.md |
@@ -329,7 +336,8 @@ Regenerate via `scripts/build-map.py`.
 | `architecture/catalog.md` | `contracts.yaml`, `adapters.yaml`, `findymail.search.business-profile.json`, `__init__.py`, `contracts.py`, `paths.py`, `plan.py`, `synthetic.py`, `route.py`, `test_routing.py`, `catalog-drift.yml`, `catalog_drift.py`, `catalog_ingest.py`, `catalog_validate.py`, `aliases.yaml`, `fx.yaml`, `aviato.yaml`, `crustdata.yaml`, `aviato.companies.acquisitions.json`, `aviato.companies.employees.json`, `aviato.companies.enrich.bulk.json`, `aviato.companies.enrich.json`, `aviato.companies.founders.json`, `aviato.companies.funding_rounds.json`, `aviato.companies.investments.json`, `aviato.companies.outbound_investments.json`, `aviato.companies.search.json`, `aviato.linkedin.company.posts.json`, `aviato.linkedin.post.comments.json`, `aviato.linkedin.post.reactions.json`, `aviato.linkedin.post.reposts.json`, `aviato.linkedin.user.posts.json`, `aviato.people.contact.get.json`, `aviato.people.email.find.json`, `aviato.people.enrich.bulk.json`, `aviato.people.enrich.json`, `aviato.people.phone.find.json`, `aviato.people.search.json`, `aviato.people.search.simple.json`, `crustdata.companies.autocomplete.json`, `crustdata.companies.enrich.json`, `crustdata.companies.identify.json`, `crustdata.companies.jobs.search.json`, `crustdata.companies.search.json`, `crustdata.people.autocomplete.json`, `crustdata.people.enrich.json`, `crustdata.people.search.json`, `google-search-console.yaml`, `google-search-console.extended.yaml`, `google-tag-manager.yaml`, `google-tag-manager.extended.yaml`, `instagram.yaml`, `instagram.extended.yaml`, `justoneapi.extended.yaml`, `minimax.yaml`, `apify.yaml`, `brightdata.yaml`, `companyenrich.yaml`, `oceanio.yaml`, `akta.extended.yaml`, `dataforseo.extended.yaml`, `tikhub.extended.yaml`, `minimax.video-gen.result.retrieve.json`, `minimax.video-gen.from_image.json`, `minimax.video-gen.task.status.json`, `openrouter.yaml`, `openrouter.extended.yaml`, `openrouter.x.alibaba-wan-3-0.json`, `replicate.yaml`, `replicate.extended.yaml`, `replicate.image-gen.flux-schnell.json`, `__init__.py`, `store.py`, `settlement.py`, `stats.py`, `catalog_observations.py`, `catalog.py`, `test_aigc_pr_b.py`, `test_catalog_api.py`, `test_catalog_validate.py` |
 | `architecture/composition.md` | `bootstrap.py`, `bootstrap_handlers.py`, `bootstrap_http.py`, `call_surface.py`, `connect.py`, `mcp_oauth.py`, `session.py`, `admin.py`, `auth.py`, `billing.py`, `call.py`, `connections.py`, `onboard.py`, `orgs.py`, `resources.py`, `referrals.py`, `web.py`, `dump_surface.py`, `test_app_roles.py` |
 | `architecture/data-model.md` | `alembic.ini`, `env.py`, `0001_baseline_current_schema.py`, `0002_archive_tables.py`, `0003_callrecord_cached.py`, `0004_archivekey_request_shape.py`, `0005_capacity_policy_snapshot.py`, `0006_overflow_route.py`, `0007_overflow_spend.py`, `0008_org_platform_overflow_disabled.py`, `0009_callrecord_hit.py`, `0017_async_task_record.py`, `0018_async_resource_ownership.py`, `0019_async_poll_failures.py`, `0020_callrecord_created_at_indexes.py`, `0021_ledgerentry_org_created_at_index.py`, `0022_org_spent_today_counter.py`, `0023_callrecord_org_user_created_at_index.py`, `0024_membership_calls_today_counter.py`, `0011_callrecord_archive_link.py`, `0015_idempotentcall_membership_cascade.py`, `maintenance.py`, `sitetrack.js`, `models.py`, `timeutil.py`, `db.py`, `referrals.py`, `audit.py`, `analytics.py`, `bootstrap_handlers.py`, `ratestore.py`, `auth.py`, `test_postgres_reset.py`, `test_alembic_expand_safety.py` |
-| `architecture/import-boundaries.md` | `pyproject.toml`, `ci.yml`, `__init__.py`, `__init__.py`, `access.py`, `authorize.py`, `idempotency.py`, `overflow.py`, `route.py`, `__init__.py`, `intake.py`, `resolve.py`, `reserve.py`, `settle.py`, `evidence.py`, `service.py`, `types.py`, `client_identity.py`, `__init__.py`, `__init__.py`, `access.py`, `budgets.py`, `publicdemo.py`, `teams.py`, `usage.py`, `__init__.py`, `__init__.py`, `authorization.py`, `oauth_flow.py`, `refresh.py`, `__init__.py`, `__init__.py`, `__init__.py`, `__init__.py`, `injectors.py`, `relay.py`, `__init__.py`, `limiter.py`, `test_call_architecture.py`, `test_import_lightness.py` |
+| `architecture/feedback.md` | `feedback_contract.py`, `feedback.py`, `feedback.py`, `feedback.py`, `0025_feedback.py`, `feedback.md`, `test_feedback.py` |
+| `architecture/import-boundaries.md` | `pyproject.toml`, `ci.yml`, `__init__.py`, `__init__.py`, `access.py`, `authorize.py`, `idempotency.py`, `overflow.py`, `route.py`, `__init__.py`, `intake.py`, `resolve.py`, `reserve.py`, `settle.py`, `evidence.py`, `service.py`, `types.py`, `client_identity.py`, `__init__.py`, `__init__.py`, `access.py`, `budgets.py`, `publicdemo.py`, `teams.py`, `usage.py`, `__init__.py`, `__init__.py`, `authorization.py`, `oauth_flow.py`, `refresh.py`, `__init__.py`, `feedback.py`, `__init__.py`, `__init__.py`, `__init__.py`, `injectors.py`, `relay.py`, `__init__.py`, `limiter.py`, `test_call_architecture.py`, `test_import_lightness.py` |
 | `architecture/instagram-oauth.md` | `catalog_ingest.py`, `access.py`, `resolve.py`, `service.py`, `instagram.yaml`, `instagram.extended.yaml`, `cli.py`, `store.py`, `authorization.py`, `oauth_flow.py`, `oauth_exchange.py`, `mcp.py`, `call.py`, `index.html`, `0010_oauth_authorization_method.py`, `test_instagram_oauth_architecture.py` |
 | `architecture/local-proxy.md` | `localproxy.py`, `server.js` |
 | `architecture/local-run.md` | `localrun.py`, `egress.py`, `fsjail.py` |

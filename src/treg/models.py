@@ -1128,6 +1128,24 @@ class IdempotentCall(SQLModel, table=True):
     expires_at: datetime
 
 
+class Feedback(SQLModel, table=True):
+    """A private team report, persisted before acknowledging receipt.
+
+    call_ids and endpoint_id are submitted claims. verified_call_ids contains only references
+    found in this team's audit or ledger; it verifies provenance, not the report's conclusion.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    org_id: int = Field(foreign_key="org.id", index=True)
+    user_email: str
+    category: str = Field(index=True)
+    message: str
+    call_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    verified_call_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    endpoint_id: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=_now)
+
+
 class ToolRequest(SQLModel, table=True):
     """A "the catalog doesn't have X" report — filed from the catalog page, the CLI, or by an
     agent mid-search over MCP. Demand signal for which provider to key next; reviewed by querying

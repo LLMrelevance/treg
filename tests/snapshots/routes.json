@@ -262,6 +262,32 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "submit_feedback",
+    "path": "/feedback"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "get_feedback",
+    "path": "/feedback/{feedback_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "admin_feedback",
+    "path": "/admin/feedback"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET",
       "HEAD"
     ],
@@ -558,6 +584,15 @@
     ],
     "name": "skill_md",
     "path": "/skill.md"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "feedback_md",
+    "path": "/feedback.md"
   },
   {
     "kind": "APIRoute",
