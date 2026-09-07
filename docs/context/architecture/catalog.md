@@ -102,9 +102,11 @@ evidence feeds the shared money settlement function; provider variation stays de
 
 `millionverifier.yaml` adds single-email verification and the free own-account credit probe.
 The USD price is documented at $89 / 50,000 prepaid credits ($0.00178 each), with no expiry.
-Three live verification requests on the supplied promotional account consumed three credits;
-the balance updated later, so immediate before/after probes are not a per-call meter. The paid
-pack has not been purchased and the price retains `confidence: documented`.
+The initial three live verification requests consumed three credits. Subsequent account-ledger
+evidence shows deductions followed by separate goodwill credits for risky results, including
+six catch-all credits returned after three ten-email bulk format tests (30 deducted, six returned).
+Those bulk tests are evidence only, not catalog support. Immediate balance probes are not a
+per-call meter. No paid pack has been purchased; the price retains `confidence: documented`.
 
 `adapters.yaml` adds `millionverifier.people.email.verify` to the existing
 `treg.people.email.verify` contract beside Hunter, LeadMagic and Tomba. `ok` maps to valid;

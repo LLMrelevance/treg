@@ -41,7 +41,7 @@ endpoints:
       source_url: https://www.millionverifier.com/
       checked: '2026-09-08'
       confidence: documented
-      note: "One credit per verification at the $89 / 50,000-credit pack rate. Credits never expire. Risky unknown and catch-all results are free through automatic credit returns for eligible accounts; accounts flagged for misuse may still pay. Three live checks on the promotional account consumed three credits after a delayed balance update (500 to 497); the USD pack rate remains documented, not purchased or observed."
+      note: "One credit per verification at the $89 / 50,000-credit pack rate, including invalid results. Credits never expire. Upstream deducts a credit first, then automatically returns it for unknown/catch-all results on eligible accounts; accounts flagged for misuse may still pay. On platform keys, treg settles unknown/catch-all at zero without waiting for the upstream return and absorbs any eligibility exception. Own keys are not metered by treg. Credit returns were observed on the promotional account; the USD pack rate remains documented, not purchased or observed."
     verified: '2026-09-08'
     example_response: examples/millionverifier.people.email.verify.json
     docs_url: https://developer.millionverifier.com/#tag/Single-API

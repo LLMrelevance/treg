@@ -1202,6 +1202,28 @@ async def test_millionverifier_own_key_precedes_platform_and_is_free(clients, en
     assert await _balance(clients) == before
 
 
+async def test_millionverifier_account_usage_requires_own_key(clients, enrichment_on, monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "PLATFORM-MV-KEY")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "millionverifier")
+    get_settings.cache_clear()
+    seen = []
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider({
+        "millionverifier": [(200, {"credits": 123})],
+    }, seen))
+    before = await _balance(clients)
+    response = await clients.get("/call/millionverifier.account.usage")
+    assert response.status_code == 404, response.text
+    assert seen == []
+    assert await _balance(clients) == before
+
+    await clients.post("/secrets", json={"name": "millionverifier", "value": "OWN-MV-KEY"})
+    response = await clients.get("/call/millionverifier.account.usage")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"credits": 123}
+    assert len(seen) == 1
+    assert await _balance(clients) == before
+
+
 @pytest.mark.parametrize("result,free,charged", [
     ("ok", False, True), ("ok", True, True), ("invalid", False, True),
     ("disposable", False, True), ("catch_all", False, False), ("unknown", False, False),
