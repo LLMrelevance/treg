@@ -13,6 +13,9 @@ sources:
   - src/treg/web/people-search.html
   - src/treg/web/grokbot.html
   - src/treg/web/fable-gtm.html
+  - src/treg/web/astra.html
+  - src/treg/web/media/astra/page.css
+  - src/treg/web/media/astra/page.js
   - src/treg/web/llms.txt
   - scripts/indexnow_submit.py
   - src/treg/web/support.html
@@ -39,6 +42,24 @@ answering 405 everywhere, no `og:`/`twitter:` tags or image, no structured data,
 FastAPI's stock Swagger shell — a kilobyte of JavaScript to anything that does not run scripts.
 
 ## The pieces
+
+`/astra` is the Astra + treg launch-film destination, served by `astra_page` as bundled,
+no-cache HTML and included in the sitemap and route ownership manifest. It leads with
+“Connect ChatGPT to any data & tools” and a native-styled, self-playing Codex workflow:
+prompt, provider comparison, scan and selection, email/phone enrichment, then the cost receipt.
+The preview pauses off screen, respects reduced motion, and opens the `warm-paper` launch film
+on click. Tool cards introduce the catalog; a subscription comparison keeps the illustrative
+usage receipt alongside it. The “Not just lead enrichment” use cases follow pricing. On small
+screens, pricing stacks vertically and the demo switches between chat and contact results.
+
+Benchmark tabs identify the evaluated agent as Claude Code, rather than presenting its scores
+as an Astra evaluation. Use-case prompts are copyable; plugin CTAs open the treg listing on
+`chatgpt.com/plugins`. Account setup follows the launch-page convention: members continue to
+`/app?ref=astra`; other visitors see a native sign-in dialog with the existing OAuth links and
+email-code endpoints (`/auth/email/start` and `/auth/email/verify`). The page uses `sitetrack.js`,
+`adtrack.js` and `gtag.js` for the existing attribution path; `data-page="astra"` identifies
+the landing page in ad-click capture. Campaign links should carry `utm_*` parameters for
+server-side first-touch attribution across signup, first successful call and top-up.
 
 | Path | What it is |
 |---|---|

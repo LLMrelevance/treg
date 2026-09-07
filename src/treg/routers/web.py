@@ -2733,6 +2733,7 @@ _SITEMAP_PAGES: tuple[tuple[str, str, str], ...] = (
     ("/people-search", "people-search.html", "0.8"),
     ("/grokbot", "grokbot.html", "0.8"),
     ("/fable", "fable-gtm.html", "0.8"),
+    ("/astra", "astra.html", "0.8"),
     ("/terms", "terms.html", "0.2"),
     ("/privacy", "privacy.html", "0.2"),
     # The outcome pages. Listed WITHOUT a trailing slash on purpose: `/use-cases/<slug>/` 307s to
@@ -3068,6 +3069,15 @@ async def fable_page():
     page = _WEB_DIR / "fable-gtm.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="fable-gtm.html not bundled")
+    return FileResponse(page, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/astra", include_in_schema=False)
+async def astra_page():
+    """Astra + treg launch destination, with the Codex demo and direct plugin listing."""
+    page = _WEB_DIR / "astra.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="astra.html not bundled")
     return FileResponse(page, headers={"Cache-Control": "no-cache"})
 
 
