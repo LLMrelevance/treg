@@ -287,21 +287,27 @@ worker whenever the archive records, `archive_prune_batch` (500) bodies per pass
 `archive_prune_interval_s` (3600); batch 0 disables. Rollup counters (bodies_kept, kept_bytes)
 move atomically with each strip.
 
-## Recorder throttle (2026-09-03)
+## Recorder throttle (2026-09-03, memory-bounded 2026-09-07)
 
 At most `_MAX_CONCURRENT_WRITES` (2) recordings touch the database at once — audit's exact
 loop-bound-semaphore pattern (four until 2026-09-07; every slot is paid per uvicorn worker and
-again per rolling-deploy instance, and a recording is one INSERT of a body already in memory). Before it, a burst could put up to 512 concurrent short sessions in
-front of the API's 15-slot pool (SToneX's pool-pressure report); those writes now land on the
-BACKGROUND pool instead (`ops/deploy.md` § Three pools), so the semaphore is the inner bound rather
-than the only one — a third module reaching for the wrong maker no longer needs its author to have
-read this section. Queued recordings wait inside
-their fire-and-forget task, so the caller is unaffected; the 30s bound covers wait+write, so a
-stuck queue still sheds rather than wedges. Throttled, not shed: the burst test proves all 12
-concurrent recordings land while peak DB concurrency stays ≤4.
+again per rolling-deploy instance, and a recording is one INSERT of a body already in memory).
+Before it, a burst could put up to 512 concurrent short sessions in front of the API's 15-slot pool
+(SToneX's pool-pressure report); those writes now land on the BACKGROUND pool instead
+(`ops/deploy.md` § Three pools), so the semaphore is the inner bound rather than the only one.
+Queued recordings wait inside their fire-and-forget task, so the caller is unaffected; the 30s
+bound covers wait+write, so a stuck queue still sheds rather than wedges. Throttled, not shed: the
+burst test proves all 12 concurrent recordings land while peak DB concurrency stays ≤2.
+
+**Memory bound (2026-09-07 OOM fix).** Each pending task holds its `body` bytes in a closure — up to
+`_MAX_PENDING` (512) tasks × `archive_max_body_bytes` (2 MB) = 1 GB worst case. After #363 reduced
+concurrent writes from 4 to 2, backlog built faster under heavy traffic and the 2026-09-07T00:43:06Z
+OOM killed production at 4 GB. `_MAX_PENDING_BYTES` (256 MB) now caps total body bytes held by
+pending work: `record()` sheds when EITHER the task count OR the bytes threshold is exceeded. The
+done callback releases bytes when a task completes, keeping the budget accurate.
 
 The semaphore is process-local, while production runs multiple processes. An exact in-process key
-lock is acquired before the semaphore, so duplicate recordings queue without consuming all four
+lock is acquired before the semaphore, so duplicate recordings queue without consuming both
 database-write slots and unrelated keys keep moving; weak references discard inactive locks. Once
 admitted, the writer locks and refreshes the matching `ArchiveKey` row before reading the newest
 snapshot and allocating version N+1. The refresh matters because the earlier unlocked lookup
