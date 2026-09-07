@@ -228,6 +228,7 @@ async def test_routed_call_runs_the_cheapest_child_and_returns_output_raw_and_pr
     assert d["output"] == {"email": "patrick@stripe.com", "confidence": 0.99, "first_name": "Patrick", "last_name": "Collison", "verified": True}
     assert d["raw"]["data"]["score"] == 99, "the winning provider's body, verbatim"
     assert d["_treg"]["served_by"] == "tomba.people.email.find" and d["_treg"]["outcome"] == "hit"
+    assert "advice" not in d["_treg"], "the provider vouched for the mailbox — nothing to add"
     assert r.headers["X-Treg-Served-By"] == "tomba.people.email.find" and r.headers["X-Treg-Providers-Tried"] == "tomba"
     assert seen == [("tomba", "GET", {"domain": "stripe.com", "full_name": "Patrick Collison"}, None)]
     charged = int(r.headers["X-Treg-Cost-Micro"])
@@ -241,6 +242,24 @@ async def test_routed_call_runs_the_cheapest_child_and_returns_output_raw_and_pr
     rows = (await clients.get("/calls")).json()
     kinds = {(x["tool_name"], x.get("credential_tier")) for x in rows}
     assert (ROUTED, "routed") in kinds and ("tomba.people.email.find", "platform") in kinds
+
+
+async def test_an_unverified_hit_carries_verify_advice(clients: AsyncClient, enrichment_on, monkeypatch):
+    """A found address the provider did not vouch for (Tomba's verification status is not `valid`
+    — the catch-all shape that bounced for a recruiting team on 2026-09-06) is still a HIT and
+    still billed, but the answer says so in `_treg.advice` and points at the verify endpoint. A
+    suggestion, not a chained call: the balance moves by the find alone."""
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider(
+        {"tomba": [(200, {"data": {"email": "alan@pruittstructures.com", "score": 96,
+                                    "verification": {"status": "accept_all"}}})]}, []))
+    before = await _balance(clients)
+    r = await clients.post(f"/call/{ROUTED}", json={"full_name": "Alan Marquez", "domain": "pruittstructures.com"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["output"]["email"] == "alan@pruittstructures.com" and d["output"]["verified"] is False
+    assert d["_treg"]["outcome"] == "hit"
+    assert "treg.people.email.verify" in d["_treg"]["advice"]
+    assert before - await _balance(clients) == int(r.headers["X-Treg-Cost-Micro"]) == 8_900, "the find, nothing chained"
 
 
 async def test_error_on_the_first_child_falls_back_to_the_second(clients: AsyncClient, enrichment_on, monkeypatch):

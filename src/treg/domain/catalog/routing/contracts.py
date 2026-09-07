@@ -24,6 +24,12 @@ class Contract:
     miss: str
     idempotent: bool = True
     default_max_cost_usd: float | None = None  # the per-call ceiling when the caller sends none
+    # One sentence the router attaches as `_treg.advice` to a HIT whose `output.verified` is not
+    # true — a found contact the provider did not confirm deliverable, which an agent should verify
+    # before outreach. Empty = no advice (a search result is not something you "verify"). A
+    # suggestion only: treg never chains the verify call itself, which would double every hit's
+    # price and change what the find bills for.
+    advice_unverified: str = ""
 
     @property
     def required_output(self) -> tuple[str, ...]:
@@ -109,7 +115,8 @@ def parse_contracts(doc: dict) -> dict[str, Contract]:
             filters={k: (v if isinstance(v, dict) else {"type": str(v)}) for k, v in (c.get("filters") or {}).items()},
             output={k: (v if isinstance(v, dict) else {"type": str(v)}) for k, v in (c.get("output") or {}).items()},
             miss=str(c.get("miss") or ""), idempotent=bool(c.get("idempotent", True)),
-            default_max_cost_usd=(float(c["default_max_cost_usd"]) if c.get("default_max_cost_usd") is not None else None))
+            default_max_cost_usd=(float(c["default_max_cost_usd"]) if c.get("default_max_cost_usd") is not None else None),
+            advice_unverified=str(c.get("advice_unverified") or ""))
     return out
 
 
