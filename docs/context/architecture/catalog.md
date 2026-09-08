@@ -106,7 +106,10 @@ The initial three live verification requests consumed three credits. Subsequent 
 evidence shows deductions followed by separate goodwill credits for risky results, including
 six catch-all credits returned after three ten-email bulk format tests (30 deducted, six returned).
 Those bulk tests are evidence only, not catalog support. Immediate balance probes are not a
-per-call meter. No paid pack has been purchased; the price retains `confidence: documented`.
+per-call meter. The account owner later confirmed $89 for the base 50,000-credit pack.
+The catalog rate excludes initial free credits and variable promotional bonuses; it is not
+the effective cost after bonuses. No receipt was inspected, so `confidence: documented` and
+`source: docs` remain appropriate.
 
 `adapters.yaml` adds `millionverifier.people.email.verify` to the existing
 `treg.people.email.verify` contract beside Hunter, LeadMagic and Tomba. `ok` maps to valid;

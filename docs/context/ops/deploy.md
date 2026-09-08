@@ -25,8 +25,9 @@ related:
 
 MillionVerifier platform calls require `TREG_PLATFORM_KEY_MILLIONVERIFIER` in the secret store
 and `millionverifier` in the existing `TREG_PLATFORM_PROVIDERS` allow-list. The listing adds
-the settings slot only; operators enable it on deployment and fund the account when its
-promotional credits run out. Teams can connect their own keys without platform configuration.
+the settings slot and a `sync: false` web-service key entry in `render.yaml`. The capacity
+sweep cron reads the same key through `fromService`. Operators supply the secret and enable
+the provider on deployment. Teams can connect their own keys without platform configuration.
 
 ## Entry point (`__main__.py`)
 `python -m treg upgrade` runs the explicit release phase. `maintenance._upgrade_schema()` runs
