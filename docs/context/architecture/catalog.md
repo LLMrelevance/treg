@@ -7,6 +7,8 @@ sources:
   - src/treg/catalog/examples/millionverifier.people.email.verify.json
   - src/treg/catalog/examples/millionverifier.account.usage.json
   - src/treg/catalog/adapters.yaml
+  - src/treg/catalog/tomba.yaml
+  - src/treg/catalog/examples/tomba.people.email.verify.json
   - src/treg/catalog/examples/findymail.search.business-profile.json
   - src/treg/domain/catalog/routing/__init__.py
   - src/treg/domain/catalog/routing/contracts.py
@@ -121,6 +123,15 @@ service, and `credits` is a delayed balance; neither is per-call usage.
 Bulk upload, file info/list/download, stop and delete are excluded: those operations use
 `bulkapi.millionverifier.com` with `key` auth and a multipart file lifecycle, rather than this
 provider's Single API host and `api` auth. The YAML records the complete eight-operation map.
+
+## Tomba email verification (2026-09-08)
+
+Tomba email verification uses `GET /v1/email-verifier?email=…`; its catalog input and routing
+adapter both send `email` in query parameters. A live comparison with the same address and
+credentials returned HTTP 200 with a verification verdict on this documented query route and
+HTTP 422 `params_invalid` on the former `/v1/email-verifier/{email}` path. The response fixture
+captures the returned verdict fields; the mapping remains `data.email.status` / `data.email.score`.
+Historical failure-only samples do not establish coverage for the corrected request shape.
 
 ## Authorization metadata
 
