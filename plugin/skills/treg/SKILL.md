@@ -169,6 +169,13 @@ Notes:
     match; only `output.verified: true` means it checked the mailbox. When it is not, the answer
     carries `_treg.advice` naming the verify step (`treg.people.email.verify`, a fraction of a cent)
     — run it before outreach, and never re-send the same find: every hit bills, repeats included.
+  - **Verify before you send. Every address, every time.** This includes rows from a company or
+    domain search (`treg.people.search`, `hunter.companies.emails`, …): those are directory
+    listings, and a row's email is unconfirmed unless that row's own verification field says
+    otherwise. Treat `invalid` as dead and `accept_all` as risky. And never send to an address the
+    provider did not return — if a domain search came back empty, `info@` is a guess, not a result.
+    Live 2026-09-08: 73 of one team's 79 bounces were unverified rows and guesses that one $0.006
+    verify call each would have caught.
 - An endpoint with no published price is refused rather than served free; connect your own key.
 
 ## Task - generate a video or an image
