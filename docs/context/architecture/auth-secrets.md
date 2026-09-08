@@ -34,6 +34,12 @@ Tier 4 has explicit platform-key slots for MiniMax, OpenRouter and Replicate. Th
 receive them as environment secrets, and the worker constructs the same platform bindings as the call
 path. Key values are never copied into task records, logs or archive evidence.
 
+`MILLIONVERIFIER` is a pasted-key Enrichment provider. Both own keys and platform bindings inject
+`api` into the query at `https://api.millionverifier.com`. Its free `/api/v3/credits` probe returns
+HTTP 200 with `error: apikey_not_found` for a garbage key; `token_reject_field="error"` rejects
+that body while allowing valid zero-credit accounts. `platform_key_millionverifier` reads
+`TREG_PLATFORM_KEY_MILLIONVERIFIER`; platform access also requires the existing allow-list.
+
 ## Instagram grant methods (2026-09-01)
 
 Instagram is one provider with two explicit protocol profiles. The default `instagram-login`

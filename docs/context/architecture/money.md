@@ -766,6 +766,20 @@ and `cost_source: "aggregator"` + `served_via` in the ledger `meta`, so `reconci
 `OverflowSpend` (per aggregator per UTC day) is updated inside that same settle transaction; it is
 accounting for the $20/day budget, not a balance. Shadow mode places no hold and charges nothing.
 
+## MillionVerifier credit returns
+
+`application.call.settle._observed_cost_micro` treats `unknown` and `catch_all` verification
+results as zero cost, independently of routing (both are useful verdicts). Definitive results
+use the documented $0.00178 estimate, including invalid results. Upstream deducts credits first
+and automatically returns risky credits for eligible accounts after verification. Treg uses its
+existing reserve/settle cycle to close the hold at zero for unknown/catch-all as soon as the
+response arrives; it does not wait for the upstream return, poll the balance, or create a later
+refund transaction. The zero-cost rule reflects treg's pricing policy, not confirmation of an
+individual upstream return. If the platform account loses eligibility due to upstream misuse rules, treg absorbs
+that exception rather than charging callers for these advertised free results. Own keys still
+bypass treg metering. The response's `free` flag describes the email service and `credits` is a
+delayed account balance, so neither field is interpreted as per-call cost.
+
 ## Per-success response rules
 
 HTTP 200 alone does not prove a billable success. `settle.py` checks the routing adapter first,

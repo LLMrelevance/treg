@@ -52,9 +52,16 @@ aggregator on the *same* endpoint, typed 503). This fragment covers what is buil
 Scope: treg-owned platform credentials only. Tiers 1/2 (a caller's own tool or key) are never
 consulted or affected by anything here.
 
+MillionVerifier's platform slot has an acknowledged exhaustion-signature gap in
+`tests/test_capacity_overflow_routes.py::_UNRECORDED_SIGNATURE`: the supplied promotional account
+has not been exhausted. Its balance collector reads `credits` from the free `/api/v3/credits`
+endpoint using query auth `api`. Both the balance script and sweep use this collector; it does
+not add `bulk_credits` to the balance. No overflow route is claimed. Verify the funded
+account's empty-credit response before adding a signature or enabling overflow.
+
 ## Pieces (`src/treg/domain/capacity/`)
 
-- **`collectors.py`** — the 31 providers' *free* balance/quota calls (`coroutine(client, key) →
+- **`collectors.py`** — the providers' *free* balance/quota calls (`coroutine(client, key) →
   {value, unit, note}`), moved byte-identically from `scripts/provider_balances.py`. Only DataForSEO,
   TikHub, and Brightdata speak dollars; everyone else meters credits, rows, searches. `NO_BALANCE_API`
   names the 7 providers that publish no meter (dashboard-only) so they read as "no API", never as a

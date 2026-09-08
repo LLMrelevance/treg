@@ -3,6 +3,9 @@ title: Endpoint catalog — what you can DO with a connected key, and which prov
 status: shipped
 sources:
   - src/treg/catalog/contracts.yaml
+  - src/treg/catalog/millionverifier.yaml
+  - src/treg/catalog/examples/millionverifier.people.email.verify.json
+  - src/treg/catalog/examples/millionverifier.account.usage.json
   - src/treg/catalog/adapters.yaml
   - src/treg/catalog/examples/findymail.search.business-profile.json
   - src/treg/domain/catalog/routing/__init__.py
@@ -94,6 +97,30 @@ The computed cost view uses a `cost.table` fallback as its scalar validated uppe
 eligibility and compact displays. Runtime charging evaluates the first matching row against request
 values plus catalog defaults and freezes that settlement basis. Terminal usage or the recorded table
 evidence feeds the shared money settlement function; provider variation stays declarative in YAML.
+
+## MillionVerifier email verification (2026-09-08)
+
+`millionverifier.yaml` adds single-email verification and the free own-account credit probe.
+The USD price is documented at $89 / 50,000 prepaid credits ($0.00178 each), with no expiry.
+The initial three live verification requests consumed three credits. Subsequent account-ledger
+evidence shows deductions followed by separate goodwill credits for risky results, including
+six catch-all credits returned after three ten-email bulk format tests (30 deducted, six returned).
+Those bulk tests are evidence only, not catalog support. Immediate balance probes are not a
+per-call meter. The account owner later confirmed $89 for the base 50,000-credit pack.
+The catalog rate excludes initial free credits and variable promotional bonuses; it is not
+the effective cost after bonuses. No receipt was inspected, so `confidence: documented` and
+`source: docs` remain appropriate.
+
+`adapters.yaml` adds `millionverifier.people.email.verify` to the existing
+`treg.people.email.verify` contract beside Hunter, LeadMagic and Tomba. `ok` maps to valid;
+other verdicts remain provider-native status words. Like the peer adapters, a risky or invalid
+verdict is an answer, while error bodies (no `quality`) are misses. `settle._observed_cost_micro`
+separately makes unknown/catch-all results free. The upstream `free` flag means a free email
+service, and `credits` is a delayed balance; neither is per-call usage.
+
+Bulk upload, file info/list/download, stop and delete are excluded: those operations use
+`bulkapi.millionverifier.com` with `key` auth and a multipart file lifecycle, rather than this
+provider's Single API host and `api` auth. The YAML records the complete eight-operation map.
 
 ## Authorization metadata
 

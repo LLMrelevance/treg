@@ -1161,3 +1161,106 @@ async def test_strict_filters_refuses_a_looser_answer_instead_of_billing_it(clie
     assert r.status_code == 200 and r.json()["_treg"]["served_by"] == "aviato.people.search.simple", r.text
     assert "X-Treg-Ignored-Filters" not in r.headers and seen[0][2]["country"] == "Guatemala"
     get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("result,valid,miss", [
+    ("ok", True, False), ("invalid", False, False), ("disposable", False, False),
+    ("catch_all", False, False), ("unknown", False, False), ("unverified", False, False),
+])
+def test_millionverifier_verdicts(result, valid, miss):
+    cat = catalog_store.load()
+    eid = "millionverifier.people.email.verify"
+    assert eid in cat.by_id["treg.people.email.verify"]["routed_children"]
+    assert cat.platform_eligible(cat.by_id[eid])
+    assert not cat.platform_eligible(cat.by_id["millionverifier.account.usage"])
+    adapter = cat.adapters[eid]
+    assert adapter.verified
+    doc = {"result": result, "quality": "good" if valid else "bad", "error": ""}
+    assert adapter.from_upstream(doc) == {"valid": valid, "status": result}
+    assert adapter.is_miss(doc) is miss
+    assert adapter.is_miss({"result": "error", "error": "invalid_api_key"})
+    assert adapter.is_miss({})
+
+
+async def test_millionverifier_error_falls_through_unbilled(clients, enrichment_on, monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "PLATFORM-MV-KEY")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "millionverifier,leadmagic")
+    get_settings.cache_clear()
+    seen = []
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider({
+        "millionverifier": [(200, {"result": "error", "error": "Apikey not found"})],
+        "leadmagic": [(200, {"email_status": "valid", "credits_consumed": 0.25})],
+    }, seen))
+    response = await clients.post("/call/treg.people.email.verify", json={"email": "support@millionverifier.com"},
+                                  headers={"X-Treg-Route-Prefer": "millionverifier,leadmagic"})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["_treg"]["served_by"] == "leadmagic.people.email.verify"
+    assert data["_treg"]["tried"][0]["outcome"] == "miss"
+    await audit.drain()
+    async with session_maker() as db:
+        rows = (await db.execute(select(CallRecord).where(
+            CallRecord.provider == "millionverifier"))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].cost_observed_micro == 0
+
+
+async def test_millionverifier_own_key_precedes_platform_and_is_free(clients, enrichment_on, monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "PLATFORM-MV-KEY")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "millionverifier,leadmagic")
+    get_settings.cache_clear()
+    await clients.post("/secrets", json={"name": "millionverifier", "value": "OWN-MV-KEY"})
+    before = await _balance(clients)
+    seen = []
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider({
+        "millionverifier": [(200, {"result": "ok", "quality": "good", "error": ""})],
+    }, seen))
+    response = await clients.post("/call/treg.people.email.verify", json={"email": "support@millionverifier.com"})
+    assert response.status_code == 200, response.text
+    assert response.json()["_treg"]["served_by"] == "millionverifier.people.email.verify"
+    assert response.json()["_treg"]["tier"] == "credential"
+    assert await _balance(clients) == before
+
+
+async def test_millionverifier_account_usage_requires_own_key(clients, enrichment_on, monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "PLATFORM-MV-KEY")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "millionverifier")
+    get_settings.cache_clear()
+    seen = []
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider({
+        "millionverifier": [(200, {"credits": 123})],
+    }, seen))
+    before = await _balance(clients)
+    response = await clients.get("/call/millionverifier.account.usage")
+    assert response.status_code == 404, response.text
+    assert seen == []
+    assert await _balance(clients) == before
+
+    await clients.post("/secrets", json={"name": "millionverifier", "value": "OWN-MV-KEY"})
+    response = await clients.get("/call/millionverifier.account.usage")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"credits": 123}
+    assert len(seen) == 1
+    assert await _balance(clients) == before
+
+
+@pytest.mark.parametrize("result,free,charged", [
+    ("ok", False, True), ("ok", True, True), ("invalid", False, True),
+    ("disposable", False, True), ("catch_all", False, False), ("unknown", False, False),
+])
+async def test_millionverifier_platform_billing(clients, enrichment_on, monkeypatch, result, free, charged):
+    """Definitive verdicts cost one credit; risky returns are free, unrelated to free-email flags."""
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "PLATFORM-MV-KEY")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "millionverifier")
+    get_settings.cache_clear()
+    seen = []
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider({
+        "millionverifier": [(200, {"result": result, "quality": "risky" if not charged else "good",
+                                   "error": "", "free": free, "credits": 497})],
+    }, seen))
+    before = await _balance(clients)
+    response = await clients.get("/call/millionverifier.people.email.verify", params={"email": "support@millionverifier.com"})
+    assert response.status_code == 200, response.text
+    delta = before - await _balance(clients)
+    assert delta == (1780 if charged else 0)
+    assert response.json()["result"] == result
