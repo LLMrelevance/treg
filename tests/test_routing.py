@@ -216,6 +216,56 @@ async def test_routed_plan_keeps_per_success_hit_fallback_from_the_cache(
 
 # ---- the call path ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize("routed", [False, True])
+@pytest.mark.parametrize("verdict", ["valid", "invalid"])
+async def test_tomba_verification_keeps_email_in_query_and_settles(
+    clients: AsyncClient, enrichment_on, monkeypatch, routed, verdict,
+):
+    email = "person+tag@example.com"
+    payload = {"data": {"email": {"status": verdict, "score": 99}}}
+    seen = []
+
+    async def relay(request, upstream_url, tool, secrets, client, drop_params=None, **kwargs):
+        seen.append(upstream_url)
+        assert upstream_url == "https://api.tomba.io/v1/email-verifier"
+        assert request.method == "GET"
+        assert dict(request.query_items) == {"email": email}
+        assert "email" not in (drop_params or ())
+
+        async def body():
+            yield json.dumps(payload).encode()
+
+        async def close():
+            pass
+
+        return UpstreamResponse(200, ((b"content-type", b"application/json"),), body(), close)
+
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _balance(clients)
+    if routed:
+        response = await clients.post(
+            "/call/treg.people.email.verify", json={"email": email},
+            headers={"X-Treg-Route-Prefer": "tomba"},
+        )
+    else:
+        response = await clients.get("/call/tomba.people.email.verify", params={"email": email})
+
+    assert response.status_code == 200, response.text
+    assert len(seen) == 1
+    if routed:
+        doc = response.json()
+        assert doc["raw"] == payload
+        assert doc["output"] == {"valid": verdict == "valid", "status": verdict, "score": 99}
+        assert doc["_treg"]["served_by"] == "tomba.people.email.verify"
+        assert doc["_treg"]["outcome"] == "hit", "an invalid verdict is still a verification answer"
+    else:
+        assert response.json() == payload
+    assert int(response.headers["X-Treg-Cost-Micro"]) == 8_900
+    assert before - await _balance(clients) == 8_900
+    async with session_maker() as db:
+        assert (await db.execute(select(Hold))).scalars().all() == []
+
+
 async def test_routed_call_runs_the_cheapest_child_and_returns_output_raw_and_provenance(clients: AsyncClient, enrichment_on, monkeypatch):
     seen = []
     monkeypatch.setattr(call_service, "relay", _relay_by_provider(
@@ -642,7 +692,8 @@ def test_filters_reach_adapters_through_in_expr_and_array_bodies():
     q, b = cat.adapters["serpapi.google.keywords.ideas"].to_upstream(req)
     assert q == {"q": "coffee", "gl": "gb", "hl": "en", "engine": "google_autocomplete"}
     q, b = cat.adapters["tomba.people.email.verify"].to_upstream({"email": "a@b.io"})
-    assert q == {"email": "a@b.io"}, "a pathParams target travels as a query value the proxy folds into the path"
+    assert q == {"email": "a@b.io"}, "Tomba verification requires the email query parameter"
+    assert cat.by_id["tomba.people.email.verify"]["path"] == "/v1/email-verifier"
     assert cost_at({"usd": 0.00179, "type": "per_result", "per": 1}, req) == 8_950, "priced at the requested limit"
     ep = cat.by_id["treg.google.keywords.ideas"]
     assert ep["input"]["body"]["country"]["note"].startswith("filter — default 'us'")

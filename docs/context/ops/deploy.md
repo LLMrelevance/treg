@@ -532,8 +532,9 @@ first as a cron service (`treg-capacity-sweep`, hourly), with the DB URL, Fernet
 > as a statement of intent until a Blueprint is registered - and register one only after the file
 > has been reconciled to the live services, because a Blueprint sync overwrites what it manages.
 > The overflow re-verify cron (`treg-overflow-verify`, Mondays 06:00 UTC, dashboard-made, command
-> `treg-worker overflow verify --all` since 2026-09-02) is deliberately absent from the file for
-> that reason.
+> `treg-worker overflow verify --all && treg-worker overflow sync` since 2026-09-08 - before that
+> `verify --all` alone, so its stamps never opened or decayed a route until someone synced by hand)
+> is deliberately absent from the file for that reason.
 
 **Running the overflow routine by hand** (until a Blueprint schedules verify → sync): two one-off
 jobs on the verify cron service, in order - `render jobs create <cron-id> --start-command
@@ -541,6 +542,15 @@ jobs on the verify cron service, in order - `render jobs create <cron-id> --star
 `verified N, failed N, inconclusive N, aggregator errors N, skipped N` line of the first and the
 `enabled` count of the second. Verify only
 stamps; sync is what opens routes.
+
+Pricier routes need no special run since 2026-09-08: a route that is enabled or was stamped
+before renews under `--renew-max-usd` (default $1), which covers Influencers Club's $0.66
+enrichment and the 3¢–65¢ routes the 2¢ cap had let decay; the whole run is bounded by
+`--budget-usd` (default $15). The 2¢ `--max-usd` only gates never-verified pairs under `--all`.
+A one-off `--only <provider>` run (comma-separated IDs) is still the way to bring a newly seeded
+provider in mid-week: `treg-worker overflow verify --only influencersclub`, then `overflow sync`.
+Email enrichment for Influencers Club has no test request and stays unverified. A verification
+run alone does not enable routes.
 
 Aggregator keys
 (`TREG_OVERFLOW_KEY_ORTHOGONAL` / `_MONID`) are dashboard-managed on the web service and flow the same
