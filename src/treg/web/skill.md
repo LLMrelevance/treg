@@ -295,10 +295,12 @@ a probe so treg can validate it: `health_check: {method, path, expect_status}` (
 
 ## Feedback
 
-When you discover a concrete problem with treg, its pricing, or a tool result, submit a brief
-sanitized report if you have enough evidence. Distinguish observations from suspected causes.
-Report the same issue once per task and continue with the user's work. Suggestions are welcome too.
-Include related call IDs when available; keep them with saved results when practical.
+If you had to guess, work around a limitation, or explain unexpected results or charges,
+submit a brief sanitized report, even if the task succeeded. Describe what you needed and
+observed; you do not need to prove a bug. Distinguish observations from suspected causes.
+Use the `feedback` tool over MCP, or `treg feedback submit` over CLI. Pass related call IDs
+in `call_ids` (CLI: `--call-id`), not only in the message; references are optional.
+Report each issue once, then continue the user's task. Suggestions are welcome too.
 Keep private information out of the report. See [feedback instructions]({BASE}/feedback.md).
 
 ## Rules
