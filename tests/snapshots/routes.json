@@ -1993,6 +1993,123 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "enrich_arena_page",
+    "path": "/enrich-arena"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "enrich_arena_asset",
+    "path": "/enrich-arena/{asset}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "arena_tasks",
+    "path": "/arena/tasks"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_plan",
+    "path": "/arena/plans"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_start",
+    "path": "/arena/runs/{run_id}/start"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "arena_history",
+    "path": "/arena/runs"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "arena_run",
+    "path": "/arena/runs/{run_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_cancel",
+    "path": "/arena/runs/{run_id}/cancel"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_evaluate",
+    "path": "/arena/runs/{run_id}/evaluations"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_reveal",
+    "path": "/arena/runs/{run_id}/reveal"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_rate",
+    "path": "/arena/runs/{run_id}/attempts/{attempt_id}/rating"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_report",
+    "path": "/arena/runs/{run_id}/attempts/{attempt_id}/report"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_manual_plan",
+    "path": "/arena/runs/{run_id}/attempts/{attempt_id}/plan"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "arena_manual_start",
+    "path": "/arena/runs/{run_id}/attempts/{attempt_id}/start"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "run_tool_server",

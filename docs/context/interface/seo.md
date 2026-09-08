@@ -43,6 +43,9 @@ FastAPI's stock Swagger shell — a kilobyte of JavaScript to anything that does
 
 ## The pieces
 
+The landing footer links to the public standalone [Enrich Arena](enrich-arena.md) page. Its query
+form is visible before login; submission is authenticated and metered against team credits.
+
 `/astra` is the Astra + treg launch-film destination, served by `astra_page` as bundled,
 no-cache HTML and included in the sitemap and route ownership manifest. It leads with
 “Connect ChatGPT to any data & tools” and a native-styled, self-playing Codex workflow:

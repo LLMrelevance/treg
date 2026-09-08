@@ -41,6 +41,11 @@ pair, so every list/create/mutation and the proxy are scoped to the caller's org
 `docs/MULTI-TENANCY-PLAN.md` (standalone plan).
 
 ## The model (`models.py`)
+
+[Enrich Arena](../interface/enrich-arena.md) runs and evaluations require both the creating user
+and the active team to match. Regular team membership alone does not expose another member's results.
+Team deletion removes evaluations before their runs through `ORG_SCOPED_MODELS`.
+
 - **`Org`** — `id, name, slug (unique), suspended, demo, public_demo, created_at`. The tenant that owns
   secrets/tools/bundles. **`public_demo`** marks a team whose member token is PUBLISHED (e.g. on the
   landing page): non-admin members are locked to `/call` + reads and may never act as a user — enforced in

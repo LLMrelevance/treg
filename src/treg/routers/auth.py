@@ -206,7 +206,7 @@ def _social_http_error(exc: auth_use_cases.SocialLoginError) -> HTTPException:
 
 # ---- human login via GitHub OAuth (dashboard sessions) ------------------------------------
 @app.get("/auth/github")
-async def auth_github(request: Request, cli: str = ""):
+async def auth_github(request: Request, cli: str = "", return_to: str = ""):
     try:
         started = auth_use_cases.start_github_login(cli, lambda: _login_callback_base(request))
     except auth_use_cases.SocialLoginError as exc:
@@ -214,6 +214,7 @@ async def auth_github(request: Request, cli: str = ""):
     resp = RedirectResponse(started.url, status_code=302)
     resp.set_cookie("treg_oauth_state", started.state, httponly=True, max_age=600,
                     samesite="lax", secure=_is_https(request))
+    _arena_login_return(resp, request, return_to if not cli else "")
     return resp
 
 
@@ -228,17 +229,28 @@ def _auth_page(headline: str, sub: str = "", *, ok: bool = True, status: int = 2
     return HTMLResponse(html, status_code=status)
 
 
+def _arena_login_return(resp, request: Request, target: str) -> None:
+    # One allowlisted first-party destination, not an arbitrary open redirect primitive.
+    if target == "/enrich-arena":
+        resp.set_cookie("treg_arena_return", target, httponly=True, max_age=600,
+                        samesite="lax", secure=_is_https(request))
+    else:
+        resp.delete_cookie("treg_arena_return")
+
+
 def _finish_oauth_login(request: Request, user: User, st: tuple | None) -> RedirectResponse:
     """After a GitHub/Google callback proves an identity: set the browser session cookie, then either
     land on the dashboard (a plain browser login) or bounce to /login?cli=<id> so a `treg login`
     handshake goes through the SAME team picker as the other doors (instead of completing blind — which
     would leave the CLI guessing the org). The picker's POST /auth/cli/approve reads this same cookie."""
     login_id = st[0] if st is not None else None
-    dest = f"/login?cli={login_id}" if login_id else "/app"
+    browser_dest = "/enrich-arena" if request.cookies.get("treg_arena_return") == "/enrich-arena" else "/app"
+    dest = f"/login?cli={login_id}" if login_id else browser_dest
     resp = RedirectResponse(dest, status_code=302)
     resp.set_cookie(sess.COOKIE, sess.make_session(user.id, token_version=user.token_version), httponly=True,
                     samesite="lax", secure=_is_https(request), max_age=sess.TTL_SECONDS)
     resp.delete_cookie("treg_oauth_state")
+    resp.delete_cookie("treg_arena_return")
     return resp
 
 
@@ -265,7 +277,7 @@ async def auth_github_callback(
 
 
 @app.get("/auth/google")
-async def auth_google(request: Request, cli: str = ""):
+async def auth_google(request: Request, cli: str = "", return_to: str = ""):
     """Human login via Google OAuth — a parallel door to GitHub, same session/CLI-handshake plumbing."""
     try:
         started = auth_use_cases.start_google_login(cli, lambda: _login_callback_base(request))
@@ -274,6 +286,7 @@ async def auth_google(request: Request, cli: str = ""):
     resp = RedirectResponse(started.url, status_code=302)
     resp.set_cookie("treg_oauth_state", started.state, httponly=True, max_age=600,
                     samesite="lax", secure=_is_https(request))
+    _arena_login_return(resp, request, return_to if not cli else "")
     return resp
 
 

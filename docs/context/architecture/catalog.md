@@ -1573,6 +1573,16 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   `kind: filters` / `Location` layer for the DSL/SQL providers (aviato dsl and pdl sql ride `obj`/
   `fmt` today; crustdata/diffbot/coresignal/apollo do not); own-key-dry → treg-key fallback.
 
+- **Name-only Leadsforge requests (2026-09-07)**: email and phone adapters accept the derived
+  `{first_name, last_name, domain}` variant or a LinkedIn URL. Removed the redundant
+  `{full_name, domain}` fallback: a one-word name cannot derive `last_name`, so that fallback
+  selected an identity variant whose name was not mapped and sent only `companyDomain`.
+  Complete full names still derive both parts and work normally. Regression tests exercise the
+  actual matched-variant request, including rejection of mononyms and preservation of LinkedIn.
+  Arena also validates full names before quoting, preventing Hunter's `invalid_full_name` error.
+  Leadsforge and Fiber contact lookup success flags no longer populate `verified`: neither
+  flag is an explicit mailbox deliverability verdict. The field remains absent when unknown.
+
 ## Security
 
 PII IS THE HARD RULE. This repo is public, and every captured example ships in it. Three checks

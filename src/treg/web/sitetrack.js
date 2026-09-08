@@ -43,7 +43,9 @@
     // the first-touch URL/referrer locally and applies it ($set_once) when the person is identified
     // after sign-in. The masking config matches index.html's — the SPA shows API tokens in <pre>
     // blocks and a replay must never leak one.
+    var privatePage = document.currentScript && document.currentScript.dataset.privatePage === 'true';
     window.posthog.init(key, {api_host: host, person_profiles: 'identified_only', capture_pageview: true,
+      ...(privatePage ? {autocapture: false, disable_session_recording: true} : {}),
       session_recording: {maskAllInputs: true, maskTextSelector: 'pre, .lc-codewrap, .agent-copy'}});
   } catch (e) { /* analytics must never break the page */ }
 })();

@@ -20,6 +20,7 @@ from starlette.routing import BaseRoute, Mount
 
 from . import adsconv, analytics, archive, audit
 from .application.call import route as routed_call
+from .application import arena
 from . import bootstrap_handlers
 from .bootstrap_http import (
     _BodyDecodeMiddleware,
@@ -41,6 +42,20 @@ RouteKey = tuple[str, tuple[str, ...], str]
 # Every HTTP route has one workload owner. A new decorator in api.py fails app creation until its
 # key is placed here, so the dataplane cannot silently acquire a management or runner endpoint.
 _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
+    ('/enrich-arena', ('GET',), 'enrich_arena_page'),
+    ('/enrich-arena/{asset}', ('GET',), 'enrich_arena_asset'),
+    ('/arena/tasks', ('GET',), 'arena_tasks'),
+    ('/arena/plans', ('POST',), 'arena_plan'),
+    ('/arena/runs/{run_id}/start', ('POST',), 'arena_start'),
+    ('/arena/runs', ('GET',), 'arena_history'),
+    ('/arena/runs/{run_id}', ('GET',), 'arena_run'),
+    ('/arena/runs/{run_id}/cancel', ('POST',), 'arena_cancel'),
+    ('/arena/runs/{run_id}/evaluations', ('POST',), 'arena_evaluate'),
+    ('/arena/runs/{run_id}/reveal', ('POST',), 'arena_reveal'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/report', ('POST',), 'arena_report'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/rating', ('POST',), 'arena_rate'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/plan', ('POST',), 'arena_manual_plan'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/start', ('POST',), 'arena_manual_start'),
     ('/meta', ('GET',), 'meta'),
     ('/providers.json', ('GET',), 'providers_catalog'),
     ('/catalog/platforms', ('GET',), 'catalog_platforms'),
@@ -513,6 +528,7 @@ def _lifespan(role: AppRole):
                 if mcp_reader_bound:
                     _mcp.clear_endpoint_observation_reader(endpoint_observations)
                 routed_call.clear_endpoint_observation_reader(endpoint_observations)
+                await arena.shutdown()
                 await endpoint_observations.aclose()
                 # analytics LAST: it is the sink the other two report their losses into, and a
                 # drop during their drain is the one most worth hearing about. Draining it first

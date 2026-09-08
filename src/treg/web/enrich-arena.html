@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Enrich Arena — compare the answers</title>
+  <meta name="description" content="One enrichment query. Independent answers. Compare enrichment results, vendors, cost and speed, and vote for the best answer.">
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/enrich-arena/arena.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Geist+Pixel&amp;family=Google+Sans+Flex:opsz,wght@6..144,400..700&amp;display=swap">
+  <script src="/adtrack.js"></script>
+  <script src="/vendor/vue-3.5.41.global.prod.js" defer></script>
+  <script src="/enrich-arena/arena.js" defer></script>
+</head>
+<body>
+<div id="arena" v-cloak class="ph-no-capture ph-hide">
+  <header class="masthead">
+    <a href="/" class="brand" aria-label="treg home"><svg class="brandmark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#101010"/><rect x="111" y="111" width="140.5" height="140.5" rx="20" fill="#fff"/><rect x="260.5" y="260.5" width="140.5" height="140.5" rx="20" fill="#fff"/></svg> treg<span class="brand-divider">/</span><span class="brand-sub">Enrich Arena</span></a>
+    <nav aria-label="Arena account">
+      <template v-if="user">
+        <label v-if="teams.length > 1" class="team-switcher"><span>Team</span><select aria-label="Team paying for runs" v-model="team" @change="changeTeam" :disabled="running || busy"><option v-for="t in teams" :value="t.slug">{{t.name}}</option></select></label>
+        <span class="balance" v-if="balance !== null">{{usd(balance)}} <span>credits</span></span>
+        <button class="text-button" @click="logout" :disabled="running || busy">Sign out</button>
+      </template>
+      <button v-else class="sign-in-button" @click="openLogin(false)">Sign in <span aria-hidden="true">↗</span></button>
+    </nav>
+  </header>
+  <div class="arena-layout" :class="{'has-history':user && history.length}">
+    <aside v-if="user && history.length" class="session-sidebar" aria-label="Query sessions">
+      <button class="new-session" @click="newSession" :disabled="busy || running"><span aria-hidden="true">＋</span> New query</button>
+      <div class="session-list" role="navigation" aria-label="Previous queries">
+        <button v-for="h in history" :key="h.id" class="session-item" :class="{active:run?.id===h.id}" :aria-current="run?.id===h.id?'page':null" :title="Object.values(h.identity).join(' · ')" :disabled="busy || running" @click="loadHistory(h.id)">
+          <span class="session-title">{{Object.values(h.identity).join(' · ')}}</span>
+          <span class="session-meta">{{taskLabel(h.capability)}} · {{h.mode==='compare'?'Battle':'Waterfall'}}</span>
+          <span class="session-date">{{historyDate(h.created_at)}}<span v-if="h.state==='running'"> · Running</span></span>
+        </button>
+      </div>
+    </aside>
+  <main>
+    <section class="intro">
+      <span class="intro-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges"><path d="M4 3h3v3h3v3h3v3h-3v-2H7V7H4zM17 3h3v4h-3v3h-3v2h-3V9h3V6h3zM5 13h3v3h3v3H8v-2H5v3H2v-3h3zM16 13h3v4h3v3h-3v-3h-3v2h-3v-3h3z"/></svg></span><h1>Enrich Arena</h1>
+    </section>
+
+    <section id="composer" class="workspace" aria-label="Enrichment query">
+      <form @submit.prevent="submit">
+        <div class="compose-main" id="task-inputs" role="tabpanel" :aria-labelledby="'task-'+taskId">
+          <div class="input-row"><label class="query-field" v-for="key in inputKeys"><span class="sr-only">{{fieldLabel(key)}}</span><input v-model="inputs[key]" :type="key==='email'?'email':'text'" :placeholder="placeholder(key)" :maxlength="500" :disabled="busy || running" required autocomplete="off" @input="quote=null"></label>
+          </div>
+          <div class="compose-heading">
+            <label class="input-method" v-if="currentTask.variants.length>1">Using <select aria-label="Input type" :value="variant" @change="chooseVariant(Number($event.target.value))" :disabled="busy || running"><option v-for="(v,i) in currentTask.variants" :value="i">{{variantLabel(v)}}</option></select></label>
+
+          </div>
+        </div>
+        <div class="task-toolbar">
+          <div class="task-tabs" role="tablist" aria-label="Task type"><button v-for="(t,i) in tasks" :key="t.id" :id="'task-'+t.id" type="button" role="tab" :aria-selected="taskId===t.id" aria-controls="task-inputs" :tabindex="taskId===t.id?0:-1" :class="{active:taskId===t.id}" :disabled="busy || running" @click="chooseTask(t.id)" @keydown="taskKeydown($event,i)">{{t.label}}</button></div>
+          <button class="run-button" type="submit" :disabled="busy || running || pricing || !tasks.length">{{runButtonLabel}} <span aria-hidden="true">→</span></button>
+        </div>
+        <div v-if="readyQuote" class="query-options">
+          <span class="price-hint">Estimated cost; final charges may vary.</span>
+        </div>
+      </form>
+    </section>
+
+    <div v-if="error" role="alert" class="notice error-notice"><span>{{error}}</span><button @click="error=''" aria-label="Dismiss error">×</button></div>
+
+    <section v-if="showProviderPreview && tasks.length" class="results-section provider-preview" aria-label="Vendors and pricing">
+      <arena-fighters :entries="availableProviders" :mode="mode" selectable choosable :enabled-providers="enabledProviders" @toggle-provider="toggleProvider" :disabled="busy || running" @change-mode="setMode"></arena-fighters>
+      <div class="results-table-wrap" tabindex="0" role="region" aria-label="Vendor pricing table">
+        <table class="results-table pricing-table">
+          <caption class="sr-only">Vendors and estimated pricing for {{currentTask.label}}</caption>
+          <thead><tr><th scope="col">Vendor</th><th scope="col">Billing</th><th scope="col" class="number-cell">{{readyQuote?'Your estimate':'Catalog estimate'}}</th></tr></thead>
+          <tbody><tr v-for="p in previewProviders" :key="p.provider">
+            <th scope="row"><div class="vendor-name"><span class="vendor-logo"><span aria-hidden="true">{{providerName(p.provider).slice(0,1)}}</span><img :src="'/logos/'+p.provider+'.svg?v=arena-real-1'" alt="" width="24" height="24" @error="$event.target.style.display='none'"></span>{{providerName(p.provider)}}</div></th>
+            <td class="billing-cell">{{billingLabel(p)}}</td><td class="number-cell">{{p.estimate_micro==null?'Price unavailable':usd(p.estimate_micro)}}</td>
+          </tr><tr v-if="!previewProviders.length"><td colspan="3" class="result-empty">{{customServices?'Click a vendor avatar to include it.':'No services support this input type.'}}</td></tr></tbody>
+        </table>
+      </div>
+      <p class="pricing-note">{{readyQuote?(mode==='waterfall'?'Quoted order · stops at the first hit.':'Estimates for your team.'):'Catalog estimates · access and final pricing depend on your team and query.'}}</p>
+    </section>
+
+    <section v-if="run" class="results-section" aria-label="Enrichment results" aria-live="polite">
+      <arena-fighters :key="run.id" :entries="resultFighters" :choosable="!showProviderPreview && !running" :enabled-providers="enabledProviders" @toggle-provider="toggleProvider" :mode="run.mode" :active="running" :selected="winnerIds" :awards="battleAwards" :selectable="!showProviderPreview" :disabled="busy || running" @change-mode="setMode"><template #actions><button v-if="running" class="battle-stop text-button" @click="cancelRun" :disabled="busy">Stop</button></template></arena-fighters>
+      <p v-if="run.state==='interrupted' || run.state==='failed'" class="notice">This run did not finish. Completed answers are kept; uncertain calls will not be retried automatically.</p>
+      <div class="results-table-wrap" tabindex="0" role="region" :aria-label="run.mode==='waterfall'?'Waterfall results table':'Comparison results table'">
+        <table class="results-table" :class="{'waterfall-table':run.mode==='waterfall'}">
+          <caption class="sr-only">{{run.mode==='waterfall'?'Services in waterfall order':'Compare enrichment services and vote for the best answer'}}</caption>
+          <thead><tr><th scope="col">{{run.mode==='waterfall'?'Step / vendor':'Vendor'}}</th><th scope="col">Result</th><th scope="col">Status</th><th scope="col" class="number-cell">Cost</th><th scope="col" class="time-cell">{{run.mode==='waterfall'?'Timeline':'Time'}}</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>
+            <template v-for="(r,i) in run.results" :key="r.id">
+              <tr class="vendor-row" :class="{picked:winnerIds.includes(r.id)}" tabindex="0" :aria-expanded="expandedResults.includes(r.id)" :aria-controls="'detail-'+r.id" @click="toggleResultRow($event,r.id)" @keydown.enter.self.prevent="toggleDetails(r.id)" @keydown.space.self.prevent="toggleDetails(r.id)">
+                <th scope="row"><div class="vendor-name"><span v-if="run.mode==='waterfall'" class="step-number">{{i+1}}</span><span class="vendor-logo"><span aria-hidden="true">{{providerName(r.provider).slice(0,1)}}</span><img :src="'/logos/'+r.provider+'.svg?v=arena-real-1'" alt="" width="24" height="24" @error="$event.target.style.display='none'"></span><span>{{providerName(r.provider)}}<span v-if="battleAwards[r.id]" class="result-awards"><span v-for="badge in battleAwards[r.id]" :key="badge" class="award-badge" :class="badge.toLowerCase()" :title="awardTitle(badge)">{{badge}}</span></span></span></div></th>
+                <td class="result-cell"><template v-if="summaryFields(r).length"><div class="result-value"><span v-if="typeof r.output[summaryFields(r)[0]]==='boolean'">{{fieldLabel(summaryFields(r)[0])}}: </span>{{displayValue(r.output[summaryFields(r)[0]])}}</div><div v-if="summaryFields(r).length>1" class="result-meta"><span v-for="key in summaryFields(r).slice(1)">{{fieldLabel(key)}}: {{displayValue(r.output[key])}}</span></div></template><span v-else class="result-empty">{{emptyLabel(r)}}</span><div v-if="domainMismatch(r)" class="result-note">{{domainMismatch(r)}}</div><div v-if="r.report && ratingValue(r)==='down'" class="reported-note" :title="r.report.comment"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M14 3H6a2 2 0 0 0-2 1.6L2.6 10a2 2 0 0 0 2 2.5H8v4a1.5 1.5 0 0 0 2.6 1L14 12V3Z M14 3h3v9h-3"/></svg> Issue reported</div></td>
+                <td><span class="outcome" :class="r.state">{{outcomeLabel(r)}}</span></td>
+                <td class="number-cell"><span>{{r.charged_micro===null?'Pending':usd(r.charged_micro)}}</span><small v-if="r.tier!=='platform'">Your key</small><small v-if="r.cached">Cached</small><small v-if="r.manual">Additional call</small></td>
+                <td class="time-cell"><span class="duration">{{r.duration_ms==null?(r.state==='running'?'Running…':'—'):seconds(r.duration_ms)}}</span><div class="timing-track" v-if="run.mode==='waterfall' && r.duration_ms" :title="'Started '+seconds(r.started_ms||0)+' after run start'"><div :style="{marginLeft:timeLeft(r)+'%',width:timeWidth(r)+'%'}"></div></div></td>
+                <td class="row-actions"><div><button v-if="r.can_try" class="try-vendor" :disabled="busy || running" :aria-label="manualLabel(r)+' with '+providerName(r.provider)" @click="tryVendor(r)">{{manualLabel(r)}}</button><template v-if="['hit','miss','error','timeout'].includes(r.state)"><button v-for="value in ['up','down']" :key="value" class="rating-button" :class="'thumb-'+value" :disabled="busy || running" :aria-pressed="ratingValue(r)===value" :title="value==='up'?'Thumbs up':'Thumbs down · optional details'" :aria-label="'Thumbs '+value+': '+providerName(r.provider)" @click="rateResult(r,value)"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M14 3H6a2 2 0 0 0-2 1.6L2.6 10a2 2 0 0 0 2 2.5H8v4a1.5 1.5 0 0 0 2.6 1L14 12V3Z M14 3h3v9h-3"/></svg></button></template><button class="details-button" :aria-label="'Details: '+providerName(r.provider)" :aria-expanded="expandedResults.includes(r.id)" :aria-controls="'detail-'+r.id" @click="toggleDetails(r.id)"><span aria-hidden="true">{{expandedResults.includes(r.id)?'−':'+'}}</span></button></div></td>
+              </tr>
+              <tr v-if="reporting===r.id" class="detail-row"><td colspan="6"><form class="report-form" @submit.prevent="sendReport(r)"><strong role="status">{{busy?'Saving feedback…':'Thumbs down saved'}} · {{providerName(r.provider)}}</strong><label>Reason (optional)<select v-model="reportDrafts[r.id].reason" :disabled="busy || !!r.report"><option value="">Choose a reason</option><option value="incorrect_data">Incorrect data</option><option value="wrong_person">Wrong person</option><option value="wrong_company">Wrong company</option><option value="outdated_data">Outdated data</option><option value="other">Something else</option></select></label><label>Details (optional)<textarea v-model="reportDrafts[r.id].comment" rows="2" maxlength="1000" :disabled="busy || !!r.report" placeholder="What should we know about this result?"></textarea></label><div><button v-if="!r.report" class="primary" :disabled="busy || running || (!reportDrafts[r.id].reason && !reportDrafts[r.id].comment.trim())">Save details</button><span v-else>Details saved</span><button type="button" class="text-button" @click="reporting=''">Done</button></div></form></td></tr>
+              <tr v-if="expandedResults.includes(r.id)" :id="'detail-'+r.id" class="detail-row"><td colspan="6"><div class="row-detail"><p v-if="r.detail" class="step-reason">{{r.detail}}</p><dl v-if="Object.keys(r.output).length" class="field-list"><div v-for="key in run.fields" :class="{missing:r.output[key]==null || r.output[key]===''}"><dt>{{fieldLabel(key)}}</dt><dd>{{displayValue(r.output[key])}}</dd></div></dl><p class="quality-note" v-if="run.capability==='people.email.find' && r.state==='hit'">{{r.output.verified===true?'Service reports this email as verified.':'Found, not confirmed deliverable. Verify before outreach.'}}</p><p class="quality-note" v-if="run.capability==='people.phone.find' && r.state==='hit'">Found, not confirmed to be a live line.</p><details v-if="r.raw"><summary>Original response</summary><p class="variant-name">{{r.endpoint_id}}</p><pre>{{JSON.stringify(r.raw,null,2)}}</pre></details></div></td></tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <p class="waterfall-stop" v-if="run.mode==='waterfall' && !running">{{run.stop_reason}}</p>
+      <div class="after-actions" v-if="!running"><button class="text-button" v-if="run.mode==='compare'" @click="tryWaterfall">Try as waterfall ↗</button><button class="text-button" @click="exportResult">Export results</button></div>
+    </section>
+
+  </main>
+  </div>
+  <footer><span>Built with <a href="/">treg</a> — tools for the work ahead.</span><span>Private results · Retained for 30 days</span><a href="/privacy">Privacy</a></footer>
+
+  <dialog ref="loginDialog" @cancel="closeLogin"><button class="dialog-close" aria-label="Close sign in" @click="closeLogin">×</button><h2>Sign in to continue.</h2><p>Your query is saved. Runs use your team’s credits.</p><div class="social-buttons"><button v-if="meta.google" @click="socialLogin('google')">Continue with Google ↗</button><button v-if="meta.github" @click="socialLogin('github')">Continue with GitHub ↗</button></div><form @submit.prevent="emailStep==='code'?verifyEmail():sendCode()"><label>Email<input v-model="email" type="email" autocomplete="email" required :disabled="emailStep==='code'"></label><label v-if="emailStep==='code'">Sign-in code<input v-model="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><p v-if="devCode" class="notice">Local development code: {{devCode}}</p><p v-if="authError" role="alert" class="auth-error">{{authError}}</p><button class="primary" :disabled="authBusy">{{authBusy?'One moment…':emailStep==='code'?'Verify & continue':'Email me a code'}}</button></form><p class="fine">By continuing, you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p></dialog>
+
+  <dialog ref="teamDialog"><p class="eyebrow">A HOME FOR YOUR CREDITS</p><h2>Name your team.</h2><p>Arena uses your team balance. Create a team to continue.</p><form @submit.prevent="createTeam"><label>Team name<input v-model="newTeamName" required maxlength="80" placeholder="Your team"></label><p v-if="authError" class="auth-error">{{authError}}</p><button class="primary" :disabled="authBusy">Create team & continue ↗</button></form></dialog>
+
+
+
+</div>
+<template id="arena-fighters-template">
+  <div class="pixel-arena" :class="[mode,{'is-live':active}]" role="group" aria-label="Vendor fighters">
+    <div class="battle-toolbar">
+      <div v-if="selectable" class="battle-modes" role="group" aria-label="Execution mode">
+        <button type="button" :aria-pressed="mode==='waterfall'" :class="{active:mode==='waterfall'}" :disabled="disabled || active" @click="chooseMode('waterfall')"><svg aria-hidden="true" viewBox="0 0 24 18"><path d="M6 3h6v5M14 10h6v4"/><rect x="1" y="1" width="5" height="4"/><rect x="9" y="7" width="5" height="4"/><rect x="18" y="14" width="5" height="3"/></svg>Waterfall</button>
+        <button type="button" :aria-pressed="mode==='compare'" :class="{active:mode==='compare'}" :disabled="disabled || active" @click="chooseMode('compare')"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.5 17.5 3-3L5 2H2v3L14.5 17.5ZM13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5 4.5 16.5M17.5 9.5 22 5V2h-3l-4.5 4.5M5 13l6 6M8 16l-4 4M3 19l2 2"/></svg>Battle</button>
+      </div>
+      <span v-else class="battle-mode-label">{{mode==='compare'?'Battle':'Waterfall'}}</span>
+      <span class="battle-explainer">{{mode==='compare'?'Run & compare results from all vendors':'Running from cheapest vendor, until get a valid result'}}</span>
+      <slot name="actions"></slot>
+    </div>
+    <div class="fighter-roster" tabindex="0" role="region" aria-label="Vendor fighter lineup">
+      <component :is="choosable?'button':'div'" v-for="(entry,i) in entries" :key="entry.provider" class="fighter" :class="[state(entry),{'fighter-toggle':choosable}]" :style="{'--beat':(i%4)*-0.17+'s'}" :type="choosable?'button':null" :role="choosable?null:'img'" :disabled="choosable && (disabled || active)" :aria-pressed="choosable?enabled(entry):null" :aria-label="choosable?name(entry.provider):name(entry.provider)+': '+[label(entry),...(awards[entry.id]||[])].join(' · ')" :aria-description="choosable?[label(entry),...(awards[entry.id]||[])].join(' · '):null" @click="chooseProvider(entry)">
+        <span v-if="choosable" class="fighter-check" aria-hidden="true">{{enabled(entry)?'✓':'+'}}</span>
+        <div class="fighter-scene" aria-hidden="true">
+          <svg class="fighter-celebration" viewBox="0 0 72 20"><path class="victory-stars" d="M10 3h4v4h4v4h-4v4h-4v-4H6V7h4z M58 0h3v3h3v3h-3v3h-3V6h-3V3h3z"/><path class="vote-crown" d="M25 6h4v4h4V3h6v7h4V6h4v13H25z"/></svg>
+          <span class="fighter-alert">!</span>
+          <div class="fighter-facing"><div class="fighter-sprite">
+            <svg class="fighter-body" viewBox="0 0 64 72" fill="currentColor" shape-rendering="crispEdges">
+              <g class="fighter-leg back"><path d="M34 47h8v14h4v5H34z"/></g><g class="fighter-leg front"><path d="M22 47h8v19H18v-5h4z"/></g>
+              <path d="M22 30h20v20H22z"/><path class="fighter-shirt" d="M26 31h12v11H26z"/><path class="fighter-belt" d="M22 44h20v4H22z"/>
+              <g class="fighter-arm back"><path d="M14 32h12v8H10V28h8v8h-4z"/><path class="fighter-glove" d="M8 25h12v10H8z"/></g>
+              <g class="fighter-arm front"><path d="M40 32h14v8H40z"/><path class="fighter-glove" d="M50 26h12v12H50z"/></g>
+            </svg>
+            <span class="fighter-head"><span>{{name(entry.provider).slice(0,1)}}</span><img :src="'/logos/'+entry.provider+'.svg?v=arena-real-1'" alt="" width="26" height="26" @error="$event.target.style.display='none'"></span>
+        <span v-if="awards[entry.id]" class="fighter-awards" :class="{'double-belt':awards[entry.id].length>1}" aria-hidden="true"><span v-for="badge in awards[entry.id]" :key="badge" class="award-badge" :class="badge.toLowerCase()">{{badge}}</span></span>
+          </div><svg class="fighter-impact" viewBox="0 0 24 24" shape-rendering="crispEdges"><path d="M10 0h4v7h-4z M10 17h4v7h-4z M0 10h7v4H0z M17 10h7v4h-7z M8 8h8v8H8z"/></svg></div>
+          <span class="fighter-shadow"></span>
+        </div>
+        <span v-if="i<entries.length-1" class="fighter-link" aria-hidden="true"><span v-if="mode==='compare'">VS</span><svg v-else viewBox="0 0 24 14"><path d="M1 3h9v8h12M18 7l4 4-4 3"/></svg></span>
+        <span class="fighter-name" aria-hidden="true">{{name(entry.provider)}}</span><span class="fighter-verdict" aria-hidden="true">{{label(entry)}}</span>
+      </component>
+    </div>
+    <p v-if="choosable" class="fighter-hint">Click a fighter to include or exclude</p>
+  </div>
+</template>
+<noscript><p class="loader-fallback">Enrich Arena needs JavaScript to compare results. Enable JavaScript and reload.</p></noscript>
+<script>setTimeout(function(){var a=document.getElementById('arena');if(a&&a.hasAttribute('v-cloak')){var p=document.createElement('p');p.className='loader-fallback';p.textContent='Arena could not load. Please reload this page.';a.after(p);}},5000);</script>
+<script src="/sitetrack.js" data-private-page="true"></script>
+</body>
+</html>

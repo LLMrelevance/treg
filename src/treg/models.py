@@ -1377,6 +1377,37 @@ class ArchiveSnapshot(SQLModel, table=True):
 
 
 
+class ArenaRun(SQLModel, table=True):
+    """Private, bounded Arena run. Encrypted payload owns the frozen plan and result snapshots."""
+    __table_args__ = (UniqueConstraint("org_id", "user_id", "request_key", name="uq_arena_request"),)
+    id: str = Field(primary_key=True)
+    org_id: int = Field(foreign_key="org.id", index=True)
+    user_id: int = Field(index=True)  # provenance; survives membership removal without granting access
+    request_key: str
+    fingerprint: str
+    capability: str
+    mode: str
+    state: str = "running"
+    payload: str
+    created_at: datetime = Field(default_factory=_now)
+    deadline_at: datetime
+    expires_at: datetime = Field(index=True)
+    cancel_requested: bool = False
+    revealed_at: datetime | None = None
+
+
+class ArenaEvaluation(SQLModel, table=True):
+    """One immutable preference for a run's creator, including its exposure context."""
+    __table_args__ = (UniqueConstraint("run_id", name="uq_arena_evaluation"),)
+    id: str = Field(primary_key=True)
+    org_id: int = Field(foreign_key="org.id", index=True)
+    run_id: str = Field(foreign_key="arenarun.id", index=True)
+    user_id: int
+    kind: str
+    payload: str  # encrypted selection, exposure snapshot, reasons and optional comment
+    created_at: datetime = Field(default_factory=_now)
+
+
 class ArchiveEndpointStat(SQLModel, table=True):
     """The archive report's running totals, one row per endpoint — maintained by the recorder in
     the SAME transaction as each snapshot, so the panel reads 50 tiny rows instead of walking

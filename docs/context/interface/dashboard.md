@@ -123,6 +123,13 @@ is still reachable (welcome flow, in-app links); (bottom)
 the **account** block — avatar · email · theme · sign out. The old top-bar org dropdown and top-right
 account controls are gone.
 
+## Standalone Enrich Arena
+
+`/enrich-arena` has its own public layout and account controls, outside the dashboard shell.
+It checks authentication on query submission, preserves the query across login, and spends the
+selected team's normal credits. Google/GitHub accept an allowlisted Arena return cookie; other
+dashboard and CLI login destinations retain their existing behavior. See [Enrich Arena](enrich-arena.md).
+
 ## Auth — three doors
 Two are **session** (cookie) paths, one is a token fallback:
 - **GitHub (`githubLogin`):** `Continue with GitHub` → `/auth/github` → callback sets a signed HttpOnly

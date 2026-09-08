@@ -21,6 +21,7 @@ sources:
   - src/treg/alembic/versions/0022_org_spent_today_counter.py
   - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
   - src/treg/alembic/versions/0024_membership_calls_today_counter.py
+  - src/treg/alembic/versions/0025_enrich_arena.py
   - src/treg/alembic/versions/0011_callrecord_archive_link.py
   - src/treg/alembic/versions/0015_idempotentcall_membership_cascade.py
   - src/treg/maintenance.py
@@ -44,6 +45,12 @@ related:
 ---
 
 # Data model
+
+Revision `0025` adds `ArenaRun` and `ArenaEvaluation` for [Enrich Arena](../interface/enrich-arena.md).
+Runs freeze encrypted inputs, adapter requests, outcomes and receipts; evaluations record an immutable
+preference with the exposed candidate set and feedback context (attributed since version 2). Both are creator/team scoped and expire after
+30 days. The run is claimed with a conditional update; a unique run-id evaluation constraint and
+run-row locking serialize concurrent feedback; viewing results does not submit a vote. These tables have no balance-writing responsibilities.
 
 `AsyncTaskRecord` is one deferred metered submission keyed by the original `call_id`: org,
 provider, endpoint, extracted task id, optional fetch/result id, optional validated dynamic poll URL,

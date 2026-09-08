@@ -30,6 +30,10 @@ related:
 
 # Application composition
 
+The standalone [Enrich Arena](../interface/enrich-arena.md) page and `/arena/*` routes are control-role
+surfaces. Paid interactive runs use the ordinary call application internally. Shutdown drains their
+in-process owners before closing the shared upstream client.
+
 `bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table,
 attaches concern routers at compatibility-sensitive registration points, and calls the factory once at
 EOF so the deployed `treg.api:app` import path remains the default `all` role.

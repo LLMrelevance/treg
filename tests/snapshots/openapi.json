@@ -3302,6 +3302,16 @@
               "title": "Cli",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Return To",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3397,6 +3407,16 @@
             "schema": {
               "default": "",
               "title": "Cli",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Return To",
               "type": "string"
             }
           }
