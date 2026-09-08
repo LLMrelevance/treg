@@ -1911,6 +1911,100 @@ def test_tomba_unknown_page_size_does_not_guess_from_email_count(page_size):
     assert call_settle._observed_cost_micro(mk, body) is None
 
 
+@pytest.mark.parametrize('amount,expected', [(0.005,5000),(.0015,1500),(.0025,2500),(0,0),('0.0015',1500), (None,None), (True,None),(-1,None),('NaN',None),('Infinity',None),({},None)])
+def test_trykitt_usd_charge(amount, expected):
+    mk = _mk('trykitt', endpoint_id='trykitt.people.email.find', cost_type='per_success')
+    raw = {'email':'a@example.com','credits':{'jobCredits':amount,'remainingCredits':'900'}}
+    assert call_settle._observed_cost_micro(mk,json.dumps(raw).encode()) == expected
+
+
+
+def test_trykitt_null_miss_is_free_and_verification_verdicts_are_answers():
+    cat = catalog_store.load()
+    for email in ['no-results-found',None,'']:
+        doc={'email':email,'credits':{'jobCredits':None}}
+        assert cat.adapters['trykitt.people.email.find'].is_miss(doc)
+        assert call_settle._observed_cost_micro(_mk('trykitt',endpoint_id='trykitt.people.email.find',cost_type='per_success'),json.dumps(doc).encode()) == 0
+    for status in ['valid','invalid','unknown','catchall']:
+        assert not cat.adapters['trykitt.people.email.verify'].is_miss({'validity':status})
+        assert call_settle._observed_cost_micro(_mk('trykitt',endpoint_id='trykitt.people.email.verify',cost_type='per_success'),json.dumps({'validity':status,'credits':{'jobCredits':None}}).encode()) is None
+
+
+
+@pytest.mark.parametrize('endpoint,doc,expected', [
+    ('trykitt.people.email.find',{'email':'a@example.com','validity':'valid','credits':{'jobCredits':.005}},5000),
+    ('trykitt.people.email.find',{'email':'no-results-found','credits':{'jobCredits':None}},0),
+    ('trykitt.people.email.find',{'email':'a@example.com','validity':'valid','credits':{'jobCredits':0}},0),
+    ('trykitt.people.email.verify',{'validity':'invalid','credits':{'jobCredits':.0015}},1500),
+    ('trykitt.people.email.verify',{'validity':'unknown','credits':{'jobCredits':None}},1500),
+    ('trykitt.people.email.verify',{'validity':'catchall','credits':{'jobCredits':.0015}},1500),
+])
+async def test_trykitt_platform_ledger(clients,monkeypatch,kitt_on,endpoint,doc,expected):
+    monkeypatch.setattr(call_service,'relay',_fake_relay(200,json.dumps(doc).encode()))
+    before=await _balance(clients)
+    response=await clients.post('/call/'+endpoint,json={'email':'a@example.com','fullName':'A B','domain':'example.com','realtime':True})
+    assert response.status_code == 200,response.text
+    assert response.json()==doc
+    assert await _balance(clients)==before-expected
+
+
+
+@pytest.mark.parametrize('realtime',[None,False,1,'true'])
+async def test_trykitt_platform_rejects_non_realtime_before_upstream(clients,monkeypatch,kitt_on,realtime):
+    async def fail(*args,**kwargs):
+        pytest.fail('must reject before relay')
+    monkeypatch.setattr(call_service,'relay',fail)
+    body={'email':'a@example.com'}
+    if realtime is not None: body['realtime']=realtime
+    before=await _balance(clients)
+    r=await clients.post('/call/'+'trykitt.people.email.verify',json=body)
+    assert r.status_code==400,r.text
+    assert await _balance(clients)==before
+
+
+
+async def test_trykitt_byok_wins_and_preserves_async_body(clients,monkeypatch,kitt_on):
+    await clients.post('/secrets',json={'name':'trykitt','value':'OWN-KITT'})
+    # The shared in-process echo upstream exercises real header injection.
+    before=await _balance(clients)
+    r=await clients.post('/call/'+'trykitt.people.email.verify',json={'email':'a@example.com','realtime':False})
+    assert r.status_code==200,r.text
+    assert 'OWN-KITT' in r.text
+    assert 'TEST-KITT-KEY' not in r.text
+    assert await _balance(clients)==before
+
+
+
+@pytest.mark.parametrize('amount,expected', [(0, 0), ('0.0000015', 2),
+                                           (0.025, 25000), (None, None)])
+def test_reported_charge_uses_catalog_path_for_any_provider(monkeypatch, amount, expected):
+    endpoint = {'id': 'example.lookup', 'provider': 'example', 'cost': {
+        'type': 'per_call', 'value': 0.03, 'currency': 'USD',
+        'reported_charge': {'path': 'billing.actual', 'unit': 'usd'},
+    }}
+    monkeypatch.setitem(catalog_store.load().by_id, endpoint['id'], endpoint)
+    body = json.dumps({'billing': {'actual': amount}, 'credits': {'jobCredits': 999}}).encode()
+    assert call_settle._observed_cost_micro(
+        _mk('example', endpoint_id=endpoint['id']), body) == expected
+
+
+@pytest.mark.parametrize('body,valid', [
+    (b'{"mode":"sync"}', True),
+    (b'{"mode":"async"}', False),
+    (b'{}', False),
+    (b'{"mode":"sync","mode":"sync"}', False),
+    (b'[]', False),
+])
+def test_platform_request_constraints_do_not_require_a_price_table(body, valid):
+    ep = {'id': 'example.lookup', 'platform_request': {'body.mode': 'sync'},
+          'cost': {'type': 'per_call', 'value': 0.01}}
+    if valid:
+        call_resolution._enforce_platform_request(ep, body)
+    else:
+        with pytest.raises(ResolutionFailed):
+            call_resolution._enforce_platform_request(ep, body)
+
+
 # ---- ContactOut ----
 
 def _contactout_cost(eid):
@@ -2119,7 +2213,7 @@ async def test_contactout_split_must_be_explicit_and_stats_are_private(clients, 
     assert response.status_code == 400
     assert "email_type" in response.text
     response = await clients.get("/call/contactout.account.usage")
-    assert response.status_code in (404, 428)
+    assert response.status_code == 404
 
 
 def test_contactout_combined_email_array_is_not_billed_twice():

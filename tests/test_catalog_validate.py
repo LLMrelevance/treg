@@ -495,6 +495,36 @@ def test_async_descriptor_rejects_a_retired_or_broken_poll_target():
     assert any("marked 'retired'" in e for e in errors)
 
 
+@pytest.mark.parametrize('rule', [
+    {'path': 'billing.charge', 'unit': 'usd'},
+    {'path': 'billing.charge', 'unit': 'credits'},
+    {'path': '', 'unit': 'usd'},
+    {'path': 'billing.charge', 'unit': 'usd', 'scale': 2},
+])
+def test_reported_charge_requires_supported_units_and_path(rule):
+    cost = dict(catalog_store.load().by_id['trykitt.people.email.find']['cost'])
+    cost['reported_charge'] = rule
+    errors = []
+    validator.check_cost(cost, 'test', errors, [])
+    assert bool(errors) is (rule != {'path': 'billing.charge', 'unit': 'usd'})
+
+
+@pytest.mark.parametrize('rule,valid', [
+    ({'body.realtime': True}, True),
+    ({'body.realtime': 1}, False),
+    ({'body.realtime': False}, False),
+    ({'body.missing': True}, False),
+    ({'queryParams.realtime': True}, False),
+    ({}, False),
+])
+def test_platform_request_requires_declared_fixed_body_value(rule, valid):
+    errors = []
+    validator.check_platform_request(rule, {'body': {
+        'realtime': {'type': 'boolean', 'enum': [True]},
+    }}, 'test', errors)
+    assert (not errors) is valid
+
+
 # ---- ContactOut ----
 
 def _contactout_cost(eid):
@@ -508,7 +538,7 @@ def test_contactout_catalog_prices_validate_and_surface_is_bounded():
 
     cat = catalog_store.load()
     entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
-    assert len(entries) == 21
+    assert len(entries) == 20
     assert not any("batch" in e["path"] for e in entries)
     errors = []
     for e in entries:
@@ -533,7 +563,7 @@ def test_contactout_catalog_distribution_preserves_ids_and_global_discovery():
     cat = catalog_store.load()
     entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
     assert Counter(e["platform"] for e in entries) == {
-        "linkedin": 8, "people": 10, "companies": 2, "account": 1}
+        "linkedin": 8, "people": 10, "companies": 2}
     for e in entries:
         assert e["capability"].split(".")[0] == e["platform"]
     assert cat.by_id["contactout.people.contact.work"]["platform"] == "linkedin"
@@ -547,7 +577,7 @@ def test_contactout_person_routes_cannot_recapture_pii():
     path = Path("src/treg/catalog/contactout.yaml")
     endpoints = yaml.safe_load(path.read_text())["endpoints"]
     safe = {"contactout.people.count", "contactout.people.email.verify",
-            "contactout.companies.search", "contactout.companies.enrich", "contactout.account.usage"}
+            "contactout.companies.search", "contactout.companies.enrich"}
     for ep in endpoints:
         if ep["id"] in safe:
             continue

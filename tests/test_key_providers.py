@@ -22,7 +22,7 @@ from treg import oauth_providers as P
 def test_key_providers_are_offerable_without_deployment_credentials():
     """The user brings the key, so treg holds no app of its own — a key provider must be offerable,
     not shown as 'not configured' the way an unset OAuth provider is."""
-    for svc in ("apollo", "pdl", "akta", "hunter", "contactout", "millionverifier", "crunchbase", "tikhub", "brightdata", "semrush",
+    for svc in ("apollo", "pdl", "akta", "hunter", "contactout", "millionverifier", "trykitt", "crunchbase", "tikhub", "brightdata", "semrush",
                 "justoneapi", "dataforseo", "seranking", "moz", "majestic", "serpstat", "exa",
                 "cloro",
                 "lusha", "coresignal", "diffbot", "thecompaniesapi", "leadmagic", "fiber-ai",
@@ -320,6 +320,4 @@ def test_contactout_platform_binding(contactout_platform):
             "format": "{secret}",
         }
     ]
-    assert not catalog_store.load().platform_eligible(
-        catalog_store.load().by_id["contactout.account.usage"]
-    )
+    assert "contactout.account.usage" not in catalog_store.load().by_id

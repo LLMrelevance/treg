@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from collections.abc import Callable
 
 from sqlalchemy import update
@@ -190,6 +191,17 @@ def _observed_cost_micro(mk: MarketplaceCall, body: bytes, headers=None) -> int 
         return None
     if not isinstance(doc, dict):
         return 0 if provider == "contactout" else None
+    reported = (ep.get("cost") or {}).get("reported_charge") if ep else None
+    if reported:
+        amount = _dig(doc, reported["path"])
+        if isinstance(amount, (int, float, str)) and not isinstance(amount, bool):
+            try:
+                dollars = Decimal(str(amount))
+                if dollars.is_finite() and dollars >= 0:
+                    return int((dollars * 1_000_000).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+            except (InvalidOperation, ValueError, OverflowError):
+                pass
+        # Missing or invalid charge evidence leaves the normal miss/base rules in force.
     if provider == "aviato" and mk.endpoint_id == "aviato.companies.enrich.bulk":
         rows = doc.get("companies")
         if isinstance(rows, list) and mk.unit_micro > 0:

@@ -374,6 +374,14 @@ metadata, incl. numeric IP encodings) at registration AND the proxy re-resolves 
 (`infra.upstream.ssrf.host_is_public`, also re-exported by `health`, gated by `proxy_ssrf_check`) — no
 SSRF, even via DNS rebinding.
 
+## Kitt AI key connection
+
+`TRYKITT` registers Kitt AI under `trykitt`, with `x-api-key` header injection at
+`https://api.trykitt.ai`. `/credit` returns 200 even with a valid zero balance and 401
+for a bogus key. `platform_key_trykitt` loads `TREG_PLATFORM_KEY_TRYKITT`; the normal
+platform-provider allow-list is also required. Own keys always take precedence.
+
+
 ## ContactOut pasted API tokens
 
 `oauth_providers.CONTACTOUT` verifies against `/v1/stats` and requires `status_code: 200` as well

@@ -609,6 +609,12 @@ If a deploy fails with a lock timeout in the logs, that is the mechanism working
 itself stops accepting connections, restart the POSTGRES resource, not the web service — an app
 restart cannot release server-side slots (learned the hard way).
 
+Kitt AI platform serving requires `TREG_PLATFORM_KEY_TRYKITT` and `trykitt` in the
+platform-provider allow-list. `render.yaml` declares the secret on the web service
+and passes it to the capacity worker. Adding the code does not enable the provider
+on an existing deployment or copy a local `.env` key to production.
+
+
 The ContactOut server platform-key slot (`TREG_PLATFORM_KEY_CONTACTOUT`) is forwarded to the
 worker by `render.yaml`. The provider allow-list still controls serving; see
 [ContactOut](../architecture/contactout.md) for informational capacity checks.
