@@ -46,7 +46,7 @@ FastAPI's stock Swagger shell — a kilobyte of JavaScript to anything that does
 `/gpt6` is the launch-film destination, served by `gpt6_page` as bundled,
 no-cache HTML and included in the sitemap and route ownership manifest. `/astra` redirects
 permanently to `/gpt6`, preserving query parameters for campaign attribution. It leads with
-“Give GPT Astra any data & tools” and a native-styled, self-playing Codex workflow:
+“Give GPT-6 Astra any data & tools” and a native-styled, self-playing Codex workflow:
 prompt, provider comparison, scan and selection, email/phone enrichment, then the cost receipt.
 The preview pauses off screen, respects reduced motion, and opens the `warm-paper` launch film
 on click. Tool cards introduce the catalog; a subscription comparison keeps the illustrative
