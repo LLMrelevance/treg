@@ -91,6 +91,14 @@ async def _hunter(c, key):
                     f"resets {(d.get('data') or {}).get('reset_date')}"}
 
 
+async def _trykitt(c, key):
+    d = await _get(c, "https://api.trykitt.ai/credit", headers={"x-api-key": key})
+    value = d.get("credits")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return {"value": None, "unit": "USD", "note": "Missing Kitt balance"}
+    return {"value": value, "unit": "USD", "note": ""}
+
+
 async def _millionverifier(c, key):
     # Free balance probe. Do not add bulk_credits to credits: they can name the same pool.
     try:
@@ -387,6 +395,7 @@ BALANCE_ROUTES = {
     "moz": _moz,
     "seranking": _seranking,
     "hunter": _hunter,
+    "trykitt": _trykitt,
     "millionverifier": _millionverifier,
     "leadmagic": _leadmagic,
     "lusha": _lusha,

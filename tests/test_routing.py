@@ -1315,3 +1315,35 @@ async def test_millionverifier_platform_billing(clients, enrichment_on, monkeypa
     delta = before - await _balance(clients)
     assert delta == (1780 if charged else 0)
     assert response.json()["result"] == result
+
+
+@pytest.mark.parametrize('cap,identity,doc,expected',[
+    ('find',{'first_name':'Erol','last_name':'Toker','domain':'trykitt.ai'}, {'email':'erol@trykitt.ai','validity':'valid','credits':{'jobCredits':.005}},5000),
+    ('verify',{'email':'erol@trykitt.ai'}, {'validity':'unknown','credits':{'jobCredits':.0015}},1500),
+])
+async def test_trykitt_routed_calls(clients,monkeypatch,kitt_on,cap,identity,doc,expected):
+    seen=[]
+    monkeypatch.setattr(call_service,'relay',_relay_by_provider({'trykitt':[(200,doc)]},seen))
+    before=await _balance(clients)
+    r=await clients.post('/call/treg.people.email.'+cap,json=identity)
+    assert r.status_code==200,r.text
+    assert seen[0][3]['realtime'] is True
+    if cap=='find':
+        assert seen[0][3]['fullName']=='Erol Toker'
+        assert r.json()['output']['verified'] is True
+    else: assert r.json()['output']['status']=='unknown'
+    assert await _balance(clients)==before-expected
+
+
+
+async def test_trykitt_throttle_releases_and_routes_to_next_provider(clients,monkeypatch,kitt_on):
+    monkeypatch.setenv('TREG_PLATFORM_PROVIDERS','trykitt,leadmagic')
+    monkeypatch.setenv('TREG_PLATFORM_KEY_LEADMAGIC','TEST-LEADMAGIC')
+    get_settings.cache_clear()
+    seen=[]
+    monkeypatch.setattr(call_service,'relay',_relay_by_provider({'trykitt':[(418,{'message': 'temporarily throttled', 'response_code': 418})],'leadmagic':[(200,{'email':'a@example.com','status':'valid','credits_consumed':1})]},seen))
+    before=await _balance(clients)
+    r=await clients.post('/call/treg.people.email.find',json={'full_name':'A B','domain':'example.com'})
+    assert r.status_code==200,r.text
+    assert [row[0] for row in seen]==['trykitt','leadmagic']
+    assert await _balance(clients)==before-25000

@@ -493,3 +493,33 @@ def test_async_descriptor_rejects_a_retired_or_broken_poll_target():
     validator.check_async_descriptor(_valid_async(), "demo.yaml:submit", "demo", index,
                                      {"type": "per_success"}, errors)
     assert any("marked 'retired'" in e for e in errors)
+
+
+@pytest.mark.parametrize('rule', [
+    {'path': 'billing.charge', 'unit': 'usd'},
+    {'path': 'billing.charge', 'unit': 'credits'},
+    {'path': '', 'unit': 'usd'},
+    {'path': 'billing.charge', 'unit': 'usd', 'scale': 2},
+])
+def test_reported_charge_requires_supported_units_and_path(rule):
+    cost = dict(catalog_store.load().by_id['trykitt.people.email.find']['cost'])
+    cost['reported_charge'] = rule
+    errors = []
+    validator.check_cost(cost, 'test', errors, [])
+    assert bool(errors) is (rule != {'path': 'billing.charge', 'unit': 'usd'})
+
+
+@pytest.mark.parametrize('rule,valid', [
+    ({'body.realtime': True}, True),
+    ({'body.realtime': 1}, False),
+    ({'body.realtime': False}, False),
+    ({'body.missing': True}, False),
+    ({'queryParams.realtime': True}, False),
+    ({}, False),
+])
+def test_platform_request_requires_declared_fixed_body_value(rule, valid):
+    errors = []
+    validator.check_platform_request(rule, {'body': {
+        'realtime': {'type': 'boolean', 'enum': [True]},
+    }}, 'test', errors)
+    assert (not errors) is valid

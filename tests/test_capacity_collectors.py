@@ -177,3 +177,14 @@ def test_implemented_collectors_are_registered_and_do_not_overlap_absent_list():
         assert provider not in collectors.NO_BALANCE_API
     overlap = set(collectors.BALANCE_ROUTES.keys()) & set(collectors.NO_BALANCE_API.keys())
     assert not overlap, f"Providers in both maps: {overlap}"
+
+
+@pytest.mark.parametrize('balance',[0,9.992])
+async def test_trykitt_balance_is_usd(monkeypatch,kitt_on,balance):
+    def reply(request):
+        assert request.headers['x-api-key']=='TEST-KITT-KEY'
+        assert request.url.path=='/credit'
+        return httpx.Response(200,json={'credits':balance})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        row=await collectors.provider_balance('trykitt',client)
+    assert row['value']==balance and row['unit']=='USD'

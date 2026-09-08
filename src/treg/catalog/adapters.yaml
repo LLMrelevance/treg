@@ -15,6 +15,12 @@
 
 adapters:
   # ---- people.email.find --------------------------------------------------------------------
+  trykitt.people.email.find:
+    accepts: [[full_name, domain], [first_name, last_name, domain]]
+    in: {full_name: body.fullName, domain: body.domain, linkedin_url: body.linkedinStandardProfileURL}
+    const: {body.realtime: true}
+    out: {email: email, verified: "validity == 'valid'"}
+    miss: "coalesce(email, 'no-results-found') == 'no-results-found'"
   hunter.people.email.find:
     accepts: [[full_name, domain], [first_name, last_name, domain]]
     in:  {full_name: queryParams.full_name, domain: queryParams.domain}
@@ -252,6 +258,12 @@ adapters:
     miss: "results[0].phones[0].number == null"
 
   # ---- people.email.verify ------------------------------------------------------------------
+  trykitt.people.email.verify:
+    accepts: [[email]]
+    in: {email: body.email}
+    const: {body.realtime: true}
+    out: {valid: "validity == 'valid'", status: validity}
+    miss: "validity == null"
   millionverifier.people.email.verify:
     accepts: [[email]]
     in:  {email: queryParams.email}

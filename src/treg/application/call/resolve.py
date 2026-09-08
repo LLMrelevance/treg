@@ -935,15 +935,18 @@ def _document_value(document: object, dotted: str) -> object:
     return current
 
 
-def _enforce_platform_pricing_selectors(ep: dict, body: bytes) -> None:
-    """Bind a platform-priced row to its fixed request discriminator before reserve/relay.
+def _enforce_platform_request(ep: dict, body: bytes) -> None:
+    """Check explicit platform constraints and fixed pricing selectors before reserve/relay.
 
     Catalog tables may price several rows on one upstream path. A table condition whose body field
     has a singleton enum is the row identity, not caller choice: accepting another value lets a cheap
     row reserve for an expensive model. Full schema validation remains out of the faithful BYOK path.
     """
     input_schema = ep.get("input") or {}
-    selectors: dict[str, object] = {}
+    selectors: dict[str, object] = {
+        path.removeprefix("body."): value
+        for path, value in (ep.get("platform_request") or {}).items()
+    }
     for row in (ep.get("cost") or {}).get("table") or []:
         for path in (row.get("when") or {}):
             if not str(path).startswith("body."):
@@ -958,7 +961,7 @@ def _enforce_platform_pricing_selectors(ep: dict, body: bytes) -> None:
     document = _strict_json_object(body, ep["id"])
     for path, expected in sorted(selectors.items()):
         actual = _document_value(document, path)
-        if actual != expected:
+        if actual != expected or (isinstance(expected, bool) and type(actual) is not bool):
             raise ResolutionFailed(
                 "catalog_parameter_invalid", status_code=400, detail={
                     "error": "catalog_parameter_invalid",
@@ -967,7 +970,7 @@ def _enforce_platform_pricing_selectors(ep: dict, body: bytes) -> None:
                     "expected": expected,
                     "message": (
                         f"{ep['id']} fixes body.{path} to {expected!r}; "
-                        "choose the catalog endpoint for the requested value"
+                        "use the required value for a platform call"
                     ),
                 },
             )
@@ -1337,7 +1340,7 @@ async def _resolve_marketplace_call(
     cost = _platform_offer(ep, provider, caller.org)
     async_owner_call_id = None
     if cost is not None:
-        _enforce_platform_pricing_selectors(ep, body)
+        _enforce_platform_request(ep, body)
         async_owner_call_id = await _enforce_platform_async_ownership(ep, query, caller, db)
     skip_direct = False
     probe_lock_id = None

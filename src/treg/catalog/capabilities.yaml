@@ -246,6 +246,7 @@ capabilities:
 
   # merged from slack + brightdata proposed_capabilities (2026-07-28)
   account.datasets.list: "List the datasets or scrapers you can use"
+  account.auth: "Test whether a credential is valid"
   account.identity: "Check which account a credential belongs to"
   slack.channel.info: "Get a channel's topic & member count"
   slack.reaction.add: "React to a message with an emoji"
