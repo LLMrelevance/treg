@@ -314,5 +314,7 @@ when the account is marked exhausted).
 
 `collectors._contactout` exposes the three raw credit pools through an informational observation,
 not a scalar balance. `snapshot_from` and `latest_state` preserve it without marking the provider
-exhausted. Prepaid quotas are already remaining credits. Polling/exhaustion semantics still await
-provider confirmation; see [ContactOut](../architecture/contactout.md).
+exhausted. Prepaid quotas are already remaining credits. The pools are independent; the designated
+account manager monitors usage and arranges top-ups. Stats freshness remains unconfirmed; treg
+keeps the existing sweep cadence and does not assume behavior at zero credits. See
+[ContactOut](../architecture/contactout.md).
