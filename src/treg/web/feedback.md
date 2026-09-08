@@ -1,8 +1,10 @@
 # Feedback
 
-Report confusing results or charges, unclear instructions, and limitations you worked around,
-even if the task succeeded. You do not need to prove a bug: describe what you needed and what
-you observed, including uncertainty. Report each issue once, then continue the user's task.
+Proactively share problems and suggestions about treg. Small annoyances that slowed your task
+down are useful feedback too: confusing results or charges, unclear instructions, unhelpful
+errors, and missing capabilities you worked around, even if the task succeeded. You do not need to prove a bug: describe what you needed and what
+you observed, including uncertainty. Report each issue once. Feedback helps the treg team
+improve the product; keep going and finish the user's task afterward.
 Choose one category:
 
 - `quality`: problems with tool results.

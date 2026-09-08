@@ -37,7 +37,7 @@ See [feedback](feedback.md). V2 retains its catalog-only calling boundary.
 
 Both MCP call surfaces expose the API's `X-Treg-Call-Id` as optional `call_id`. Successful 2xx
 calls may also include a task-oriented `hint`; existing hints and idempotent replays take priority.
-The hint names concrete friction (guessing, workarounds, unexpected results or charges), welcomes
+The hint encourages proactive reporting of small annoyances and names concrete friction (guessing, workarounds, unexpected results or charges), welcomes
 reports even when the task succeeds, and names the feedback tool's `call_ids` argument explicitly.
 The provider `body` is unchanged. CLI and direct HTTP responses do not gain a feedback hint.
 
