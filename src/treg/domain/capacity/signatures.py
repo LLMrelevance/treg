@@ -55,6 +55,10 @@ _TABLE: list[tuple[str, int, str, str]] = [
     ("trykitt", 402, r"insufficient (?:credits?|funds|balance)|out of credits", "balance"),
     # This API uses 402 for both funds and rate limits. The first matching row wins.
     ("trykitt", 402, r"", "unknown"),
+    # ContactOut documents this 403 separately from "No access to endpoint".
+    # Independent pools: lock only the failed endpoint, never the entire provider.
+    # https://api.contactout.com/#errors (checked 2026-09-08).
+    ("contactout", 403, r"you're out of credits", "quota"),
     ("*", 402, r"", "balance"),
 ]
 

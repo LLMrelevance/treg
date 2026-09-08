@@ -323,3 +323,20 @@ Kitt documents 402 for both rate limits and insufficient funds, so only an expli
 insufficient-funds phrase marks balance exhaustion; ambiguous 402 stays unknown.
 Paid exhaustion and paid concurrency have not been live-tested. Free-plan burst
 results varied, so no numeric free-plan concurrency/rate limit is configured.
+
+
+## ContactOut independent pools
+
+`collectors._contactout` exposes the three raw credit pools through an informational observation,
+not a scalar balance. `snapshot_from` and `latest_state` preserve it without marking the provider
+exhausted. Prepaid quotas are already remaining credits. The pools are independent; the designated
+account manager monitors usage and arranges top-ups. Stats freshness remains unconfirmed; treg
+keeps the existing sweep cadence and does not assume behavior at zero credits. See
+[ContactOut](../architecture/contactout.md).
+
+ContactOut overflow now has verified routes on Orthogonal and Monid, using the same price gates,
+expiry, opt-out and budget controls. Its documented out-of-credit 403 is endpoint-scoped quota,
+not a provider-wide balance lock. See the ContactOut fragment for enabled coverage and the paid
+`scripts/contactout_overflow_verify.py --budget-usd 10 --apply` renewal command; nonexistent static
+catalog examples cannot renew successful contact checks. Production policy/mode changes and the
+weekly renewal schedule remain rollout actions, not changes applied by this PR.

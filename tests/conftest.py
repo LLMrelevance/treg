@@ -59,6 +59,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from treg import audit  # noqa: E402
 from treg.api import app  # noqa: E402
 from treg import archive  # noqa: E402
+from treg.config import get_settings  # noqa: E402
 from treg.infra.db import reset_db  # noqa: E402
 
 
@@ -379,6 +380,17 @@ def kitt_on(monkeypatch):
     from treg.config import get_settings
     monkeypatch.setenv('TREG_PLATFORM_KEY_TRYKITT', 'TEST-KITT-KEY')
     monkeypatch.setenv('TREG_PLATFORM_PROVIDERS', 'trykitt')
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+# ---- ContactOut ----
+
+@pytest.fixture
+def contactout_platform(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_CONTACTOUT", "PLATFORM-TEST")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "contactout")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

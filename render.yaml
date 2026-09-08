@@ -103,6 +103,8 @@ services:
         sync: false
       - key: TREG_PLATFORM_KEY_TRYKITT
         sync: false
+      - key: TREG_PLATFORM_KEY_CONTACTOUT
+        sync: false
       - key: TREG_PLATFORM_KEY_MILLIONVERIFIER
         sync: false
       - key: TREG_PLATFORM_KEY_LEADMAGIC
@@ -254,6 +256,11 @@ services:
           type: web
           name: treg
           envVarName: TREG_PLATFORM_KEY_TRYKITT
+      - key: TREG_PLATFORM_KEY_CONTACTOUT
+        fromService:
+          type: web
+          name: treg
+          envVarName: TREG_PLATFORM_KEY_CONTACTOUT
       - key: TREG_PLATFORM_KEY_MILLIONVERIFIER
         fromService:
           type: web

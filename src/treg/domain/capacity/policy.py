@@ -24,6 +24,7 @@ _KNOWN: dict[str, tuple[str, str, str]] = {
     "tikhub": ("cash", "auto_recharge", "api"),
     "lusha": ("credits", "auto_recharge", "api"),
     "scrapecreators": ("credits", "manual", "api"),
+    "contactout": ("credits", "unknown", "api"),  # independent pools; overages unconfirmed
     "leadmagic": ("credits", "manual", "api"),
     "findymail": ("credits", "manual", "api"),
     "leadsforge": ("credits", "manual", "api"),
@@ -160,6 +161,11 @@ def latest_state(policy: CapacityPolicy, snap: CapacitySnapshot | None,
     if snap is None:
         return LatestState(policy.provider, None, "", None, "stale", health="unknown",
                            note="no observation yet", rate_limit=rl)
+    if snap.confidence == "informational" and not snap.error:
+        old = now - snap.observed_at > STALE_AFTER
+        return LatestState(policy.provider, None, snap.unit, snap.observed_at,
+                           "stale" if old else "informational", health="stale" if old else "unknown",
+                           note=snap.note, rate_limit=rl)
     if snap.error or snap.remaining is None:
         return LatestState(policy.provider, None, snap.unit, snap.observed_at, "stale",
                            health="stale", note=snap.error or snap.note, rate_limit=rl)

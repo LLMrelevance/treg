@@ -96,8 +96,8 @@ def test_match_catalogs_by_exact_host_method_path_with_prefix_folding():
 
 async def test_sync_reproduces_the_verified_set_and_never_enables_a_bad_ratio(monkeypatch):
     await reset_db()
-    # Preserve the August baseline; September's Influencers Club verification is tested separately.
-    seed = [{**x, "verified_at": None} if x["provider"] == "influencersclub" else x
+    # Preserve the August baseline; September provider verifications are tested separately.
+    seed = [{**x, "verified_at": None} if x["provider"] in ("influencersclub", "contactout") else x
             for x in R.load_seed()]
     verified = {(x["endpoint_id"], x["aggregator"]) for x in seed if x["verified_at"]}
     assert len(verified) == 145, "the 2026-08-26 verified set (131 ROUTE + 11 tomba + 2 phone + hunter domain-search)"

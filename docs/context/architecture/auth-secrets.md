@@ -380,3 +380,10 @@ SSRF, even via DNS rebinding.
 `https://api.trykitt.ai`. `/credit` returns 200 even with a valid zero balance and 401
 for a bogus key. `platform_key_trykitt` loads `TREG_PLATFORM_KEY_TRYKITT`; the normal
 platform-provider allow-list is also required. Own keys always take precedence.
+
+
+## ContactOut pasted API tokens
+
+`oauth_providers.CONTACTOUT` verifies against `/v1/stats` and requires `status_code: 200` as well
+as HTTP success. Its binding injects the raw `token` header. Both garbage rejection and valid
+connection creation were tested live; see [ContactOut](contactout.md).

@@ -805,3 +805,12 @@ The base find price is $0.005. The documented volume discount is not tracked loc
 an upstream reported discount is honored. `/credit` and `remainingCredits` are account
 balances, never charge evidence. Paid live tests reconciled $0.008 after a delayed
 balance update. Free-plan null charge fields use the same documented fallback policy.
+
+
+## ContactOut contact hits
+
+`application.call.contactout` calculates request-sized holds and derives contact/search charges
+from returned profiles using the YAML Starter micro-USD rates. It reuses the existing money lifecycle.
+Profile-only LinkedIn enrichment reserves and settles 20,000 micro-USD when a profile is found;
+misses remain free. Platform reveal search requires an explicit page size to bound its hold.
+Own keys are unmetered; see [ContactOut](contactout.md) for prices, free verification and evidence limits.

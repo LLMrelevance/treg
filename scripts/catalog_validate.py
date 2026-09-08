@@ -508,6 +508,18 @@ def check_cost(cost: dict, where: str, errors: list[str], warnings: list[str],
             fail(errors, where, "cost.reported_charge requires a JSON path and unit: usd")
         if "table" in cost or "settle" in cost or cost.get("type") == "free":
             fail(errors, where, "cost.reported_charge requires a paid scalar price without cost.settle")
+    if "contactout" in cost:
+        rule = cost["contactout"]
+        jobs = {"contact", "person", "email", "linkedin", "search", "decision",
+                "company_search", "domains", "reverse"}
+        rates = rule.get("rates_micro") if isinstance(rule, dict) else None
+        if not isinstance(rule, dict) or rule.get("job") not in jobs:
+            fail(errors, where, "cost.contactout needs a supported job")
+        if not isinstance(rates, dict) or set(rates) != {"work_email", "personal_email", "phone", "search"} \
+                or any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in rates.values()):
+            fail(errors, where, "cost.contactout.rates_micro needs four positive integer micro-USD rates")
+        if cost.get("currency") != "USD":
+            fail(errors, where, "cost.contactout requires USD")
     has_table = "table" in cost
     if has_table:
         if "value" in cost:
