@@ -7,6 +7,39 @@ Each test mocks the upstream API response and verifies that the collector return
 from __future__ import annotations
 
 from treg.domain.capacity import collectors
+import httpx
+import pytest
+
+
+@pytest.mark.parametrize("balance", [0, 465])
+async def test_millionverifier_balance_uses_query_key_without_double_counting(monkeypatch, balance):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "private-test-key")
+    collectors.get_settings.cache_clear()
+    def reply(request):
+        assert request.url.path == "/api/v3/credits"
+        assert request.url.params["api"] == "private-test-key"
+        return httpx.Response(200, json={"credits": balance, "bulk_credits": balance})
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+            row = await collectors.provider_balance("millionverifier", client)
+        assert row == {"provider": "millionverifier", "value": balance, "unit": "credits", "note": ""}
+    finally:
+        collectors.get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("status,body", [(200, {"error": "apikey_not_found"}), (401, {}), (200, {})])
+async def test_millionverifier_balance_errors_do_not_expose_key(monkeypatch, status, body):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_MILLIONVERIFIER", "private-test-key")
+    collectors.get_settings.cache_clear()
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda request: httpx.Response(status, json=body))) as client:
+            row = await collectors.provider_balance("millionverifier", client)
+        assert row["value"] is None
+        assert row["note"]
+        assert "private-test-key" not in str(row)
+    finally:
+        collectors.get_settings.cache_clear()
 
 
 class MockResponse:
