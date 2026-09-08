@@ -510,3 +510,6 @@ def test_worker_cli_parses_overflow_commands(monkeypatch):
     monkeypatch.setattr(worker, "_overflow_verify", fake)
     assert worker.main(["overflow", "sync", "--live"]) == 0 and seen["live"] is True
     assert worker.main(["overflow", "verify", "--max-usd", "0.05"]) == 0 and seen["max_usd"] == 0.05
+    assert seen["renew_max_usd"] == worker.RENEW_MAX_USD and seen["budget_usd"] == worker.VERIFY_BUDGET_USD
+    assert worker.main(["overflow", "verify", "--renew-max-usd", "0.7", "--budget-usd", "3"]) == 0
+    assert seen["renew_max_usd"] == 0.7 and seen["budget_usd"] == 3.0

@@ -201,14 +201,21 @@ pays the aggregator's real price, 0% markup, disclosed in-band when it ships (st
 - **`verify.py`** + `treg-worker overflow verify` — the weekly re-verify: one cheap call per
   route through the aggregator (and, when we hold the vendor key, directly), compare the shape
   fingerprint (keys and list/leaf markers, values ignored), stamp `last_verified_at` or disable
-  with the reason. `--max-usd` (default 2¢) is a per-route price cap, not a run budget: pricier
-  routes are skipped, as are routes whose endpoint has no `test_request`. Without `--all` only
-  enabled or previously-stamped rows are visited, so a never-verified pair never enters the rota;
-  run it with `--all`. `--only` restricts the run to comma-separated provider IDs, allowing a
-  higher per-route price cap for one provider without probing every pricier route in the table.
+  with the reason. Two per-route price caps and one run budget: a route that is enabled or was
+  stamped before is a **renewal**, held to `--renew-max-usd` (default $1); a never-verified pair is
+  **discovery**, visited only under `--all` and held to `--max-usd` (default 2¢). Renewals go first,
+  oldest stamp first, so the route nearest its 7-day decay is reached before `--budget-usd`
+  (default $15, relay fee plus the direct comparison when we hold the vendor key) runs out; a route
+  that does not fit the budget is skipped, not the rest of the run. Routes whose endpoint has no
+  `test_request` are skipped. One cap for both once cost real routes: on 2026-09-07 the weekly
+  `verify --all` at 2¢ skipped 134 routes, among them all 46 stamped on 2026-08-26 and priced
+  3¢–65¢ (branddev, predictleads, findymail, leadsforge, apollo, companyenrich, fiber-ai, pdl,
+  hunter, icypeas); they decayed off at the next sync and no run could ever bring them back.
+  `--only` restricts the run to comma-separated provider IDs.
   Verify only STAMPS - `overflow sync` is what re-derives `enabled` from the
-  stamps, so every verify must be followed by a sync (by hand today, `ops/deploy.md`); a route
-  disabled by one failed verify is only re-enabled by that sync. A failed route is a result, not a failed run: the command exits 0 after
+  stamps, so every verify must be followed by a sync (the weekly cron chains the two since
+  2026-09-08, `ops/deploy.md`); a route disabled by one failed verify is only re-enabled by that
+  sync, and a route past its 7 days keeps serving until a sync notices - the sync is the decay. A failed route is a result, not a failed run: the command exits 0 after
   completing (it used to exit 1 whenever any route failed, which made every Render run read
   "failed"). `verify.verdict` is the one place that decides what a verification means: `passed`
   stamps; `failed` (contract refusal, relay non-2xx, a 2xx of a different shape) disables with the
