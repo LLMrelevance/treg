@@ -123,11 +123,8 @@ endpoints:
         required: true
         note: Full regular LinkedIn profile URL; Sales Navigator and Recruiter URLs
           are not supported.
-        example: https://www.linkedin.com/in/rob-liu
+        example: https://www.linkedin.com/in/YOUR-PROFILE
     note: Availability only; no contact reveal. Free; paid ContactOut account required.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/rob-liu
   cost:
     type: free
     value: 0
@@ -136,6 +133,8 @@ endpoints:
     unit: call
     note: Availability only; no contact reveal. Free; paid ContactOut account required.
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.work_email.available
   domain: contacts
   capability: linkedin.email.work.availability
@@ -149,9 +148,6 @@ endpoints:
     queryParams:
       profile: *id001
     note: Availability only; no contact reveal. Free; paid ContactOut account required.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/rob-liu
   cost:
     type: free
     value: 0
@@ -160,6 +156,8 @@ endpoints:
     unit: call
     note: Availability only; no contact reveal. Free; paid ContactOut account required.
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.phone.available
   domain: contacts
   capability: linkedin.phone.availability
@@ -173,9 +171,6 @@ endpoints:
     queryParams:
       profile: *id001
     note: Availability only; no contact reveal. Free; paid ContactOut account required.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/rob-liu
   cost:
     type: free
     value: 0
@@ -184,6 +179,8 @@ endpoints:
     unit: call
     note: Availability only; no contact reveal. Free; paid ContactOut account required.
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.email.verify
   domain: contacts
   capability: people.email.verify
@@ -282,12 +279,6 @@ endpoints:
       See docs for accepted industry, seniority and size values. reveal_info=true
       can return both email types and phones. For work-only contacts, search without
       reveal then use the work-email contact tool.
-  test_request:
-    body:
-      domain:
-      - contactout.com
-      page_size: 1
-      reveal_info: false
   cost:
     type: per_result
     value: 0.02
@@ -313,9 +304,9 @@ endpoints:
         personal_email: 250000
         phone: 250000
         search: 20000
-  verified: 2026-09-09
-  example_response: examples/contactout.people.search.json
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.decision-makers
   domain: contacts
   capability: people.search
@@ -342,12 +333,9 @@ endpoints:
         enum:
         - false
     note: Supply at least one of linkedin_url, domain or name. Pages contain up to
-      25 profiles. Reveal may return both email types and phones; use no-reveal then
+      25 profiles. The platform hold is up to $0.50; this route has no page_size
+      control. Reveal may return both email types and phones; use no-reveal then
       work-email contact for work-only enrichment.
-  test_request:
-    queryParams:
-      domain: contactout.com
-      reveal_info: false
   cost:
     type: per_result
     value: 0.02
@@ -362,12 +350,15 @@ endpoints:
       personal email $0.25, phone $0.25 per profile with a hit; search $0.02 per returned
       profile/company. Multiple addresses of one type consume one credit per profile.
       No contact hit means no contact charge. Supply at least one of linkedin_url,
-      domain or name. Pages contain up to 25 profiles. Reveal may return both email
+      domain or name. Pages contain up to 25 profiles. The platform hold is up to $0.50; this route has no page_size
+      control. Reveal may return both email
       types and phones; use no-reveal then work-email contact for work-only enrichment.
     contactout:
       job: decision
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.search.reveal
   domain: contacts
   capability: people.search
@@ -418,7 +409,9 @@ endpoints:
         type: integer
         min: 1
         max: 25
-        default: 25
+        required: true
+        example: 1
+        note: Platform calls require an explicit page_size; 1 reserves at most $0.67.
       data_types:
         type: array
         note: Availability filter, NOT a reveal selector.
@@ -435,12 +428,6 @@ endpoints:
       See docs for accepted industry, seniority and size values. reveal_info=true
       can return both email types and phones. For work-only contacts, search without
       reveal then use the work-email contact tool.
-  test_request:
-    body:
-      company:
-      - treg-verification-nonexistent-20260908
-      page_size: 1
-      reveal_info: true
   cost:
     type: per_result
     value: 0.67
@@ -463,6 +450,8 @@ endpoints:
       job: search
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.decision-makers.reveal
   domain: contacts
   capability: people.search
@@ -489,12 +478,9 @@ endpoints:
         enum:
         - true
     note: Supply at least one of linkedin_url, domain or name. Pages contain up to
-      25 profiles. Reveal may return both email types and phones; use no-reveal then
+      25 profiles. The platform hold is up to $16.75; this route has no page_size
+      control. Reveal may return both email types and phones; use no-reveal then
       work-email contact for work-only enrichment.
-  test_request:
-    queryParams:
-      domain: treg-verification-nonexistent.invalid
-      reveal_info: true
   cost:
     type: per_result
     value: 0.67
@@ -509,12 +495,15 @@ endpoints:
       personal email $0.25, phone $0.25 per profile with a hit; search $0.02 per returned
       profile/company. Multiple addresses of one type consume one credit per profile.
       No contact hit means no contact charge. Supply at least one of linkedin_url,
-      domain or name. Pages contain up to 25 profiles. Reveal may return both email
+      domain or name. Pages contain up to 25 profiles. The platform hold is up to $16.75; this route has no page_size
+      control. Reveal may return both email
       types and phones; use no-reveal then work-email contact for work-only enrichment.
     contactout:
       job: decision
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.companies.search
   domain: companies
   capability: companies.search
@@ -633,9 +622,6 @@ endpoints:
     queryParams:
       email: *id034
     note: $0.06 per served call; rejected upstream requests are unbilled.
-  test_request:
-    queryParams:
-      email: treg-verification-nonexistent@example.com
   cost:
     type: per_call
     value: 0.06
@@ -655,6 +641,8 @@ endpoints:
       job: reverse
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.contact.work
   domain: contacts
   capability: linkedin.email.work.find
@@ -677,11 +665,6 @@ endpoints:
         default: false
     note: Set email_type explicitly as shown. Phone adds $0.25 only on a hit; never
       charged per phone/address in the returned array.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
-      email_type: work
-      include_phone: false
   cost:
     type: per_success
     value: 0.15
@@ -702,6 +685,8 @@ endpoints:
       job: contact
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.contact.personal
   domain: contacts
   capability: linkedin.email.personal.find
@@ -724,11 +709,6 @@ endpoints:
         default: false
     note: Set email_type explicitly as shown. Phone adds $0.25 only on a hit; never
       charged per phone/address in the returned array.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
-      email_type: personal
-      include_phone: false
   cost:
     type: per_success
     value: 0.25
@@ -749,6 +729,8 @@ endpoints:
       job: contact
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.contact.phone
   domain: contacts
   capability: linkedin.phone.find
@@ -773,11 +755,6 @@ endpoints:
         - true
     note: Set email_type explicitly as shown. Phone adds $0.25 only on a hit; never
       charged per phone/address in the returned array.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
-      email_type: none
-      include_phone: true
   cost:
     type: per_success
     value: 0.25
@@ -798,6 +775,8 @@ endpoints:
       job: contact
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.linkedin.enrich
   domain: contacts
   capability: linkedin.user.profile
@@ -815,12 +794,8 @@ endpoints:
         default: false
     note: This route does not document email_type or include selectors. It may return
       both email types and phones. Use the dedicated work-email contact tool to avoid
-      personal-email reveal. Treg follows the agreed contact-only rate here; no search
-      surcharge.
-  test_request:
-    queryParams:
-      profile: https://www.linkedin.com/in/zbeslic
-      profile_only: 'true'
+      personal-email reveal. Profile-only results cost $0.02 when a profile is found.
+      Contact misses cost $0 at treg, though ContactOut still consumes a search credit.
   cost:
     type: per_success
     value: 0.65
@@ -836,14 +811,15 @@ endpoints:
       profile/company. Multiple addresses of one type consume one credit per profile.
       No contact hit means no contact charge. This route does not document email_type
       or include selectors. It may return both email types and phones. Use the dedicated
-      work-email contact tool to avoid personal-email reveal. Treg follows the agreed
-      contact-only rate here; no search surcharge.
+      work-email contact tool to avoid personal-email reveal. Profile-only results cost
+      $0.02 when a profile is found. Contact misses cost $0 at treg, though ContactOut
+      still consumes a search credit.
     contactout:
       job: linkedin
       rates_micro: *id033
-  verified: 2026-09-09
-  example_response: examples/contactout.people.linkedin.enrich.json
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.enrich
   domain: contacts
   capability: people.enrich
@@ -884,10 +860,6 @@ endpoints:
           profile only.'
     note: Provide linkedin_url, email or phone, OR name plus company/location/education.
       $0.02 if a profile is found, plus requested contacts on hit.
-  test_request:
-    body:
-      linkedin_url: https://www.linkedin.com/in/zbeslic
-      include: []
   cost:
     type: per_success
     value: 0.02
@@ -907,9 +879,9 @@ endpoints:
     contactout:
       job: person
       rates_micro: *id033
-  verified: 2026-09-09
-  example_response: examples/contactout.people.enrich.json
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.enrich.work_email
   domain: contacts
   capability: people.enrich
@@ -942,14 +914,9 @@ endpoints:
           with phone.
     note: Provide linkedin_url, email or phone, OR name plus company/location/education.
       $0.02 if a profile is found, plus requested contacts on hit.
-  test_request:
-    body:
-      linkedin_url: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
-      include:
-      - work_email
   cost:
     type: per_success
-    value: 0.16999999999999998
+    value: 0.17
     currency: USD
     per: 1
     unit: call
@@ -967,6 +934,8 @@ endpoints:
       job: person
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.enrich.personal_email
   domain: contacts
   capability: people.enrich
@@ -999,11 +968,6 @@ endpoints:
           to combine with phone.
     note: Provide linkedin_url, email or phone, OR name plus company/location/education.
       $0.02 if a profile is found, plus requested contacts on hit.
-  test_request:
-    body:
-      linkedin_url: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
-      include:
-      - personal_email
   cost:
     type: per_success
     value: 0.27
@@ -1024,6 +988,8 @@ endpoints:
       job: person
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.people.email.enrich
   domain: contacts
   capability: people.enrich
@@ -1043,10 +1009,6 @@ endpoints:
         note: Only documented include value; optional work email lookup.
     note: May return personal email and phone; only work_email is a documented include
       selector. Returned input email is not a new contact reveal.
-  test_request:
-    queryParams:
-      email: treg-verification-nonexistent@example.com
-      include: work_email
   cost:
     type: per_success
     value: 0.65
@@ -1067,6 +1029,8 @@ endpoints:
       job: email
       rates_micro: *id033
   docs_url: https://api.contactout.com/
+  untestable: Requires a person lookup or returns named individuals; no automated
+    verification request or stored example under the catalog PII rule.
 - id: contactout.account.usage
   capability: account.usage
   platform: account

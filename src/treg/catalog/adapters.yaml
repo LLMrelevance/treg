@@ -1986,18 +1986,8 @@ adapters:
   # that and it rescued 2 of 8 hard queries). Fixture kept; callable by id.
 
 
-  # ContactOut: basic discovery/profile routing never requests contact reveal.
-  contactout.people.search:
-    accepts: [[company_domain, title], [company_domain], [title], [full_name], [q]]
-    in: {company_domain: body.domain, title: body.job_title, full_name: body.name, q: body.keyword}
-    in_expr:
-      body.domain: "list(company_domain)"
-      body.job_title: "list(title)"
-      body.page_size: limit
-      body.location: "list(coalesce(location, country_name(country)))"
-    const: {body.reveal_info: false}
-    out: {people: "values(profiles)", count: "len(values(profiles))"}
-    miss: "at_least(status_code != 200, coalesce(values(profiles)) == null)"
+  # ContactOut people search/profile adapters are omitted: the PII rule excludes
+  # their verification fixtures. Direct tools remain available. Company discovery:
   contactout.companies.search:
     accepts: [[domain], [name], [industry], [technology]]
     in: {domain: body.domain, name: body.name, industry: body.industry, technology: body.technologies}
@@ -2023,32 +2013,3 @@ adapters:
       location: "get(values(companies), '[0].headquarter')"
       linkedin_url: "get(values(companies), '[0].li_vanity')"
     miss: "at_least(status_code != 200, get(values(companies), '[0].name') == null)"
-  contactout.people.enrich:
-    accepts: [[linkedin_url], [email]]
-    in: {linkedin_url: body.linkedin_url, email: body.email}
-    const: {body.include: []}
-    out:
-      full_name: profile.full_name
-      first_name: "split_first(profile.full_name)"
-      last_name: "split_last(profile.full_name)"
-      title: profile.headline
-      company: profile.company.name
-      company_domain: profile.company.domain
-      linkedin_url: profile.url
-      location: profile.location
-    miss: "at_least(status_code != 200, profile.full_name == null)"
-  contactout.people.linkedin.enrich:
-    accepts: [[linkedin_url], [linkedin_handle]]
-    in: {linkedin_url: queryParams.profile}
-    in_expr: {queryParams.profile: "coalesce(linkedin_url, linkedin_url(linkedin_handle))"}
-    const: {queryParams.profile_only: 'true'}
-    out:
-      full_name: profile.full_name
-      first_name: "split_first(profile.full_name)"
-      last_name: "split_last(profile.full_name)"
-      headline: profile.headline
-      location: profile.location
-      followers: profile.followers
-      about: profile.summary
-      linkedin_url: profile.url
-    miss: "at_least(status_code != 200, profile.full_name == null)"

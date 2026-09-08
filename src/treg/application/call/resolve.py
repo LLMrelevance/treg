@@ -1346,6 +1346,14 @@ async def _resolve_marketplace_call(
             # Fixed catalog splits must not silently fall into ContactOut's personal+work default.
             inputs = ep.get("input") or {}
             values = _json_object(body) if body else dict(query.multi_items())
+            if ep["id"] == "contactout.people.search.reveal":
+                size = values.get("page_size")
+                if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= 25:
+                    raise ResolutionFailed("catalog_parameter_invalid", status_code=400, detail={
+                        "error": "catalog_parameter_invalid", "endpoint_id": ep["id"],
+                        "parameter": "page_size",
+                        "message": "Specify page_size from 1 to 25; each result reserves up to $0.67.",
+                    })
             for name, spec in (inputs.get("body") or inputs.get("queryParams") or {}).items():
                 if not isinstance(spec, dict) or not spec.get("required") or len(spec.get("enum", [])) != 1:
                     continue

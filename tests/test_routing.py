@@ -1398,10 +1398,6 @@ def test_row_values_and_nested_lookup_expressions(value, expected):
 
 
 _CONTACTOUT_DISCOVERY = [
-    ('people.search', 'people.search', {'company_domain': 'example.test', 'limit': 1},
-     'POST', {}, {'domain': ['example.test'], 'page_size': 1, 'reveal_info': False},
-     {'status_code': 200, 'profiles': {'arbitrary-key': {'full_name': 'Sam Example'}}},
-     'people', [{'full_name': 'Sam Example'}], 20_000),
     ('companies.search', 'companies.search', {'domain': 'example.test'},
      'POST', {}, {'domain': ['example.test']},
      {'status_code': 200, 'companies': [{'name': 'Example'}]}, 'companies', [{'name': 'Example'}], 20_000),
@@ -1409,12 +1405,6 @@ _CONTACTOUT_DISCOVERY = [
      'POST', {}, {'domains': ['example.test']},
      {'status_code': 200, 'companies': {'example.test': {'name': 'Example', 'domain': 'example.test'}}},
      'name', 'Example', 20_000),
-    ('people.enrich', 'people.enrich', {'linkedin_url': 'https://www.linkedin.com/in/synthetic'},
-     'POST', {}, {'linkedin_url': 'https://www.linkedin.com/in/synthetic', 'include': []},
-     {'status_code': 200, 'profile': {'full_name': 'Sam Example'}}, 'full_name', 'Sam Example', 20_000),
-    ('linkedin.user.profile', 'people.linkedin.enrich', {'linkedin_url': 'https://www.linkedin.com/in/synthetic'},
-     'GET', {'profile': 'https://www.linkedin.com/in/synthetic', 'profile_only': 'true'}, None,
-     {'status_code': 200, 'profile': {'full_name': 'Sam Example'}}, 'full_name', 'Sam Example', 0),
 ]
 
 
@@ -1460,11 +1450,10 @@ async def test_contactout_discovery_empty_or_error_response_is_not_a_hit(
         assert not (await db.execute(select(Hold))).scalars().all()
 
 
-def test_contactout_profile_and_search_input_variants_do_not_reveal_contacts():
-    ads = catalog_store.load().adapters
-    assert ads['contactout.people.enrich'].to_upstream({'email': 'person@example.test'}, ('email',)) == (
-        {}, {'email': 'person@example.test', 'include': []})
-    assert ads['contactout.people.linkedin.enrich'].to_upstream({'linkedin_handle': 'synthetic'}) == (
-        {'profile': 'https://www.linkedin.com/in/synthetic', 'profile_only': 'true'}, {})
-    _, body = ads['contactout.people.search'].to_upstream({'title': 'Engineer', 'limit': 2})
-    assert body == {'job_title': ['Engineer'], 'page_size': 2, 'reveal_info': False}
+def test_contactout_pii_routes_are_not_enabled_without_verification_examples():
+    cat = catalog_store.load()
+    for cap, child in [('people.search', 'people.search'), ('people.enrich', 'people.enrich'),
+                       ('linkedin.user.profile', 'people.linkedin.enrich')]:
+        eid = 'contactout.' + child
+        assert eid not in cat.adapters
+        assert eid not in cat.by_id['treg.' + cap]['routed_children']

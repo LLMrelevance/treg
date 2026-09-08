@@ -2218,3 +2218,84 @@ def test_contactout_contact_reveals_require_recognizable_hit_evidence(body):
     mk = SimpleNamespace(provider="contactout", endpoint_id="contactout.people.contact.work",
                          cost_type="per_success", unit_micro=0, billed_oauth=False, request_data={})
     assert _observed_cost_micro(mk, body) == 0
+
+
+@pytest.mark.parametrize("profile_only", [True, "true", "1"])
+@pytest.mark.parametrize("doc,charge", [
+    ({"status_code": 200, "profile": {"full_name": "Synthetic Example"}}, 20000),
+    ({"status_code": 200, "profile": {}}, 0),
+    ({"status_code": 200, "profile": []}, 0),
+    ({"status_code": 403, "profile": {"full_name": "Synthetic Example"}}, 0),
+])
+def test_contactout_profile_only_found_and_miss_billing(profile_only, doc, charge):
+    cost = _contactout_cost("people.linkedin.enrich")
+    request = {"profile_only": profile_only}
+    assert contactout.estimate(cost, request) == 20000
+    assert contactout.observed(cost, {"queryParams": request}, doc) == charge
+
+
+@pytest.mark.parametrize("own", [False, True])
+@pytest.mark.parametrize("found", [False, True])
+async def test_contactout_profile_only_direct_ledger(clients, contactout_platform, monkeypatch, own, found):
+    if own:
+        await clients.post("/secrets", json={"name": "contactout", "value": "OWN-TEST"})
+    doc = {"status_code": 200, "profile": {"full_name": "Synthetic Example"} if found else {}}
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        async def stream():
+            yield json.dumps(doc).encode()
+        async def close():
+            pass
+        return UpstreamResponse(200, (), stream(), close)
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _contactout_balance(clients)
+    response = await clients.get("/call/contactout.people.linkedin.enrich",
+        params={"profile": "https://www.linkedin.com/in/synthetic", "profile_only": "true"})
+    assert response.status_code == 200
+    assert response.json() == doc
+    after = await _contactout_balance(clients)
+    assert before["balance_micro"] - after["balance_micro"] == (20000 if found and not own else 0)
+    closing = [e for e in after["entries"]["items"] if e["kind"] in ("settle", "release")]
+    assert len(closing) == (0 if own else 1)
+
+
+@pytest.mark.parametrize("size", [None, 0, 26, True, "1"])
+async def test_contactout_reveal_requires_explicit_valid_page_size(clients, contactout_platform, monkeypatch, size):
+    async def relay(*args, **kwargs):
+        pytest.fail("Invalid page_size must be refused before upstream")
+    monkeypatch.setattr(call_service, "relay", relay)
+    body = {"reveal_info": True}
+    if size is not None:
+        body["page_size"] = size
+    before = await _contactout_balance(clients)
+    response = await clients.post("/call/contactout.people.search.reveal", json=body)
+    assert response.status_code == 400
+    assert response.json()["detail"]["parameter"] == "page_size"
+    after = await _contactout_balance(clients)
+    assert before == after
+
+
+@pytest.mark.parametrize("own,size", [(False, 1), (True, None)])
+async def test_contactout_reveal_small_page_and_own_key_relay(clients, contactout_platform, monkeypatch, own, size):
+    if own:
+        await clients.post("/secrets", json={"name": "contactout", "value": "OWN-TEST"})
+    body = {"reveal_info": True}
+    if size is not None:
+        body["page_size"] = size
+    doc = {"status_code": 200, "profiles": {"synthetic": {"full_name": "Synthetic Example"}}}
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        assert json.loads(b"".join([chunk async for chunk in request.body_stream()])) == body
+        async def stream():
+            yield json.dumps(doc).encode()
+        async def close():
+            pass
+        return UpstreamResponse(200, (), stream(), close)
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _contactout_balance(clients)
+    response = await clients.post("/call/contactout.people.search.reveal", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json() == doc
+    after = await _contactout_balance(clients)
+    assert before["balance_micro"] - after["balance_micro"] == (0 if own else 20000)
+    reserves = [e for e in after["entries"]["items"] if e["kind"] == "reserve"]
+    assert len(reserves) == (0 if own else 1)
+    assert contactout.estimate(_contactout_cost("people.search.reveal"), {"reveal_info": True, "page_size": 1}) == 670000

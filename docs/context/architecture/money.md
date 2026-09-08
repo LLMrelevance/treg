@@ -795,4 +795,6 @@ its existing explicit charge/no-charge prose handling is a separate billing sign
 
 `application.call.contactout` calculates request-sized holds and derives contact/search charges
 from returned profiles using the YAML Starter micro-USD rates. It reuses the existing money lifecycle.
+Profile-only LinkedIn enrichment reserves and settles 20,000 micro-USD when a profile is found;
+misses remain free. Platform reveal search requires an explicit page size to bound its hold.
 Own keys are unmetered; see [ContactOut](contactout.md) for prices, free verification and evidence limits.

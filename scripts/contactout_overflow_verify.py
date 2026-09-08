@@ -2,8 +2,9 @@
 """Renew ContactOut overflow evidence with a discovered profile, without storing contact data.
 
 Run with the worker environment and --apply to persist stamps and sync routes. This makes paid
-calls; --budget-usd bounds estimated direct plus aggregator cost (default $10). General worker
-verification uses static catalog examples, which intentionally name nonexistent people.
+calls; --budget-usd bounds estimated direct plus aggregator cost (default $10).
+People routes have no catalog test requests under the PII rule;
+this explicit paid command builds their requests from an ephemeral discovered profile.
 """
 from __future__ import annotations
 
@@ -55,7 +56,18 @@ async def main(args):
             if not key:
                 continue
             ep = catalog.by_id[row['endpoint_id']]
-            request = json.loads(json.dumps(ep['test_request']))
+            request = json.loads(json.dumps(ep.get('test_request') or {}))
+            inputs = ep.get('input') or {}
+            for location in ('queryParams', 'body'):
+                specs = inputs.get(location) or {}
+                if not specs:
+                    continue
+                params = request.setdefault(location, {})
+                for name, spec in specs.items():
+                    if name in ('profile', 'linkedin_url'):
+                        params[name] = url
+                    elif spec.get('required') and len(spec.get('enum', [])) == 1:
+                        params[name] = spec['enum'][0]
             query = request.get('queryParams', {})
             body = request.get('body')
             if 'profile' in query:

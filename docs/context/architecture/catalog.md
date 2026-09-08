@@ -1662,4 +1662,7 @@ first real test that the capability taxonomy supports cross-provider comparison.
 
 `contactout.yaml` adds the core LinkedIn/contact surface with explicit work/personal selectors,
 on-hit Starter rates supplied by the account owner, free verification, and deferred batches.
+People lookup/search entries are `untestable:` without test requests or stored examples under the
+PII rule. Their routing adapters are omitted; company search/enrichment and email verification
+retain verified adapters. Profile-only LinkedIn enrichment costs $0.02 when found.
 See [ContactOut](contactout.md) for request limitations, derived settlement and live evidence.

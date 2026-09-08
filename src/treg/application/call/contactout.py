@@ -51,6 +51,7 @@ def estimate(cost, request):
     search = (
         rates["search"]
         if job in ("search", "decision", "person", "company_search", "domains")
+        or (job == "linkedin" and _true(request.get("profile_only")))
         else 0
     )
     if job == "domains":
@@ -127,7 +128,10 @@ def observed(cost, evidence, doc):
             return 0
         rows = [profile]
     total = (
-        len(rows) * rates["search"] if job in ("search", "decision", "person") else 0
+        len(rows) * rates["search"]
+        if job in ("search", "decision", "person")
+        or (job == "linkedin" and _true(request.get("profile_only")))
+        else 0
     )
     selected = _selected(job, request)
     for profile in rows:

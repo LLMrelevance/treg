@@ -6,11 +6,9 @@ sources:
   - src/treg/catalog/adapters.yaml
   - src/treg/catalog/examples/contactout.people.email.verify.json
   - tests/test_routing.py
-  - src/treg/catalog/examples/contactout.people.search.json
   - src/treg/catalog/examples/contactout.companies.search.json
   - src/treg/catalog/examples/contactout.companies.enrich.json
-  - src/treg/catalog/examples/contactout.people.enrich.json
-  - src/treg/catalog/examples/contactout.people.linkedin.enrich.json
+  - src/treg/application/call/resolve.py
   - src/treg/application/call/contactout.py
   - src/treg/web/logos/contactout.svg
   - tests/test_marketplace_call.py
@@ -45,9 +43,9 @@ on `account`. LinkedIn placement covers the three contact splits, three availabi
 LinkedIn profile enrichment and email-to-LinkedIn lookup. Their existing `contactout.people.*`
 IDs remain stable for saved CLI/API calls; platform and capability metadata control browsing.
 Capability labels distinguish work/personal email lookup from availability checks. Global catalog
-search remains cross-platform. Email verification, people/company search, people/company enrichment,
-and LinkedIn profile lookup participate in their existing routed contracts. Other ContactOut tools
-remain direct-only.
+search remains cross-platform. Email verification, company search and company enrichment
+participate in their existing routed contracts. People search and profile enrichment remain direct-only: the PII rule excludes their
+verification requests/examples, so their adapter registrations are omitted.
 
 The catalog covers count, personal/work email and phone availability, single email verification,
 people and company search, company domain enrichment, email-to-LinkedIn, decision makers,
@@ -89,13 +87,19 @@ email and combined email arrays are not billed again as personal-email reveals.
 
 `cost.contactout.rates_micro` carries integer micro-USD rates in YAML. `contactout.estimate`
 calculates a hold from actual request selectors, input domains, or a maximum 25-row page.
+Platform reveal search requires an explicit integer `page_size` from 1 to 25; one result reserves
+at most $0.67. Decision makers has no page-size control: its maximum hold stays $16.75 with
+reveal and $0.50 without reveal. Settlement charges actual results and releases unused funds.
 `contactout.observed` derives the final charge from returned contacts and records. The existing
 reserve/settle/release lifecycle owns all money and failure cleanup. This is derived billing,
 not a claim that ContactOut reports dollar costs in each response. Responses without recognizable hit evidence, including malformed payloads,
 misses and embedded errors, cost zero rather than settling the maximum contact hold.
 
-The agreed LinkedIn-profile enrichment rate is contact-only, even though public ContactOut docs
-mention a search credit for profile-only/no-contact responses. Treg does not add that surcharge.
+LinkedIn enrichment with `profile_only=true` reserves $0.02 and settles $0.02 for a non-empty
+profile. Empty/malformed profiles and failed envelopes settle zero. Full contact enrichment retains
+contact-hit pricing; a contact miss costs zero at treg, although the vendor consumes a search
+credit. Maintainer live verification found the previous zero-cost profile-only rule under-billed
+two successful calls by one search credit each; `estimate` and `observed` now include that rate.
 Single email verification remains free under current commercial terms; recheck if ContactOut
 starts charging verifier credits. No public plan estimate replaces these commercial rates.
 
@@ -200,9 +204,11 @@ https://api.contactout.com/#errors (checked 2026-09-08).
 
 ### Renewal and rollout
 
-Static catalog test requests intentionally use nonexistent people and cannot renew positive contact
-verification. `scripts/contactout_overflow_verify.py --budget-usd 10 --apply` discovers one profile
-at runtime, compares direct and aggregator shapes through the existing verifier, then syncs stamps.
+People routes carry `untestable:` with no catalog test request or stored example under the PII
+rule. These entries cannot participate in automated catalog re-verification.
+`scripts/contactout_overflow_verify.py --budget-usd 10 --apply` discovers one profile
+at runtime, builds requests using that ephemeral URL and required catalog selectors, compares
+direct and aggregator shapes through the existing verifier, then syncs stamps.
 It logs only endpoint IDs, statuses, verdicts and costs; no contact values. It makes paid calls;
 the budget includes direct requests and conservative aggregator estimates. Missing keys are skipped,
 failed compatibility routes are withheld from sync, and inconclusive routes retain their old stamp
@@ -233,22 +239,25 @@ and fallback on missing verdicts or embedded errors.
 
 ## Shared discovery and profile routing
 
-Five additional adapters join the existing contracts without changing capability labels:
+Company adapters join the existing contracts without changing capability labels. The three people
+adapter registrations are omitted after removal of PII-bearing catalog fixtures; direct calls
+remain available. Tests assert their absence from shared routing; direct platform tests cover
+profile-only billing and own-key exclusion. No verification gate is bypassed:
 
 | Routed tool | ContactOut child | Selected behavior |
 |---|---|---|
-| `treg.people.search` | `contactout.people.search` | `reveal_info=false`; domain/title/name/keyword identities; page size and location filters |
+| Ineligible: `treg.people.search` | `contactout.people.search` | `reveal_info=false`; domain/title/name/keyword identities; page size and location filters |
 | `treg.companies.search` | `contactout.companies.search` | Domain/name/industry/technology identities; vendor page size retained |
 | `treg.companies.enrich` | `contactout.companies.enrich` | One domain, sent as a one-element `domains` array |
-| `treg.people.enrich` | `contactout.people.enrich` | LinkedIn URL or email; `include=[]` prevents contact reveal |
-| `treg.linkedin.user.profile` | `contactout.people.linkedin.enrich` | LinkedIn URL or handle; `profile_only=true` |
+| Ineligible: `treg.people.enrich` | `contactout.people.enrich` | LinkedIn URL or email; `include=[]` prevents contact reveal |
+| Ineligible: `treg.linkedin.user.profile` | `contactout.people.linkedin.enrich` | LinkedIn URL or handle; `profile_only=true` |
 
 These mappings do not route decision-maker search, personal-email splits, or combined-reveal
 variants. The direct provider tools retain those capabilities. Company search does not document
 a page-size control: the adapter does not forward the contract's `limit` as an invented parameter.
 Its returned companies are still metered at $0.02 each. People search and domain enrichment use
 $0.02 per returned result; person enrichment uses $0.02 when found with no contact charge;
-LinkedIn profile-only lookup has no charge under the agreed contact-only pricing.
+LinkedIn profile-only lookup costs $0.02 when a profile is found.
 
 Object-keyed response rows use the reusable `values` and `get` expression helpers in
 `routing/paths.py`. `values` reads dictionary values or preserves a list; `get` applies the existing
@@ -260,5 +269,6 @@ Live captures on 2026-09-09 used the private funded key: people search returned 
 company search two companies, domain enrichment one company, and person/LinkedIn enrichment
 one profile each. The first sample LinkedIn URL missed, so the two successful profile captures
 used a profile from that search. All captured contact arrays were empty with the above selectors.
-Fixtures retain the responses; no credentials are included. Other accepted input variants have
-synthetic mapping coverage rather than separate live verification.
+The people captures and their catalog requests were removed after maintainer review under the
+catalog PII rule; only company and email-verification examples remain. People tools are marked
+`untestable:` to prevent re-capture. Other accepted company input variants were not separately live-verified.

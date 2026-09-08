@@ -539,3 +539,20 @@ def test_contactout_catalog_distribution_preserves_ids_and_global_discovery():
     assert cat.by_id["contactout.people.contact.work"]["platform"] == "linkedin"
     results, _ = catalog_store.search("contactout linkedin work email", cat, limit=100)
     assert any(e["id"] == "contactout.people.contact.work" for e, _ in results)
+
+
+def test_contactout_person_routes_cannot_recapture_pii():
+    from pathlib import Path
+    import yaml
+    path = Path("src/treg/catalog/contactout.yaml")
+    endpoints = yaml.safe_load(path.read_text())["endpoints"]
+    safe = {"contactout.people.count", "contactout.people.email.verify",
+            "contactout.companies.search", "contactout.companies.enrich", "contactout.account.usage"}
+    for ep in endpoints:
+        if ep["id"] in safe:
+            continue
+        assert ep["untestable"]
+        assert not any(key in ep for key in ("test_request", "verified", "example_response"))
+        assert not (path.parent / "examples" / (ep["id"] + ".json")).exists()
+    work = next(ep for ep in endpoints if ep["id"] == "contactout.people.enrich.work_email")
+    assert work["cost"]["value"] == 0.17
