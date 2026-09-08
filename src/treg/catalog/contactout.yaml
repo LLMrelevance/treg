@@ -284,8 +284,8 @@ endpoints:
       reveal then use the work-email contact tool.
   test_request:
     body:
-      company:
-      - ContactOut
+      domain:
+      - contactout.com
       page_size: 1
       reveal_info: false
   cost:
@@ -313,6 +313,8 @@ endpoints:
         personal_email: 250000
         phone: 250000
         search: 20000
+  verified: 2026-09-09
+  example_response: examples/contactout.people.search.json
   docs_url: https://api.contactout.com/
 - id: contactout.people.decision-makers
   domain: contacts
@@ -573,6 +575,8 @@ endpoints:
     contactout:
       job: company_search
       rates_micro: *id033
+  verified: 2026-09-09
+  example_response: examples/contactout.companies.search.json
   docs_url: https://api.contactout.com/
 - id: contactout.companies.enrich
   domain: companies
@@ -613,6 +617,8 @@ endpoints:
     contactout:
       job: domains
       rates_micro: *id033
+  verified: 2026-09-09
+  example_response: examples/contactout.companies.enrich.json
   docs_url: https://api.contactout.com/
 - id: contactout.people.linkedin.from-email
   domain: contacts
@@ -813,8 +819,8 @@ endpoints:
       surcharge.
   test_request:
     queryParams:
-      profile: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
-      profile_only: true
+      profile: https://www.linkedin.com/in/zbeslic
+      profile_only: 'true'
   cost:
     type: per_success
     value: 0.65
@@ -835,6 +841,8 @@ endpoints:
     contactout:
       job: linkedin
       rates_micro: *id033
+  verified: 2026-09-09
+  example_response: examples/contactout.people.linkedin.enrich.json
   docs_url: https://api.contactout.com/
 - id: contactout.people.enrich
   domain: contacts
@@ -878,7 +886,8 @@ endpoints:
       $0.02 if a profile is found, plus requested contacts on hit.
   test_request:
     body:
-      linkedin_url: https://www.linkedin.com/in/treg-verification-nonexistent-20260908
+      linkedin_url: https://www.linkedin.com/in/zbeslic
+      include: []
   cost:
     type: per_success
     value: 0.02
@@ -898,6 +907,8 @@ endpoints:
     contactout:
       job: person
       rates_micro: *id033
+  verified: 2026-09-09
+  example_response: examples/contactout.people.enrich.json
   docs_url: https://api.contactout.com/
 - id: contactout.people.enrich.work_email
   domain: contacts

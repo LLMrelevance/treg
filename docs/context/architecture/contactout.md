@@ -6,6 +6,11 @@ sources:
   - src/treg/catalog/adapters.yaml
   - src/treg/catalog/examples/contactout.people.email.verify.json
   - tests/test_routing.py
+  - src/treg/catalog/examples/contactout.people.search.json
+  - src/treg/catalog/examples/contactout.companies.search.json
+  - src/treg/catalog/examples/contactout.companies.enrich.json
+  - src/treg/catalog/examples/contactout.people.enrich.json
+  - src/treg/catalog/examples/contactout.people.linkedin.enrich.json
   - src/treg/application/call/contactout.py
   - src/treg/web/logos/contactout.svg
   - tests/test_marketplace_call.py
@@ -40,8 +45,9 @@ on `account`. LinkedIn placement covers the three contact splits, three availabi
 LinkedIn profile enrichment and email-to-LinkedIn lookup. Their existing `contactout.people.*`
 IDs remain stable for saved CLI/API calls; platform and capability metadata control browsing.
 Capability labels distinguish work/personal email lookup from availability checks. Global catalog
-search remains cross-platform. Email verification also has an adapter for the existing
-`treg.people.email.verify` routed tool; the other ContactOut tools remain direct-only.
+search remains cross-platform. Email verification, people/company search, people/company enrichment,
+and LinkedIn profile lookup participate in their existing routed contracts. Other ContactOut tools
+remain direct-only.
 
 The catalog covers count, personal/work email and phone availability, single email verification,
 people and company search, company domain enrichment, email-to-LinkedIn, decision makers,
@@ -212,7 +218,8 @@ do not change the global mode merely to test this provider in an existing deploy
 `status`, and only `valid` maps to `valid: true`. `invalid`, `accept_all`, `disposable`, and `unknown`
 retain their original status words with `valid: false` (not confirmed deliverable, not a claim
 that every such address is invalid). Unsuccessful envelopes and absent/empty verdicts are misses
-and allow the existing waterfall to continue. No routing runtime or expression helpers changed.
+and allow the existing waterfall to continue. The verifier itself needs no new runtime or
+expression helpers.
 
 The direct rate remains free. Existing ranking selects eligible own keys first, then platform
 candidates by expected cost; ContactOut is a free platform candidate when configured. Other
@@ -223,3 +230,35 @@ returned HTTP 200 with `status_code: 200` and `data.status: accept_all`. The com
 recorded in `examples/contactout.people.email.verify.json`; no credential is included. Shared
 routing tests cover all five documented verdicts, query preservation, zero cost, provenance,
 and fallback on missing verdicts or embedded errors.
+
+## Shared discovery and profile routing
+
+Five additional adapters join the existing contracts without changing capability labels:
+
+| Routed tool | ContactOut child | Selected behavior |
+|---|---|---|
+| `treg.people.search` | `contactout.people.search` | `reveal_info=false`; domain/title/name/keyword identities; page size and location filters |
+| `treg.companies.search` | `contactout.companies.search` | Domain/name/industry/technology identities; vendor page size retained |
+| `treg.companies.enrich` | `contactout.companies.enrich` | One domain, sent as a one-element `domains` array |
+| `treg.people.enrich` | `contactout.people.enrich` | LinkedIn URL or email; `include=[]` prevents contact reveal |
+| `treg.linkedin.user.profile` | `contactout.people.linkedin.enrich` | LinkedIn URL or handle; `profile_only=true` |
+
+These mappings do not route decision-maker search, personal-email splits, or combined-reveal
+variants. The direct provider tools retain those capabilities. Company search does not document
+a page-size control: the adapter does not forward the contract's `limit` as an invented parameter.
+Its returned companies are still metered at $0.02 each. People search and domain enrichment use
+$0.02 per returned result; person enrichment uses $0.02 when found with no contact charge;
+LinkedIn profile-only lookup has no charge under the agreed contact-only pricing.
+
+Object-keyed response rows use the reusable `values` and `get` expression helpers in
+`routing/paths.py`. `values` reads dictionary values or preserves a list; `get` applies the existing
+dotted/indexed path lookup to an expression result. Neither helper contains provider logic. Raw
+responses remain unchanged. Empty rows, missing required identity fields, and embedded errors
+are misses under the existing routing waterfall.
+
+Live captures on 2026-09-09 used the private funded key: people search returned one profile,
+company search two companies, domain enrichment one company, and person/LinkedIn enrichment
+one profile each. The first sample LinkedIn URL missed, so the two successful profile captures
+used a profile from that search. All captured contact arrays were empty with the above selectors.
+Fixtures retain the responses; no credentials are included. Other accepted input variants have
+synthetic mapping coverage rather than separate live verification.

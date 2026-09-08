@@ -1434,6 +1434,9 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   `/ N`, `==`/`!=` against literals, and named transforms (`split_first`, `split_last`, `join`,
   `has_type`, `len`, `list`, `obj`, `fmt`, `csv`, `lower`/`upper`, `at_least`, `linkedin_handle`/
   `linkedin_url`, `email_domain`, `host`, `dfs_location`, `seranking_source`, `tca_filter`).
+  `values` reads rows from object-keyed or list responses; `get` applies dotted/indexed lookup
+  to another expression result (for example, the first company in a domain-keyed response).
+  These are generic helpers, not provider-specific rewrites.
   `in_expr` builds provider params from expressions (URL-array bodies, DSL objects); `test_identity`
   states the fixture's identity when `in` builds a value rather than copying one; `filters` carry
   defaults and are always sent.

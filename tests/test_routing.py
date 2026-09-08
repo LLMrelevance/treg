@@ -1188,6 +1188,11 @@ async def test_strict_filters_refuses_a_looser_answer_instead_of_billing_it(clie
     monkeypatch.setenv("TREG_PLATFORM_KEY_CRUSTDATA", "PLATFORM-CRUSTDATA-KEY")
     monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "hunter,tomba,leadmagic,leadsforge,findymail,aviato,fiber-ai,crustdata")
     get_settings.cache_clear()
+    # This regression compares Crustdata with Aviato, independently of other catalog additions.
+    cat = catalog_store.load()
+    for eid in cat.by_id["treg.people.search"]["routed_children"]:
+        if not eid.startswith(("crustdata.", "aviato.")):
+            monkeypatch.delitem(cat.adapters, eid)
     seen = []
     monkeypatch.setattr(call_service, "relay", _relay_by_provider({"*": [(200, {"profiles": [{"name": "Someone"}], "total_count": 1})] * 3}, seen))
     before = await _balance(clients)
@@ -1380,3 +1385,86 @@ async def test_own_verifier_key_precedes_free_contactout_platform_candidate(
     assert response.json()['_treg']['served_by'] == 'hunter.people.email.verify'
     assert [row[0] for row in seen] == ['hunter']
     assert before == await _balance(clients)
+
+
+@pytest.mark.parametrize('value,expected', [
+    ({'a.example': {'name': 'A'}, 'b.example': {'name': 'B'}}, [{'name': 'A'}, {'name': 'B'}]),
+    ([{'name': 'A'}], [{'name': 'A'}]), ({}, []), ([], []), (None, None), ('bad', None),
+])
+def test_row_values_and_nested_lookup_expressions(value, expected):
+    assert P.evaluate('values(rows)', {'rows': value}) == expected
+    assert P.evaluate("get(values(rows), '[0].name')", {'rows': value}) == (
+        'A' if expected else None)
+
+
+_CONTACTOUT_DISCOVERY = [
+    ('people.search', 'people.search', {'company_domain': 'example.test', 'limit': 1},
+     'POST', {}, {'domain': ['example.test'], 'page_size': 1, 'reveal_info': False},
+     {'status_code': 200, 'profiles': {'arbitrary-key': {'full_name': 'Sam Example'}}},
+     'people', [{'full_name': 'Sam Example'}], 20_000),
+    ('companies.search', 'companies.search', {'domain': 'example.test'},
+     'POST', {}, {'domain': ['example.test']},
+     {'status_code': 200, 'companies': [{'name': 'Example'}]}, 'companies', [{'name': 'Example'}], 20_000),
+    ('companies.enrich', 'companies.enrich', {'domain': 'example.test'},
+     'POST', {}, {'domains': ['example.test']},
+     {'status_code': 200, 'companies': {'example.test': {'name': 'Example', 'domain': 'example.test'}}},
+     'name', 'Example', 20_000),
+    ('people.enrich', 'people.enrich', {'linkedin_url': 'https://www.linkedin.com/in/synthetic'},
+     'POST', {}, {'linkedin_url': 'https://www.linkedin.com/in/synthetic', 'include': []},
+     {'status_code': 200, 'profile': {'full_name': 'Sam Example'}}, 'full_name', 'Sam Example', 20_000),
+    ('linkedin.user.profile', 'people.linkedin.enrich', {'linkedin_url': 'https://www.linkedin.com/in/synthetic'},
+     'GET', {'profile': 'https://www.linkedin.com/in/synthetic', 'profile_only': 'true'}, None,
+     {'status_code': 200, 'profile': {'full_name': 'Sam Example'}}, 'full_name', 'Sam Example', 0),
+]
+
+
+@pytest.mark.parametrize('cap,child,identity,method,query,body,payload,field,expected,charge', _CONTACTOUT_DISCOVERY)
+async def test_contactout_discovery_routes_preserve_selectors_and_settle(
+    clients, contactout_platform, monkeypatch,
+    cap, child, identity, method, query, body, payload, field, expected, charge,
+):
+    cat = catalog_store.load()
+    eid = 'contactout.' + child
+    assert cat.adapters[eid].verified and not cat.adapters[eid].verify_note
+    assert eid in cat.by_id['treg.' + cap]['routed_children']
+    seen = []
+    monkeypatch.setattr(call_service, 'relay', _relay_by_provider({'contactout': [(200, payload)]}, seen))
+    before = await _balance(clients)
+    response = await clients.post('/call/treg.' + cap, json=identity)
+    assert response.status_code == 200, response.text
+    doc = response.json()
+    assert doc['raw'] == payload and doc['output'][field] == expected
+    assert doc['_treg']['served_by'] == eid and doc['_treg']['outcome'] == 'hit'
+    assert seen == [('contactout', method, query, body)]
+    assert int(response.headers['X-Treg-Cost-Micro']) == charge
+    assert before - await _balance(clients) == charge
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+@pytest.mark.parametrize('cap,child,identity,method,query,body,payload,field,expected,charge', _CONTACTOUT_DISCOVERY)
+@pytest.mark.parametrize('failed', [False, True])
+async def test_contactout_discovery_empty_or_error_response_is_not_a_hit(
+    clients, contactout_platform, monkeypatch,
+    cap, child, identity, method, query, body, payload, field, expected, charge, failed,
+):
+    payload = {'status_code': 403, **{k: v for k, v in payload.items() if k != 'status_code'}} if failed else {'status_code': 200}
+    seen = []
+    monkeypatch.setattr(call_service, 'relay', _relay_by_provider({'contactout': [(200, payload)]}, seen))
+    before = await _balance(clients)
+    response = await clients.post('/call/treg.' + cap, json=identity)
+    assert response.status_code == 200, response.text
+    assert response.json()['_treg']['outcome'] == 'miss'
+    assert before == await _balance(clients)
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+def test_contactout_profile_and_search_input_variants_do_not_reveal_contacts():
+    ads = catalog_store.load().adapters
+    assert ads['contactout.people.enrich'].to_upstream({'email': 'person@example.test'}, ('email',)) == (
+        {}, {'email': 'person@example.test', 'include': []})
+    assert ads['contactout.people.linkedin.enrich'].to_upstream({'linkedin_handle': 'synthetic'}) == (
+        {'profile': 'https://www.linkedin.com/in/synthetic', 'profile_only': 'true'}, {})
+    _, body = ads['contactout.people.search'].to_upstream({'title': 'Engineer', 'limit': 2})
+    assert body == {'job_title': ['Engineer'], 'page_size': 2, 'reveal_info': False}
