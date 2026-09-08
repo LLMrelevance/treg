@@ -1,7 +1,7 @@
 # ContactOut v1. Starter rates are the account owner's commercial terms, not public plan estimates.
 # Deferred: sync/async LinkedIn batches, batch email verification, hashed email and campaigns.
 # Work/personal splits use real documented parameters; no invented upstream endpoints.
-# A neutral lettermark is used until an official logo asset is supplied.
+# Logo supplied by the account owner.
 provider: contactout
 source:
   docs: https://api.contactout.com/

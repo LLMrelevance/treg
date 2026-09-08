@@ -1,6 +1,6 @@
 ---
 title: ContactOut — LinkedIn enrichment, Starter billing and independent credit pools
-status: implemented; live connect and core surface verified, capacity policy confirmation pending
+status: implemented; live connect and core surface verified, informational capacity monitoring
 sources:
   - src/treg/catalog/contactout.yaml
   - src/treg/application/call/contactout.py
@@ -48,7 +48,7 @@ Search `data_types` filters availability; it is NOT a reveal selector. Search/de
 `reveal_info=true` can reveal both email types and phones. The work-only recipe is search without
 reveal followed by `people.contact.work`. LinkedIn profile enrichment documents `profile_only`,
 not `email_type`; profile-from-email only documents `include=work_email`. Those tools do not promise
-work-only contact responses. The logo is a neutral lettermark placeholder.
+work-only contact responses. The ContactOut logo was supplied by the account owner.
 
 Deferred: synchronous/asynchronous LinkedIn batches (v1/v2), batch email verification. Hashed-email
 and campaign endpoints are also outside this requested enrichment surface.
@@ -96,9 +96,11 @@ The existing sweep cadence remains unchanged; no new 15-minute polling schedule 
 The public docs distinguish two meanings: prepaid `quota` is already remaining credits; postpaid
 `remaining` is quota minus count. Never subtract count from a prepaid quota. The three pools are
 not interchangeable and cannot honestly become one provider-wide remaining balance. The account
-owner has asked ContactOut whether exhaustion stops requests or permits overages, whether pools
-are isolated, and how quickly stats update / whether 15-minute free polling is supported. Until
-answered, funding mode stays unknown and the observations cannot block calls.
+owner confirmed the pools are independent. ContactOut's designated account manager monitors usage
+and arranges top-ups at agreed volume pricing; ContactOut also sends low-credit email notifications.
+Treg collects stats for visibility, without automatic purchases or pool-based blocking. Stats freshness
+and support for 15-minute polling remain pending; the existing sweep cadence is unchanged.
+The technical behavior at zero credits is not assumed from the managed top-up arrangement.
 
 ## Live evidence — 2026-09-08
 
@@ -117,7 +119,37 @@ Against `https://api.contactout.com/`, using the private root-env platform crede
   unchanged; search count/quota 0/4986. The 14-credit decline matches the returned search/company
   records and confirms prepaid quota semantics. It does not prove a general update-latency guarantee.
 
-No real contact responses were saved. Combined contact-hit billing is covered by synthetic tests;
-positive contact reveals and reveal-search upstream charges were not live-verified. The catalog
-therefore does not label their prices as observed. The opt-in `test_contactout_live` checks only
-free connection probes, never runs in ordinary CI, and does not print credentials.
+## Positive reveal verification — 2026-09-08
+
+A bounded manual run used the funded root-env credential through treg's full platform call path,
+an isolated pytest database/team, and a profile discovered through ContactOut company search.
+Only field names, usage counters and balance deltas were logged; no contact values or credentials
+were added to the repository. These were observed ledger deductions, not displayed estimates:
+
+| Successful call | Treg deduction (USD) |
+|---|---:|
+| People search, one profile, all contact types revealed | 0.67 |
+| LinkedIn work email plus phone | 0.40 |
+| LinkedIn personal email | 0.25 |
+| LinkedIn phone only | 0.25 |
+| LinkedIn work email only | 0.15 |
+| Full LinkedIn profile/contact enrichment | 0.65 |
+| Person enrichment, work email | 0.17 |
+| Person enrichment, personal email | 0.27 |
+| Profile from email, phone returned and input email echoed | 0.25 |
+| Email-to-LinkedIn | 0.06 |
+
+The deductions match the agreed Starter rules for the observed fields. Email enrichment did not
+bill the echoed input email again. Non-reveal one-profile searches deducted 0.02.
+Contact, search and person-enrichment pool deltas were observed where stats succeeded: one email
+credit for an email-bearing reveal, one phone credit for phone reveal, and one search credit for
+search/person enrichment. The shared email pool does not separately expose work/personal credit
+usage; these observations do not independently establish separate vendor dollar charges for both
+types. Treg's commercial rates remain the account owner's supplied rates.
+
+One stats request returned non-JSON HTML and interrupted the first multi-call verification pass;
+a later pass succeeded. This does not establish a polling-frequency or freshness guarantee.
+Decision-maker reveal and every optional-selector combination were not positively live-tested;
+synthetic tests continue to cover their billing. Catalog prices remain commercial/documented,
+not universally marked observed. The permanent opt-in `test_contactout_live` remains free-only;
+no paid calls run in ordinary CI.

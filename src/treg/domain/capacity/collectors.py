@@ -109,9 +109,9 @@ async def _contactout(c, key):
         pools.append(f"{label}: used={count}, quota={quota}" +
                      (f", remaining={remaining}" if remaining is not None else ""))
     # Three non-interchangeable pools cannot become one provider-wide exhaustion number.
-    # Keep raw counters visible until account overage/pool isolation semantics are confirmed.
+    # Pools are independent; the account manager monitors usage and arranges top-ups.
     return {"value": None, "unit": "credit pools", "informational": True,
-            "note": "; ".join(pools) + "; informational: overages and pool isolation unconfirmed"}
+            "note": "; ".join(pools) + "; informational: independent pools; account-manager-managed top-ups"}
 
 
 async def _millionverifier(c, key):
