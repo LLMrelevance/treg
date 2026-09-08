@@ -542,6 +542,15 @@ jobs on the verify cron service, in order - `render jobs create <cron-id> --star
 `enabled` count of the second. Verify only
 stamps; sync is what opens routes.
 
+Influencers Club's verified routes include $0.03 discovery calls and enrichment up to $0.66,
+so the default $0.02 verification cap cannot maintain them. After deploying the code and syncing
+the seed, run `treg-worker overflow verify --only influencersclub --max-usd 0.66`, followed by
+`treg-worker overflow sync`. Include that scoped verification in the weekly cron routine before
+its final sync; do not raise the price cap for every provider. The `--only` filter accepts
+comma-separated provider IDs. These calls spend the aggregator fee plus the direct comparison
+cost. Email enrichment has no test request and stays unverified; ten other mapped routes were
+compared successfully on 2026-09-08. A verification run alone does not enable routes.
+
 Aggregator keys
 (`TREG_OVERFLOW_KEY_ORTHOGONAL` / `_MONID`) are dashboard-managed on the web service and flow the same
 way. `TREG_OVERFLOW_MODE` (`off` default | `shadow` | `on`) and `TREG_OVERFLOW_DAILY_BUDGET_USD` (20)

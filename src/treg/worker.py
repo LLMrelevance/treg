@@ -112,7 +112,9 @@ async def _overflow_verify(args) -> int:
     by_id = {e["id"]: e for e in cat.endpoints}
     async with session_maker() as db:
         rows = (await db.execute(select(OverflowRoute))).scalars().all()
-    todo = [r for r in rows if args.all or r.enabled or r.last_verified_at]
+    only = {p.strip() for p in (getattr(args, "only", None) or "").split(",") if p.strip()}
+    todo = [r for r in rows if (args.all or r.enabled or r.last_verified_at)
+            and (not only or r.provider in only)]
     keys = {"orthogonal": s.overflow_key_orthogonal, "monid": s.overflow_key_monid}
     tally = {"passed": 0, "failed": 0, "aggregator": 0, "inconclusive": 0}
     skipped, key_failures = 0, []
@@ -217,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     sync.set_defaults(fn=_overflow_sync)
     ver = ovsub.add_parser("verify", help="re-verify routes with a cheap call (spends money; needs keys)")
     ver.add_argument("--all", action="store_true", help="every row, not only enabled/previously verified")
+    ver.add_argument("--only", help="comma-separated providers (default: all)")
     ver.add_argument("--max-usd", type=float, default=0.02, help="skip routes priced above this")
     ver.set_defaults(fn=_overflow_verify)
     tasks = sub.add_parser("asynctasks", help="deferred asynchronous task settlement")

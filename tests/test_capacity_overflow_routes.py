@@ -96,7 +96,9 @@ def test_match_catalogs_by_exact_host_method_path_with_prefix_folding():
 
 async def test_sync_reproduces_the_verified_set_and_never_enables_a_bad_ratio(monkeypatch):
     await reset_db()
-    seed = R.load_seed()
+    # Preserve the August baseline; September's Influencers Club verification is tested separately.
+    seed = [{**x, "verified_at": None} if x["provider"] == "influencersclub" else x
+            for x in R.load_seed()]
     verified = {(x["endpoint_id"], x["aggregator"]) for x in seed if x["verified_at"]}
     assert len(verified) == 145, "the 2026-08-26 verified set (131 ROUTE + 11 tomba + 2 phone + hunter domain-search)"
     # Freeze "now" at the mapping date so the seed's stamps are within the 7-day window.
@@ -248,7 +250,7 @@ def test_an_unrecorded_vendor_phrase_is_a_tripwire_never_a_mark():
 # gap, not a claim the vendor never runs dry: their 4xx trips `unrecorded` instead.
 _UNRECORDED_SIGNATURE = {
     "apify", "aviato", "branddev", "brightdata", "coingecko", "coresignal", "crustdata", "dataforseo",
-    "diffbot", "exa", "fiber-ai", "finnhub", "icypeas", "influencersclub", "justoneapi", "marketstack",
+    "diffbot", "exa", "fiber-ai", "finnhub", "icypeas", "justoneapi", "marketstack",
     "millionverifier",  # funded-account exhaustion not observed; trial still has credits
     "minimax", "oceanio", "openrouter", "pdl", "replicate", "scrapecreators", "seranking",
     "serpapi", "serpstat", "spyfu", "tiingo", "tikhub", "tomba", "twelvedata",

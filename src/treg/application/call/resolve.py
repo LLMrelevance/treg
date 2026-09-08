@@ -1351,7 +1351,7 @@ async def _resolve_marketplace_call(
         if lock is not None and capacity_marks.probe_due(lock.key):
             probe_lock_id = lock.lock_id
         elif (get_settings().overflow_mode == "on" and not caller.org.platform_overflow_disabled
-                and overflow_routes_view.for_endpoint(ep["id"])):
+                and overflow_routes_view.for_endpoint(ep["id"], estimate_micro=info_est)):
             skip_direct = True
         else:
             raise _provider_capacity_unavailable(
