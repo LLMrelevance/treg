@@ -49,8 +49,9 @@ permanently to `/gpt6`, preserving query parameters for campaign attribution. It
 “Give GPT6 any data & tools” and a native-styled, self-playing Codex workflow:
 prompt, provider comparison, scan and selection, email/phone enrichment, then the cost receipt.
 The preview pauses off screen, respects reduced motion, and opens the `warm-paper` launch film
-on click. Tool cards introduce the catalog; a subscription comparison keeps the illustrative
-usage receipt alongside it. The “Not just lead enrichment” use cases follow pricing. On small
+on click. After the enrichment gallery, a subscription comparison pairs pricing with the
+illustrative usage receipt. The “One plugin” catalog cards follow pricing, then the
+“Not just lead enrichment” use cases. On small
 screens, pricing stacks vertically and the demo switches between chat and contact results.
 
 The “One skill. Every enrichment job.” section follows the benchmark, reusing the nine-card
