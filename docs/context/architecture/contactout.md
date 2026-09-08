@@ -26,6 +26,14 @@ controls serving. No credential is committed or copied into a platform Secret ro
 
 ## Surface and selectors
 
+Each tool has one catalog home: eight LinkedIn-specific lookup/contact tools on `linkedin`,
+ten general people tools on `people`, two company tools on `companies`, and own-account stats
+on `account`. LinkedIn placement covers the three contact splits, three availability checkers,
+LinkedIn profile enrichment and email-to-LinkedIn lookup. Their existing `contactout.people.*`
+IDs remain stable for saved CLI/API calls; platform and capability metadata control browsing.
+Capability labels distinguish work/personal email lookup from availability checks. Global catalog
+search remains cross-platform. ContactOut has no routing adapters to migrate with these labels.
+
 The catalog covers count, personal/work email and phone availability, single email verification,
 people and company search, company domain enrichment, email-to-LinkedIn, decision makers,
 LinkedIn contact/profile enrichment, person enrichment and profile-from-email, plus own-account stats.

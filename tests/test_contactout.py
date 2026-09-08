@@ -453,3 +453,16 @@ def test_contact_reveals_require_recognizable_hit_evidence(body):
     mk = SimpleNamespace(provider="contactout", endpoint_id="contactout.people.contact.work",
                          cost_type="per_success", unit_micro=0, billed_oauth=False, request_data={})
     assert _observed_cost_micro(mk, body) == 0
+
+
+def test_catalog_distribution_preserves_ids_and_global_discovery():
+    from collections import Counter
+    cat = store.load()
+    entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
+    assert Counter(e["platform"] for e in entries) == {
+        "linkedin": 8, "people": 10, "companies": 2, "account": 1}
+    for e in entries:
+        assert e["capability"].split(".")[0] == e["platform"]
+    assert cat.by_id["contactout.people.contact.work"]["platform"] == "linkedin"
+    results, _ = store.search("contactout linkedin work email", cat, limit=100)
+    assert any(e["id"] == "contactout.people.contact.work" for e, _ in results)

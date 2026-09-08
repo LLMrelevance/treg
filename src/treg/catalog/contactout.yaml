@@ -109,13 +109,13 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.personal_email.available
   domain: contacts
-  capability: people.email.availability
-  platform: people
+  capability: linkedin.email.personal.availability
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/linkedin/personal_email_status
   name: Check personal email availability
-  summary: Check personal email availability
+  summary: Check personal email availability for a LinkedIn profile
   input:
     queryParams:
       profile: &id001
@@ -138,13 +138,13 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.work_email.available
   domain: contacts
-  capability: people.email.availability
-  platform: people
+  capability: linkedin.email.work.availability
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/linkedin/work_email_status
   name: Check work email availability
-  summary: Check work email availability
+  summary: Check work email availability for a LinkedIn profile
   input:
     queryParams:
       profile: *id001
@@ -162,13 +162,13 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.phone.available
   domain: contacts
-  capability: people.phone.availability
-  platform: people
+  capability: linkedin.phone.availability
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/linkedin/phone_status
   name: Check phone number availability
-  summary: Check phone number availability
+  summary: Check phone availability for a LinkedIn profile
   input:
     queryParams:
       profile: *id001
@@ -614,8 +614,8 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.linkedin.from-email
   domain: contacts
-  capability: people.enrich
-  platform: people
+  capability: linkedin.profile.from_email
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/person
@@ -649,8 +649,8 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.contact.work
   domain: contacts
-  capability: people.email.find
-  platform: people
+  capability: linkedin.email.work.find
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/linkedin
@@ -696,8 +696,8 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.contact.personal
   domain: contacts
-  capability: people.email.find
-  platform: people
+  capability: linkedin.email.personal.find
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/linkedin
@@ -743,8 +743,8 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.contact.phone
   domain: contacts
-  capability: people.phone.find
-  platform: people
+  capability: linkedin.phone.find
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/people/linkedin
@@ -792,8 +792,8 @@ endpoints:
   docs_url: https://api.contactout.com/
 - id: contactout.people.linkedin.enrich
   domain: contacts
-  capability: people.enrich
-  platform: people
+  capability: linkedin.user.profile
+  platform: linkedin
   scope: any_account
   method: GET
   path: /v1/linkedin/enrich
@@ -1085,6 +1085,13 @@ endpoints:
   kind: account
 proposed_capabilities:
   people.count: Count profiles matching filters without returning profiles
-  people.email.availability: Check whether email contact data exists without revealing
-    it
-  people.phone.availability: Check whether a phone exists without revealing it
+  linkedin.email.personal.availability: Check personal email availability for a LinkedIn
+    profile
+  linkedin.email.work.availability: Check work email availability for a LinkedIn profile
+  linkedin.phone.availability: Check phone availability for a LinkedIn profile
+  linkedin.profile.from_email: Find LinkedIn profile URL from an email address
+  linkedin.email.work.find: Find work email from a LinkedIn profile, optionally with
+    phone
+  linkedin.email.personal.find: Find personal email from a LinkedIn profile, optionally
+    with phone
+  linkedin.phone.find: Find phone number from a LinkedIn profile
