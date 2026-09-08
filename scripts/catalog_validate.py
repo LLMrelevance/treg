@@ -482,6 +482,18 @@ def check_cost(cost: dict, where: str, errors: list[str], warnings: list[str],
     per = cost.get("per")
     if per is not None and (not isinstance(per, int) or isinstance(per, bool) or per < 1):
         fail(errors, where, f"cost.per '{per}' must be a positive integer (the quantity `value` covers)")
+    if "contactout" in cost:
+        rule = cost["contactout"]
+        jobs = {"contact", "person", "email", "linkedin", "search", "decision",
+                "company_search", "domains", "reverse"}
+        rates = rule.get("rates_micro") if isinstance(rule, dict) else None
+        if not isinstance(rule, dict) or rule.get("job") not in jobs:
+            fail(errors, where, "cost.contactout needs a supported job")
+        if not isinstance(rates, dict) or set(rates) != {"work_email", "personal_email", "phone", "search"} \
+                or any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in rates.values()):
+            fail(errors, where, "cost.contactout.rates_micro needs four positive integer micro-USD rates")
+        if cost.get("currency") != "USD":
+            fail(errors, where, "cost.contactout requires USD")
     has_table = "table" in cost
     if has_table:
         if "value" in cost:

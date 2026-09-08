@@ -309,3 +309,19 @@ Forecasts, recharge verification and every alert (`quota_exhausted`, `rate_press
 …) — step C, gated on the `money-funding-transactions` debt. Until the rollout above flips the mode,
 `TREG_OVERFLOW_MODE` is `off` and treg still relays a vendor's 402 unchanged (or answers the typed 503
 when the account is marked exhausted).
+
+## ContactOut independent pools
+
+`collectors._contactout` exposes the three raw credit pools through an informational observation,
+not a scalar balance. `snapshot_from` and `latest_state` preserve it without marking the provider
+exhausted. Prepaid quotas are already remaining credits. The pools are independent; the designated
+account manager monitors usage and arranges top-ups. Stats freshness remains unconfirmed; treg
+keeps the existing sweep cadence and does not assume behavior at zero credits. See
+[ContactOut](../architecture/contactout.md).
+
+ContactOut overflow now has verified routes on Orthogonal and Monid, using the same price gates,
+expiry, opt-out and budget controls. Its documented out-of-credit 403 is endpoint-scoped quota,
+not a provider-wide balance lock. See the ContactOut fragment for enabled coverage and the paid
+`scripts/contactout_overflow_verify.py --budget-usd 10 --apply` renewal command; nonexistent static
+catalog examples cannot renew successful contact checks. Production policy/mode changes and the
+weekly renewal schedule remain rollout actions, not changes applied by this PR.

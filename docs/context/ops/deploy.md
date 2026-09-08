@@ -608,3 +608,7 @@ the ALTER, both instances starved, and the shared Postgres stayed wedged until a
 If a deploy fails with a lock timeout in the logs, that is the mechanism working. If the database
 itself stops accepting connections, restart the POSTGRES resource, not the web service — an app
 restart cannot release server-side slots (learned the hard way).
+
+The ContactOut server platform-key slot (`TREG_PLATFORM_KEY_CONTACTOUT`) is forwarded to the
+worker by `render.yaml`. The provider allow-list still controls serving; see
+[ContactOut](../architecture/contactout.md) for informational capacity checks.
