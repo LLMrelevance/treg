@@ -7,6 +7,10 @@ conftest (`/whoami` echoes; `/units` and `/units-bad` model Semrush's plain-text
 
 from __future__ import annotations
 
+import httpx
+from treg.api import app
+from treg.config import Settings
+from treg.domain.catalog import store as catalog_store
 import dataclasses
 
 from httpx import AsyncClient
@@ -270,3 +274,52 @@ def test_millionverifier_platform_key_configuration(monkeypatch):
     assert P.platform_bindings(P.get("millionverifier")) == [
         {"platform_setting": "platform_key_millionverifier", "injector": "env",
          "location": "query", "name": "api", "format": "{secret}"}]
+
+
+# ---- ContactOut ----
+
+async def test_contactout_connect_rejects_garbage_and_accepts_zero_pools(clients, monkeypatch):
+    def reply(request):
+        assert request.url.path == "/v1/stats"
+        assert request.headers["token"] in ("garbage", "valid-test")
+        if request.headers["token"] == "garbage":
+            return httpx.Response(
+                401, json={"status_code": 401, "message": "Bad credentials"}
+            )
+        return httpx.Response(
+            200,
+            json={
+                "status_code": 200,
+                "usage": {"quota": 0, "phone_quota": 0, "search_quota": 0},
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as upstream:
+        monkeypatch.setattr(app.state, "http", upstream)
+        bad = await clients.post(
+            "/connections/token", json={"provider": "contactout", "token": "garbage"}
+        )
+        assert bad.status_code == 422
+        assert not (await clients.get("/tools")).json()
+        good = await clients.post(
+            "/connections/token", json={"provider": "contactout", "token": "valid-test"}
+        )
+        assert good.status_code == 200, good.text
+        binding = (await clients.get("/tools")).json()[0]["bindings"][0]
+        assert binding["name"] == "token" and binding["format"] == "{secret}"
+
+
+def test_contactout_platform_binding(contactout_platform):
+    assert Settings(_env_file=None).platform_key_for("contactout") == "PLATFORM-TEST"
+    assert P.platform_bindings(P.get("contactout")) == [
+        {
+            "platform_setting": "platform_key_contactout",
+            "injector": "env",
+            "location": "header",
+            "name": "token",
+            "format": "{secret}",
+        }
+    ]
+    assert not catalog_store.load().platform_eligible(
+        catalog_store.load().by_id["contactout.account.usage"]
+    )

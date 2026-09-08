@@ -5,9 +5,11 @@ sources:
   - src/treg/catalog/contactout.yaml
   - src/treg/application/call/contactout.py
   - src/treg/web/logos/contactout.svg
-  - tests/test_contactout.py
-  - tests/test_contactout_live.py
-  - tests/test_contactout_overflow.py
+  - tests/test_marketplace_call.py
+  - tests/test_key_providers.py
+  - tests/test_capacity_collectors.py
+  - tests/test_catalog_validate.py
+  - tests/test_capacity_overflow.py
   - scripts/contactout_overflow_verify.py
   - tests/fixtures/aggregators/verification/contactout.json
 related:
@@ -155,8 +157,8 @@ One stats request returned non-JSON HTML and interrupted the first multi-call ve
 a later pass succeeded. This does not establish a polling-frequency or freshness guarantee.
 Decision-maker reveal and every optional-selector combination were not positively live-tested;
 synthetic tests continue to cover their billing. Catalog prices remain commercial/documented,
-not universally marked observed. The permanent opt-in `test_contactout_live` remains free-only;
-no paid calls run in ordinary CI.
+not universally marked observed. Live connection verification was performed manually; the
+shared test suite uses synthetic responses and does not run live ContactOut calls.
 
 ## Verified overflow routes
 

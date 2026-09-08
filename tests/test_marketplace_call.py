@@ -25,6 +25,7 @@ from httpx import AsyncClient
 from treg import api as A, audit, oauth_providers
 from treg.domain import money as ledger
 from treg.domain.catalog import store as catalog_store
+from treg.application.call import contactout
 from treg.application.call import resolve as call_resolution
 from treg.application.call import settle as call_settle
 from treg.application.call import service as call_service
@@ -1908,3 +1909,312 @@ def test_tomba_unknown_page_size_does_not_guess_from_email_count(page_size):
     body = json.dumps({'data': {'emails': [{'email': 'person@company.example'}]},
                        'meta': {'pageSize': page_size}}).encode()
     assert call_settle._observed_cost_micro(mk, body) is None
+
+
+# ---- ContactOut ----
+
+def _contactout_cost(eid):
+    return catalog_store.load().cost_view(
+        catalog_store.load().by_id["contactout." + eid]["cost"], "contactout"
+    )
+
+
+@pytest.mark.parametrize(
+    "work,personal,phone,expected",
+    [
+        (False, False, False, 0),
+        (True, False, False, 150000),
+        (False, True, False, 250000),
+        (True, False, True, 400000),
+        (False, True, True, 500000),
+        (True, True, True, 650000),
+    ],
+)
+def test_contactout_contact_hits_are_per_type_per_profile(work, personal, phone, expected):
+    c = _contactout_cost("people.linkedin.enrich")
+    doc = {
+        "status_code": 200,
+        "profile": {
+            "work_email": ["a@example.test", "b@example.test"] if work else [],
+            "personal_email": ["c@example.test"] if personal else [],
+            "phone": ["123", "456"] if phone else [],
+            "email": ["duplicate-combined@example.test"],
+            "contact_availability": {"phone": True},
+        },
+    }
+    assert contactout.observed(c, {"queryParams": {}}, doc) == expected
+    assert contactout.estimate(c, {}) == 650000
+
+
+def test_contactout_search_counts_returned_profiles_and_contacts_not_availability_or_total():
+    c = _contactout_cost("people.search.reveal")
+    doc = {
+        "status_code": 200,
+        "metadata": {"total_results": 10000},
+        "profiles": {
+            "one": {
+                "contact_info": {
+                    "work_emails": ["a@example.test", "b@example.test"],
+                    "phones": ["1"],
+                }
+            },
+            "two": {"contact_availability": {"personal_email": True}},
+            "three": {"contact_info": {"personal_emails": ["c@example.test"]}},
+        },
+    }
+    assert contactout.observed(c, {"body": {"reveal_info": True}}, doc) == 710000
+    assert contactout.observed(c, {"body": {"reveal_info": False}}, doc) == 60000
+    assert contactout.estimate(c, {"page_size": 3, "reveal_info": True}) == 2010000
+    assert contactout.estimate(c, {"reveal_info": False}) == 500000
+    assert (
+        contactout.observed(c, {"body": {}}, {"status_code": 200, "profiles": []}) == 0
+    )
+
+
+def test_contactout_person_and_email_echo_and_search_surcharge():
+    doc = {
+        "status_code": 200,
+        "profile": {
+            "email": "input@example.test",
+            "workEmail": "work@example.test",
+            "phone": "123",
+        },
+    }
+    c = _contactout_cost("people.enrich")
+    request = {
+        "email": "input@example.test",
+        "include": ["work_email", "personal_email", "phone"],
+    }
+    assert contactout.observed(c, {"body": request}, doc) == 420000
+    assert contactout.observed(c, {"body": {}}, doc) == 20000
+    assert (
+        contactout.observed(
+            _contactout_cost("people.email.enrich"),
+            {"queryParams": {"email": "input@example.test", "include": "work_email"}},
+            doc,
+        )
+        == 400000
+    )
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        [{"name": "A"}, None, {}],
+        {"example.test": {"name": "A"}, "missing.test": None},
+    ],
+)
+def test_contactout_company_counts(rows):
+    expected = 0 if rows == [] else 20000
+    assert (
+        contactout.observed(
+            _contactout_cost("companies.enrich"), {}, {"status_code": 200, "companies": rows}
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "eid,params,amount",
+    [
+        ("people.contact.work", {"email_type": "work"}, 150000),
+        (
+            "people.contact.work",
+            {"email_type": "work", "include_phone": "true"},
+            400000,
+        ),
+        (
+            "people.contact.personal",
+            {"email_type": "personal", "include_phone": "true"},
+            500000,
+        ),
+        ("people.contact.phone", {"email_type": "none", "include_phone": True}, 250000),
+        ("people.enrich", {"include": ["phone"]}, 270000),
+        ("companies.enrich", {"domains": ["a.test", "b.test"]}, 40000),
+        ("people.linkedin.from-email", {}, 60000),
+        ("people.email.verify", {}, 0),
+    ],
+)
+def test_contactout_holds(eid, params, amount):
+    assert contactout.estimate(_contactout_cost(eid), params) == amount
+
+
+async def _contactout_balance(client):
+    org = (await client.get("/orgs")).json()[0]["org_id"]
+    return (await client.get(f"/orgs/{org}/balance")).json()
+
+
+@pytest.mark.parametrize(
+    "own,status,doc,charge",
+    [
+        (
+            False,
+            200,
+            {
+                "status_code": 200,
+                "profile": {"work_email": ["a@example.test"], "phone": ["123"]},
+            },
+            400000,
+        ),
+        (False, 200, {"status_code": 200, "profile": {"work_email": []}}, 0),
+        (False, 200, {"status_code": 403, "message": "No access"}, 0),
+        (False, 403, {"status_code": 403, "message": "Out of credits"}, 0),
+        (False, 429, {"status_code": 429}, 0),
+        (
+            True,
+            200,
+            {
+                "status_code": 200,
+                "profile": {"work_email": ["a@example.test"], "phone": ["123"]},
+            },
+            0,
+        ),
+    ],
+)
+async def test_contactout_platform_settles_once_and_own_key_wins(
+    clients, contactout_platform, monkeypatch, own, status, doc, charge
+):
+    if own:
+        await clients.post("/secrets", json={"name": "contactout", "value": "OWN-TEST"})
+
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        assert "/v1/people/linkedin" in upstream_url
+        binding = tool.bindings[0]
+        assert ("secret_id" in binding) == own
+        assert binding["name"] == "token"
+
+        async def stream():
+            yield json.dumps(doc).encode()
+
+        async def close():
+            pass
+
+        return UpstreamResponse(status, (), stream(), close)
+
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _contactout_balance(clients)
+    response = await clients.get(
+        "/call/contactout.people.contact.work",
+        params={
+            "profile": "https://linkedin.com/in/test",
+            "email_type": "work",
+            "include_phone": "true",
+        },
+    )
+    assert response.status_code == status, response.text
+    assert response.json() == doc
+    after = await _contactout_balance(clients)
+    assert before["balance_micro"] - after["balance_micro"] == charge
+    entries = after["entries"]["items"]
+    closing = [e for e in entries if e["kind"] in ("settle", "release")]
+    assert len(closing) == (0 if own else 1)
+
+
+async def test_contactout_split_must_be_explicit_and_stats_are_private(clients, contactout_platform):
+    response = await clients.get(
+        "/call/contactout.people.contact.work",
+        params={"profile": "https://linkedin.com/in/test"},
+    )
+    assert response.status_code == 400
+    assert "email_type" in response.text
+    response = await clients.get("/call/contactout.account.usage")
+    assert response.status_code in (404, 428)
+
+
+def test_contactout_combined_email_array_is_not_billed_twice():
+    doc = {
+        "status_code": 200,
+        "profile": {
+            "work_email": ["work@example.test"],
+            "personal_email": [],
+            "email": ["work@example.test"],
+        },
+    }
+    c = _contactout_cost("people.enrich")
+    assert (
+        contactout.observed(
+            c, {"body": {"include": ["work_email", "personal_email"]}}, doc
+        )
+        == 170000
+    )
+
+
+async def test_contactout_search_settlement_matches_14_live_results_shape(
+    clients, contactout_platform, monkeypatch
+):
+    doc = {
+        "status_code": 200,
+        "metadata": {"total_results": 5000},
+        "profiles": {"one": {"full_name": "Synthetic"}},
+    }
+
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        async def stream():
+            yield json.dumps(doc).encode()
+
+        async def close():
+            pass
+
+        return UpstreamResponse(200, (), stream(), close)
+
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _contactout_balance(clients)
+    response = await clients.post(
+        "/call/contactout.people.search", json={"page_size": 25, "reveal_info": False}
+    )
+    assert response.status_code == 200, response.text
+    after = await _contactout_balance(clients)
+    assert before["balance_micro"] - after["balance_micro"] == 20000
+
+
+async def test_contactout_free_verify_never_reserves_or_settles_money(
+    clients, contactout_platform, monkeypatch
+):
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        async def stream():
+            yield b'{"status_code":200,"data":{"status":"valid"}}'
+
+        async def close():
+            pass
+
+        return UpstreamResponse(200, (), stream(), close)
+
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _contactout_balance(clients)
+    response = await clients.get(
+        "/call/contactout.people.email.verify", params={"email": "test@example.test"}
+    )
+    assert response.status_code == 200, response.text
+    after = await _contactout_balance(clients)
+    assert before["balance_micro"] == after["balance_micro"]
+    assert all(
+        e["amount_micro"] == 0
+        for e in after["entries"]["items"]
+        if e["kind"] in ("reserve", "settle")
+    )
+
+
+async def test_contactout_transport_failure_releases_hold(clients, contactout_platform, monkeypatch):
+    async def relay(*args, **kwargs):
+        raise httpx.ReadTimeout("synthetic timeout")
+
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _contactout_balance(clients)
+    response = await clients.get(
+        "/call/contactout.people.contact.work",
+        params={"profile": "https://linkedin.com/in/test", "email_type": "work"},
+    )
+    assert response.status_code >= 500
+    after = await _contactout_balance(clients)
+    assert before["balance_micro"] == after["balance_micro"]
+    assert len([e for e in after["entries"]["items"] if e["kind"] == "release"]) == 1
+
+
+@pytest.mark.parametrize("body", [b"", b"not json", b"[]", b"{}", b'{"status_code":200}', b'{"status_code":200,"profile":"unexpected"}'])
+def test_contactout_contact_reveals_require_recognizable_hit_evidence(body):
+    from types import SimpleNamespace
+    from treg.application.call.settle import _observed_cost_micro
+    mk = SimpleNamespace(provider="contactout", endpoint_id="contactout.people.contact.work",
+                         cost_type="per_success", unit_micro=0, billed_oauth=False, request_data={})
+    assert _observed_cost_micro(mk, body) == 0

@@ -493,3 +493,49 @@ def test_async_descriptor_rejects_a_retired_or_broken_poll_target():
     validator.check_async_descriptor(_valid_async(), "demo.yaml:submit", "demo", index,
                                      {"type": "per_success"}, errors)
     assert any("marked 'retired'" in e for e in errors)
+
+
+# ---- ContactOut ----
+
+def _contactout_cost(eid):
+    return catalog_store.load().cost_view(
+        catalog_store.load().by_id["contactout." + eid]["cost"], "contactout"
+    )
+
+
+def test_contactout_catalog_prices_validate_and_surface_is_bounded():
+    from scripts.catalog_validate import check_cost
+
+    cat = catalog_store.load()
+    entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
+    assert len(entries) == 21
+    assert not any("batch" in e["path"] for e in entries)
+    errors = []
+    for e in entries:
+        check_cost(e["cost"], e["id"], errors, [], e["input"])
+    assert errors == []
+    broken = _contactout_cost("people.contact.work") | {
+        "contactout": {"job": "contact", "rates_micro": {"phone": -1}}
+    }
+    check_cost(broken, "test", errors, [])
+    assert errors
+
+
+def test_contactout_free_checkers_are_not_advertised_as_contact_finders():
+    cat = catalog_store.load()
+    for eid in ("people.work_email.available", "people.personal_email.available", "people.phone.available"):
+        assert cat.by_id["contactout." + eid]["capability"].endswith(".availability")
+    assert cat.by_id["contactout.people.count"]["capability"] == "people.count"
+
+
+def test_contactout_catalog_distribution_preserves_ids_and_global_discovery():
+    from collections import Counter
+    cat = catalog_store.load()
+    entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
+    assert Counter(e["platform"] for e in entries) == {
+        "linkedin": 8, "people": 10, "companies": 2, "account": 1}
+    for e in entries:
+        assert e["capability"].split(".")[0] == e["platform"]
+    assert cat.by_id["contactout.people.contact.work"]["platform"] == "linkedin"
+    results, _ = catalog_store.search("contactout linkedin work email", cat, limit=100)
+    assert any(e["id"] == "contactout.people.contact.work" for e, _ in results)
