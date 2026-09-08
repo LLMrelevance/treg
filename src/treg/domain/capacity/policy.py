@@ -73,7 +73,7 @@ def policy_population(configured_keys: set[str] | None = None) -> list[str]:
 
 # Decided 2026-08-26/28: tikhub is out of overflow scope (429s, auto top-up works, Monid re-shapes
 # its responses); scrapecreators is funded, not routed (every aggregator route is ~10× our price).
-_NO_OVERFLOW = frozenset({"tikhub", "scrapecreators", "contactout"})
+_NO_OVERFLOW = frozenset({"tikhub", "scrapecreators"})
 
 
 def default_policy(provider: str, *, has_key: bool) -> CapacityPolicy:

@@ -7,6 +7,9 @@ sources:
   - src/treg/web/logos/contactout.svg
   - tests/test_contactout.py
   - tests/test_contactout_live.py
+  - tests/test_contactout_overflow.py
+  - scripts/contactout_overflow_verify.py
+  - tests/fixtures/aggregators/verification/contactout.json
 related:
   - architecture/catalog.md
   - architecture/auth-secrets.md
@@ -90,7 +93,8 @@ starts charging verifier credits. No public plan estimate replaces these commerc
 It preserves email, phone and search counters in the observation note with `value=None` and
 `informational=True`. `snapshot_from` preserves that as a successful informational observation;
 `latest_state` never derives exhaustion from it and ages it stale after the existing six-hour limit.
-No independent scheduler, automatic purchase, overflow route, or guessed exhaustion signature is added.
+No independent scheduler or automatic purchase is added. Overflow candidates and documented
+exhaustion handling are described below.
 The existing sweep cadence remains unchanged; no new 15-minute polling schedule is installed.
 
 The public docs distinguish two meanings: prepaid `quota` is already remaining credits; postpaid
@@ -153,3 +157,44 @@ Decision-maker reveal and every optional-selector combination were not positivel
 synthetic tests continue to cover their billing. Catalog prices remain commercial/documented,
 not universally marked observed. The permanent opt-in `test_contactout_live` remains free-only;
 no paid calls run in ordinary CI.
+
+## Verified overflow routes
+
+ContactOut permits overflow in the default policy. Existing stored policies are deliberately
+not overwritten by `ensure_policies`; rollout must explicitly enable `overflow_allowed` on the
+ContactOut policy, then run `treg-worker overflow sync`. The global mode and team opt-out remain
+unchanged. BYOK is never eligible. No new request-path adapter or response rewrite was added.
+
+The seed contains 26 candidates, of which 13 pass current verification and existing unit/ratio
+rules: Orthogonal count, three LinkedIn contact splits, full LinkedIn enrichment, and work/personal
+person enrichment; Monid count, three availability checkers, company search and domain enrichment.
+Orthogonal's company/search per-call vs direct per-result mismatch is deliberately not bypassed.
+Monid's work/personal contact wrappers returned extra `*_units` fields and failed shape comparison;
+they remain unverified. Other candidates have no live stamp. No metadata listing is treated as
+proof of response compatibility.
+
+Orthogonal's `/details` was queried for every direct path: the listing response was incomplete.
+Its headline $0.03 contact price is not the full charge. Live email-only calls cost $0.33, while
+phone-only and work+phone cost $0.55. All three contact seeds reserve $0.55 to cover optional phone;
+actual reported aggregator cost settles the child. Full LinkedIn/person enrichment cost $0.55.
+Monid company-domain enrichment cost $0.018/result, company search returned two results for $0.036,
+and free checkers/count cost zero. Direct-vs-relay shape/status/cost evidence, without identities,
+is in `tests/fixtures/aggregators/verification/contactout.json`.
+
+The documented 403 phrase `You're out of credits` is classified as endpoint quota exhaustion;
+`No access to endpoint` is not a capacity signal. The existing Retry-After handling classifies
+rate limits. Endpoint-level locks preserve independent credit pools. Source:
+https://api.contactout.com/#errors (checked 2026-09-08).
+
+### Renewal and rollout
+
+Static catalog test requests intentionally use nonexistent people and cannot renew positive contact
+verification. `scripts/contactout_overflow_verify.py --budget-usd 10 --apply` discovers one profile
+at runtime, compares direct and aggregator shapes through the existing verifier, then syncs stamps.
+It logs only endpoint IDs, statuses, verdicts and costs; no contact values. It makes paid calls;
+the budget includes direct requests and conservative aggregator estimates. Missing keys are skipped,
+failed compatibility routes are withheld from sync, and inconclusive routes retain their old stamp
+and expire normally. Run this weekly in the worker environment in addition to the general verifier.
+No recurring job was installed by this branch. Existing routes expire after seven days without a
+successful verification/sync. Use existing shadow mode and daily budgets before production `on`;
+do not change the global mode merely to test this provider in an existing deployment.

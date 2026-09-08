@@ -318,3 +318,10 @@ exhausted. Prepaid quotas are already remaining credits. The pools are independe
 account manager monitors usage and arranges top-ups. Stats freshness remains unconfirmed; treg
 keeps the existing sweep cadence and does not assume behavior at zero credits. See
 [ContactOut](../architecture/contactout.md).
+
+ContactOut overflow now has verified routes on Orthogonal and Monid, using the same price gates,
+expiry, opt-out and budget controls. Its documented out-of-credit 403 is endpoint-scoped quota,
+not a provider-wide balance lock. See the ContactOut fragment for enabled coverage and the paid
+`scripts/contactout_overflow_verify.py --budget-usd 10 --apply` renewal command; nonexistent static
+catalog examples cannot renew successful contact checks. Production policy/mode changes and the
+weekly renewal schedule remain rollout actions, not changes applied by this PR.
