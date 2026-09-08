@@ -212,6 +212,8 @@ endpoints:
     unit: call
     note: 'Free under current commercial terms: verifier credits are not charged.
       Recheck this rate if ContactOut starts metering verification.'
+  verified: 2026-09-09
+  example_response: examples/contactout.people.email.verify.json
   docs_url: https://api.contactout.com/
 - id: contactout.people.search
   domain: contacts

@@ -252,6 +252,14 @@ adapters:
     miss: "results[0].phones[0].number == null"
 
   # ---- people.email.verify ------------------------------------------------------------------
+  contactout.people.email.verify:
+    accepts: [[email]]
+    in: {email: queryParams.email}
+    out: {valid: "data.status == 'valid'", status: data.status}
+    # Preserve uncertain verdict words; only explicit valid confirms deliverability.
+    # Require both a successful envelope and a nonempty verdict, using existing expressions.
+    # at_least takes the maximum of the two predicates (0/1): either failure is a miss.
+    miss: "at_least(status_code != 200, coalesce(data.status) == null)"
   millionverifier.people.email.verify:
     accepts: [[email]]
     in:  {email: queryParams.email}

@@ -3,6 +3,9 @@ title: ContactOut — LinkedIn enrichment, Starter billing and independent credi
 status: implemented; live connect and core surface verified, informational capacity monitoring
 sources:
   - src/treg/catalog/contactout.yaml
+  - src/treg/catalog/adapters.yaml
+  - src/treg/catalog/examples/contactout.people.email.verify.json
+  - tests/test_routing.py
   - src/treg/application/call/contactout.py
   - src/treg/web/logos/contactout.svg
   - tests/test_marketplace_call.py
@@ -37,7 +40,8 @@ on `account`. LinkedIn placement covers the three contact splits, three availabi
 LinkedIn profile enrichment and email-to-LinkedIn lookup. Their existing `contactout.people.*`
 IDs remain stable for saved CLI/API calls; platform and capability metadata control browsing.
 Capability labels distinguish work/personal email lookup from availability checks. Global catalog
-search remains cross-platform. ContactOut has no routing adapters to migrate with these labels.
+search remains cross-platform. Email verification also has an adapter for the existing
+`treg.people.email.verify` routed tool; the other ContactOut tools remain direct-only.
 
 The catalog covers count, personal/work email and phone availability, single email verification,
 people and company search, company domain enrichment, email-to-LinkedIn, decision makers,
@@ -200,3 +204,22 @@ and expire normally. Run this weekly in the worker environment in addition to th
 No recurring job was installed by this branch. Existing routes expire after seven days without a
 successful verification/sync. Use existing shadow mode and daily budgets before production `on`;
 do not change the global mode merely to test this provider in an existing deployment.
+
+## Shared email verification
+
+`contactout.people.email.verify` participates in `treg.people.email.verify` through the existing
+`adapters.yaml` mechanism. Input `email` maps to `queryParams.email`; `data.status` is retained as
+`status`, and only `valid` maps to `valid: true`. `invalid`, `accept_all`, `disposable`, and `unknown`
+retain their original status words with `valid: false` (not confirmed deliverable, not a claim
+that every such address is invalid). Unsuccessful envelopes and absent/empty verdicts are misses
+and allow the existing waterfall to continue. No routing runtime or expression helpers changed.
+
+The direct rate remains free. Existing ranking selects eligible own keys first, then platform
+candidates by expected cost; ContactOut is a free platform candidate when configured. Other
+providers may still charge if selected by preferences, own-key availability, or fallback.
+
+On 2026-09-09, a free authenticated `GET /v1/email/verify` for the catalog's public support address
+returned HTTP 200 with `status_code: 200` and `data.status: accept_all`. The complete response is
+recorded in `examples/contactout.people.email.verify.json`; no credential is included. Shared
+routing tests cover all five documented verdicts, query preservation, zero cost, provenance,
+and fallback on missing verdicts or embedded errors.

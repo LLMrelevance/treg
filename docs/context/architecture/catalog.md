@@ -120,6 +120,11 @@ verdict is an answer, while error bodies (no `quality`) are misses. `settle._obs
 separately makes unknown/catch-all results free. The upstream `free` flag means a free email
 service, and `credits` is a delayed balance; neither is per-call usage.
 
+ContactOut also joins this contract via `contactout.people.email.verify`. Its direct price is free
+under the agreed commercial terms. The captured `accept_all` response verifies the adapter; only
+`valid` confirms deliverability, other status words remain intact, and unsuccessful envelopes or
+missing verdicts fall through. See `architecture/contactout.md` for capture evidence and tests.
+
 Bulk upload, file info/list/download, stop and delete are excluded: those operations use
 `bulkapi.millionverifier.com` with `key` auth and a multipart file lifecycle, rather than this
 provider's Single API host and `api` auth. The YAML records the complete eight-operation map.
