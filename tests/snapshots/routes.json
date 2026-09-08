@@ -717,6 +717,15 @@
       "GET",
       "HEAD"
     ],
+    "name": "gpt6_page",
+    "path": "/gpt6"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "people_search_page",
     "path": "/people-search"
   },

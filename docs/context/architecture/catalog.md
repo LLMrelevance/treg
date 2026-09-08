@@ -1398,11 +1398,16 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   `{linkedin_url}`), `derive` rules so the two name shapes match the same adapters, a small
   *output* core (`email` required; `confidence`, names, `verified` optional) and `miss` in
   canonical terms. `raw` — the winning provider's body — is always returned and never documented
-  as stable. `advice_unverified` (email and phone finds) is one sentence the router attaches as
-  `_treg.advice` to a hit whose `verified` is not true — a found contact is not a confirmed one
-  (Hunter's `accept_all`, LeadMagic's personal finder, every phone provider), and a team that sent
-  to such hits unverified bounced on most of them (2026-09-06). A suggestion only: treg never
-  chains the verify call, which would double every hit's price and change what the find bills.
+  as stable. `advice_unverified` (email and phone finds, and `people.search`) is one sentence the
+  router attaches as `_treg.advice` to a hit whose `verified` is not true — a found contact is not
+  a confirmed one (Hunter's `accept_all`, LeadMagic's personal finder, every phone provider), and a
+  team that sent to such hits unverified bounced on most of them (2026-09-06). A search contract
+  has no `verified` output, so its advice attaches to every hit: rows are directory listings, and
+  the same team's 79-address bounce list (2026-09-08) was 73 unverified Hunter domain-search rows
+  and agent-guessed `info@` addresses that one verify call each would have caught. The
+  `hunter.companies.emails` catalog summary carries the same warning for direct `/call/` users,
+  whose body is relayed verbatim. A suggestion only: treg never chains the verify call, which
+  would double every hit's price and change what the find bills.
 - **Adapters** — `adapters.yaml`, one per endpoint: `accepts` (identity variants), `in` (contract
   field → `queryParams.x` / `body.x`), `const` (fixed provider params), `out` (core field →
   expression over the body), `miss`. The expression language (`domain/catalog/routing/paths.py`)

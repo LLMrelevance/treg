@@ -262,6 +262,26 @@ async def test_an_unverified_hit_carries_verify_advice(clients: AsyncClient, enr
     assert before - await _balance(clients) == int(r.headers["X-Treg-Cost-Micro"]) == 8_900, "the find, nothing chained"
 
 
+async def test_a_people_search_hit_always_carries_verify_advice(clients: AsyncClient, enrichment_on, monkeypatch):
+    """Search rows are directory listings: a row's email is found, not confirmed deliverable. The
+    contract has no `verified` output, so the advice attaches to every hit — Hunter domain-search
+    rows with `verification: null` were 73 of one team's 79 bounces (2026-09-08). Still a
+    suggestion: one child call, the find's price, nothing chained."""
+    monkeypatch.setattr(call_service, "relay", _relay_by_provider(
+        {"hunter": [(200, {"data": {"emails": [{"value": "info@royalfarms.com", "type": "generic", "confidence": 10,
+                                                 "verification": {"date": None, "status": None}}]},
+                            "meta": {"results": 1}})],
+         "*": [(200, {"persons": []})] * 12}, []))
+    before = await _balance(clients)
+    r = await clients.post("/call/treg.people.search", json={"company_domain": "royalfarms.com", "limit": 10})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["_treg"]["served_by"] == "hunter.companies.emails" and d["_treg"]["outcome"] == "hit"
+    assert d["output"]["people"][0]["verification"]["status"] is None, "the row's own field, untouched"
+    assert "treg.people.email.verify" in d["_treg"]["advice"] and "directory" in d["_treg"]["advice"]
+    assert before - await _balance(clients) == int(r.headers["X-Treg-Cost-Micro"]), "the find, nothing chained"
+
+
 async def test_error_on_the_first_child_falls_back_to_the_second(clients: AsyncClient, enrichment_on, monkeypatch):
     seen = []
     monkeypatch.setattr(call_service, "relay", _relay_by_provider(
