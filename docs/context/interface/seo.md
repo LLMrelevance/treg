@@ -43,21 +43,27 @@ FastAPI's stock Swagger shell — a kilobyte of JavaScript to anything that does
 
 ## The pieces
 
-`/astra` is the Astra + treg launch-film destination, served by `astra_page` as bundled,
-no-cache HTML and included in the sitemap and route ownership manifest. It leads with
-“Connect ChatGPT to any data & tools” and a native-styled, self-playing Codex workflow:
+`/gpt6` is the launch-film destination, served by `gpt6_page` as bundled,
+no-cache HTML and included in the sitemap and route ownership manifest. `/astra` redirects
+permanently to `/gpt6`, preserving query parameters for campaign attribution. It leads with
+“Give GPT6 Astra any data & tools” and a native-styled, self-playing Codex workflow:
 prompt, provider comparison, scan and selection, email/phone enrichment, then the cost receipt.
 The preview pauses off screen, respects reduced motion, and opens the `warm-paper` launch film
-on click. Tool cards introduce the catalog; a subscription comparison keeps the illustrative
-usage receipt alongside it. The “Not just lead enrichment” use cases follow pricing. On small
+on click. After the enrichment gallery, a subscription comparison pairs pricing with the
+illustrative usage receipt. The “One plugin” catalog cards follow pricing, then the
+“Not just lead enrichment” use cases. On small
 screens, pricing stacks vertically and the demo switches between chat and contact results.
+
+The “One skill. Every enrichment job.” section follows the benchmark, reusing the nine-card
+people-search gallery, responsive layout and on-screen animations with reduced-motion support.
+Its final card links to `/catalog`.
 
 Benchmark tabs identify the evaluated agent as Claude Code, rather than presenting its scores
 as an Astra evaluation. Use-case prompts are copyable; plugin CTAs open the treg listing on
 `chatgpt.com/plugins`. Account setup follows the launch-page convention: members continue to
-`/app?ref=astra`; other visitors see a native sign-in dialog with the existing OAuth links and
+`/app?ref=gpt6`; other visitors see a native sign-in dialog with the existing OAuth links and
 email-code endpoints (`/auth/email/start` and `/auth/email/verify`). The page uses `sitetrack.js`,
-`adtrack.js` and `gtag.js` for the existing attribution path; `data-page="astra"` identifies
+`adtrack.js` and `gtag.js` for the existing attribution path; `data-page="gpt6"` identifies
 the landing page in ad-click capture. Campaign links should carry `utm_*` parameters for
 server-side first-touch attribution across signup, first successful call and top-up.
 
