@@ -1,4 +1,5 @@
-# Surface: POST /job/find_email, POST /job/verify_email, GET /credit and GET /api/test-key listed.
+# Surface: POST /job/find_email and POST /job/verify_email listed.
+# Account checks are internal: /credit probes keys and collects balances.
 # Excluded: GET /job?id= (HTTP 500 in repeated live tests); async/webhooks (deprecated/out of v1 scope).
 # Pricing FAQ: https://help.trykitt.ai/en/articles/11739656-pricing-faqs
 provider: trykitt
@@ -147,48 +148,4 @@ endpoints:
       cost.
   verified: '2026-09-09'
   example_response: examples/trykitt.people.email.verify.json
-  docs_url: https://documenter.getpostman.com/view/479833/2s93m62NHf
-- id: trykitt.account.credit
-  kind: account
-  capability: account.usage
-  platform: account
-  scope: own_account
-  method: GET
-  path: /credit
-  name: Check credit balance
-  summary: Check credit balance
-  input:
-    note: Authenticated free account check; x-api-key is injected. Invalid keys return
-      HTTP 401.
-  test_request:
-    queryParams: {}
-  cost:
-    type: free
-    value: 0
-    currency: USD
-    unit: call
-  verified: '2026-09-09'
-  example_response: examples/trykitt.account.credit.json
-  docs_url: https://documenter.getpostman.com/view/479833/2s93m62NHf
-- id: trykitt.account.auth
-  kind: account
-  capability: account.auth
-  platform: account
-  scope: own_account
-  method: GET
-  path: /api/test-key
-  name: Test API key
-  summary: Test API key
-  input:
-    note: Authenticated free account check; x-api-key is injected. Invalid keys return
-      HTTP 401.
-  test_request:
-    queryParams: {}
-  cost:
-    type: free
-    value: 0
-    currency: USD
-    unit: call
-  verified: '2026-09-09'
-  example_response: examples/trykitt.account.auth.json
   docs_url: https://documenter.getpostman.com/view/479833/2s93m62NHf

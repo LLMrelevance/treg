@@ -5,8 +5,6 @@ sources:
   - src/treg/catalog/trykitt.yaml
   - src/treg/catalog/examples/trykitt.people.email.find.json
   - src/treg/catalog/examples/trykitt.people.email.verify.json
-  - src/treg/catalog/examples/trykitt.account.credit.json
-  - src/treg/catalog/examples/trykitt.account.auth.json
   - src/treg/catalog/contracts.yaml
   - src/treg/catalog/millionverifier.yaml
   - src/treg/catalog/examples/millionverifier.people.email.verify.json
@@ -1665,8 +1663,9 @@ first real test that the capability taxonomy supports cross-provider comparison.
 
 ## Kitt AI (`trykitt`)
 
-`trykitt.yaml` lists realtime email find/verify plus free `/credit` and `/api/test-key`
-account checks. `adapters.yaml` adds both to their existing routed parents. Find maps
+`trykitt.yaml` lists only realtime email find/verify. Account checks are not public
+catalog tools; `/credit` remains the internal key probe and balance collector.
+`adapters.yaml` adds both email tools to their existing routed parents. Find maps
 `full_name`/derived first+last name and domain to `fullName` and `domain`; optional LinkedIn
 URLs are passed as `linkedinStandardProfileURL`. Both adapters set `realtime: true`.
 A find's `email: no-results-found` (or absent/empty email) is a miss; successful finds
@@ -1681,7 +1680,6 @@ The loader preserves the rule; BYOK returns before the guard and remains a faith
 `cost.reported_charge: {path: credits.jobCredits, unit: usd}` supplies the actual charge
 through the common response-field reader. The validator permits this only with paid scalar
 prices and no competing `settle` rule. Missing evidence uses the normal miss/base policy.
-The free key test uses `account.auth`; the balance check uses `account.usage`.
 Polling `/job?id=` returned 500 in repeated live tests and is excluded, along with
 asynchronous/webhook submission. The surface map is in the catalog header.
 

@@ -802,8 +802,8 @@ fall through to the verified miss rule and documented base estimate. Find misses
 unknown and catchall settle at the reported charge or $0.0015 fallback.
 
 The base find price is $0.005. The documented volume discount is not tracked locally;
-an upstream reported discount is honored. `/credit` and `remainingCredits` are account
-balances, never charge evidence. Paid live tests reconciled $0.008 after a delayed
+an upstream reported discount is honored. The internal `/credit` check and `remainingCredits`
+are account balances, never charge evidence. Paid live tests reconciled $0.008 after a delayed
 balance update. Free-plan null charge fields use the same documented fallback policy.
 
 
