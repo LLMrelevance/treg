@@ -279,3 +279,10 @@ Forecasts, recharge verification and every alert (`quota_exhausted`, `rate_press
 …) — step C, gated on the `money-funding-transactions` debt. Until the rollout above flips the mode,
 `TREG_OVERFLOW_MODE` is `off` and treg still relays a vendor's 402 unchanged (or answers the typed 503
 when the account is marked exhausted).
+
+## ContactOut independent pools
+
+`collectors._contactout` exposes the three raw credit pools through an informational observation,
+not a scalar balance. `snapshot_from` and `latest_state` preserve it without marking the provider
+exhausted. Prepaid quotas are already remaining credits. Polling/exhaustion semantics still await
+provider confirmation; see [ContactOut](../architecture/contactout.md).

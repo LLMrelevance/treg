@@ -1638,3 +1638,9 @@ long strings clipped, ~10 KB cap) by the verifier, then human-reviewed for PII b
 
 The SEO pair and the social pair each implement the same capabilities on purpose — they are the
 first real test that the capability taxonomy supports cross-provider comparison.
+
+## ContactOut
+
+`contactout.yaml` adds the core LinkedIn/contact surface with explicit work/personal selectors,
+on-hit Starter rates supplied by the account owner, free verification, and deferred batches.
+See [ContactOut](contactout.md) for request limitations, derived settlement and live evidence.

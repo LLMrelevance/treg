@@ -790,3 +790,9 @@ success convention. An undecidable rule does not imply a free call.
 Coverage remains a catalog concern: providers without an adapter or `expect` can still return
 embedded errors. In particular, verify TikHub's success convention before adding a file-level rule;
 its existing explicit charge/no-charge prose handling is a separate billing signal.
+
+## ContactOut contact hits
+
+`application.call.contactout` calculates request-sized holds and derives contact/search charges
+from returned profiles using the YAML Starter micro-USD rates. It reuses the existing money lifecycle.
+Own keys are unmetered; see [ContactOut](contactout.md) for prices, free verification and evidence limits.
