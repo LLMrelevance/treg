@@ -120,6 +120,11 @@ verdict is an answer, while error bodies (no `quality`) are misses. `settle._obs
 separately makes unknown/catch-all results free. The upstream `free` flag means a free email
 service, and `credits` is a delayed balance; neither is per-call usage.
 
+ContactOut also joins this contract via `contactout.people.email.verify`. Its direct price is free
+under the agreed commercial terms. The captured `accept_all` response verifies the adapter; only
+`valid` confirms deliverability, other status words remain intact, and unsuccessful envelopes or
+missing verdicts fall through. See `architecture/contactout.md` for capture evidence and tests.
+
 Bulk upload, file info/list/download, stop and delete are excluded: those operations use
 `bulkapi.millionverifier.com` with `key` auth and a multipart file lifecycle, rather than this
 provider's Single API host and `api` auth. The YAML records the complete eight-operation map.
@@ -1429,6 +1434,9 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   `/ N`, `==`/`!=` against literals, and named transforms (`split_first`, `split_last`, `join`,
   `has_type`, `len`, `list`, `obj`, `fmt`, `csv`, `lower`/`upper`, `at_least`, `linkedin_handle`/
   `linkedin_url`, `email_domain`, `host`, `dfs_location`, `seranking_source`, `tca_filter`).
+  `values` reads rows from object-keyed or list responses; `get` applies dotted/indexed lookup
+  to another expression result (for example, the first company in a domain-keyed response).
+  These are generic helpers, not provider-specific rewrites.
   `in_expr` builds provider params from expressions (URL-array bodies, DSL objects); `test_identity`
   states the fixture's identity when `in` builds a value rather than copying one; `filters` carry
   defaults and are always sent.
@@ -1649,3 +1657,12 @@ long strings clipped, ~10 KB cap) by the verifier, then human-reviewed for PII b
 
 The SEO pair and the social pair each implement the same capabilities on purpose — they are the
 first real test that the capability taxonomy supports cross-provider comparison.
+
+## ContactOut
+
+`contactout.yaml` adds the core LinkedIn/contact surface with explicit work/personal selectors,
+on-hit Starter rates supplied by the account owner, free verification, and deferred batches.
+People lookup/search entries are `untestable:` without test requests or stored examples under the
+PII rule. Their routing adapters are omitted; company search/enrichment and email verification
+retain verified adapters. Profile-only LinkedIn enrichment costs $0.02 when found.
+See [ContactOut](contactout.md) for request limitations, derived settlement and live evidence.

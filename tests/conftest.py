@@ -59,6 +59,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from treg import audit  # noqa: E402
 from treg.api import app  # noqa: E402
 from treg import archive  # noqa: E402
+from treg.config import get_settings  # noqa: E402
 from treg.infra.db import reset_db  # noqa: E402
 
 
@@ -372,3 +373,14 @@ def _no_ambient_treg_identity(monkeypatch):
     them beat any config). The suite must not change behavior because of who is running it."""
     for var in ("TREG_TOKEN", "TREG_ORG", "TREG_URL", "TREG_CLIENT"):
         monkeypatch.delenv(var, raising=False)
+
+
+# ---- ContactOut ----
+
+@pytest.fixture
+def contactout_platform(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_CONTACTOUT", "PLATFORM-TEST")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "contactout")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()

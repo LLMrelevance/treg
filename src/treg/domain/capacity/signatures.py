@@ -51,6 +51,10 @@ _TABLE: list[tuple[str, int, str, str]] = [
     # Documented 2026-09-08: discovery's allowance is distinct from the shared credit pool.
     # https://docs.influencers.club/guides/error-handling — ordinary burst 429s have Retry-After.
     ("influencersclub", 429, r"Discovery API credit limit reached", "quota"),
+    # ContactOut documents this 403 separately from "No access to endpoint".
+    # Independent pools: lock only the failed endpoint, never the entire provider.
+    # https://api.contactout.com/#errors (checked 2026-09-08).
+    ("contactout", 403, r"you're out of credits", "quota"),
     ("*", 402, r"", "balance"),
 ]
 
