@@ -265,7 +265,7 @@ adapters:
     miss: "email_status == null"
   tomba.people.email.verify:
     accepts: [[email]]
-    in:  {email: pathParams.email}
+    in:  {email: queryParams.email}
     out: {valid: "data.email.status == 'valid'", status: data.email.status, score: data.email.score}
     miss: "data.email.status == null"
   hunter.people.email.verify:
