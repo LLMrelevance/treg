@@ -2213,7 +2213,7 @@ async def test_contactout_split_must_be_explicit_and_stats_are_private(clients, 
     assert response.status_code == 400
     assert "email_type" in response.text
     response = await clients.get("/call/contactout.account.usage")
-    assert response.status_code in (404, 428)
+    assert response.status_code == 404
 
 
 def test_contactout_combined_email_array_is_not_billed_twice():

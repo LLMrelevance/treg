@@ -38,8 +38,7 @@ controls serving. No credential is committed or copied into a platform Secret ro
 ## Surface and selectors
 
 Each tool has one catalog home: eight LinkedIn-specific lookup/contact tools on `linkedin`,
-ten general people tools on `people`, two company tools on `companies`, and own-account stats
-on `account`. LinkedIn placement covers the three contact splits, three availability checkers,
+ten general people tools on `people`, and two company tools on `companies`. LinkedIn placement covers the three contact splits, three availability checkers,
 LinkedIn profile enrichment and email-to-LinkedIn lookup. Their existing `contactout.people.*`
 IDs remain stable for saved CLI/API calls; platform and capability metadata control browsing.
 Capability labels distinguish work/personal email lookup from availability checks. Global catalog
@@ -49,7 +48,9 @@ verification requests/examples, so their adapter registrations are omitted.
 
 The catalog covers count, personal/work email and phone availability, single email verification,
 people and company search, company domain enrichment, email-to-LinkedIn, decision makers,
-LinkedIn contact/profile enrichment, person enrichment and profile-from-email, plus own-account stats.
+LinkedIn contact/profile enrichment, person enrichment and profile-from-email.
+Account stats are not a public catalog tool. `/v1/stats` remains the internal key probe
+and balance collector; dashboard, CLI and MCP catalog discovery do not list it.
 Free availability/count tools have distinct capabilities so they cannot be advertised as free
 contact finders or profile searches. Work/personal contact splits use `email_type`; person
 enrichment splits use `include`.

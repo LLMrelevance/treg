@@ -538,7 +538,7 @@ def test_contactout_catalog_prices_validate_and_surface_is_bounded():
 
     cat = catalog_store.load()
     entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
-    assert len(entries) == 21
+    assert len(entries) == 20
     assert not any("batch" in e["path"] for e in entries)
     errors = []
     for e in entries:
@@ -563,7 +563,7 @@ def test_contactout_catalog_distribution_preserves_ids_and_global_discovery():
     cat = catalog_store.load()
     entries = [e for e in cat.endpoints if e.get("provider") == "contactout"]
     assert Counter(e["platform"] for e in entries) == {
-        "linkedin": 8, "people": 10, "companies": 2, "account": 1}
+        "linkedin": 8, "people": 10, "companies": 2}
     for e in entries:
         assert e["capability"].split(".")[0] == e["platform"]
     assert cat.by_id["contactout.people.contact.work"]["platform"] == "linkedin"
@@ -577,7 +577,7 @@ def test_contactout_person_routes_cannot_recapture_pii():
     path = Path("src/treg/catalog/contactout.yaml")
     endpoints = yaml.safe_load(path.read_text())["endpoints"]
     safe = {"contactout.people.count", "contactout.people.email.verify",
-            "contactout.companies.search", "contactout.companies.enrich", "contactout.account.usage"}
+            "contactout.companies.search", "contactout.companies.enrich"}
     for ep in endpoints:
         if ep["id"] in safe:
             continue

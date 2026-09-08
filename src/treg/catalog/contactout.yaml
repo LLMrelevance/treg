@@ -1031,35 +1031,6 @@ endpoints:
   docs_url: https://api.contactout.com/
   untestable: Requires a person lookup or returns named individuals; no automated
     verification request or stored example under the catalog PII rule.
-- id: contactout.account.usage
-  capability: account.usage
-  platform: account
-  scope: own_account
-  method: GET
-  path: /v1/stats
-  name: Read account usage and credit pools
-  summary: Read account usage and credit pools
-  input:
-    queryParams:
-      period:
-        type: string
-        note: YYYY-MM; defaults to current month.
-    note: Own account only. Prepaid quota fields are remaining credits; postpaid remaining
-      fields represent quota minus count. Email, phone and search are separate pools,
-      not a dollar balance.
-  test_request:
-    queryParams: {}
-  cost:
-    type: free
-    value: 0
-    currency: USD
-    per: 1
-    unit: call
-    note: Own account only. Prepaid quota fields are remaining credits; postpaid remaining
-      fields represent quota minus count. Email, phone and search are separate pools,
-      not a dollar balance.
-  docs_url: https://api.contactout.com/
-  kind: account
 proposed_capabilities:
   people.count: Count profiles matching filters without returning profiles
   linkedin.email.personal.availability: Check personal email availability for a LinkedIn

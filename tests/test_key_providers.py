@@ -320,6 +320,4 @@ def test_contactout_platform_binding(contactout_platform):
             "format": "{secret}",
         }
     ]
-    assert not catalog_store.load().platform_eligible(
-        catalog_store.load().by_id["contactout.account.usage"]
-    )
+    assert "contactout.account.usage" not in catalog_store.load().by_id
