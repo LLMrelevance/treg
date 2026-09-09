@@ -161,3 +161,11 @@ def test_quickenrich_capacity_uses_reported_allowance(remaining, health):
     state = latest_state(policy, snap, now)
     assert state.health == health
     assert state.is_exhausted(now) == (remaining == 0)
+
+
+@pytest.mark.parametrize("balance,exhausted", [(0, True), (9.992, False)])
+def test_trykitt_paid_balance_uses_common_exhaustion_rule(balance, exhausted):
+    state = latest_state(default_policy("trykitt", has_key=True), CapacitySnapshot(
+        provider="trykitt", remaining=balance, unit="USD",
+        observed_at=utcnow_naive(), confidence="exact"))
+    assert state.is_exhausted() is exhausted
