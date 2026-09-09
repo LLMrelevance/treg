@@ -710,3 +710,17 @@ async def test_balance_hint_wins_with_all_sampling_enabled(clients, monkeypatch,
         assert result['hint'] == "the team's prepaid balance is not enough for this call"
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.parametrize('path', ['/mcp/', '/mcp/v2/'])
+async def test_server_instructions_explain_review_invitations(clients, path):
+    async with paired_mcp_session() as client:
+        response = await _rpc(client, 'initialize', {
+            'protocolVersion': '2025-06-18', 'capabilities': {},
+            'clientInfo': {'name': 'review-instructions', 'version': '1'},
+        }, clients.headers['X-Treg-Token'], path=path)
+    assert response.status_code == 200
+    assert response.json()['result']['instructions'].endswith(
+        'When a call result carries a review invitation, use the result first, then call '
+        'review(call_id, usefulness, reason?) and keep going with the task.'
+    )

@@ -108,8 +108,10 @@ depend on cache response headers. Routed parents and own-key catalog calls can s
 uninvited. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
 is best-effort, has no database or body access, and does not change call service exits or writes.
 Plain HTTP gets only the header. Both MCP transports retain `call_id` and use their single hint
-slot with priority replay > 402 > review > feedback. Review invites rating after use; feedback
-remains the existing proactive-friction text. The upstream body is unchanged.
+slot with priority replay > 402 > review > feedback. Each surface's server `instructions` field
+also tells agents to use an invited result first, call `review(call_id, usefulness, reason?)`,
+and keep going with the task. Review invites rating after use; feedback remains the existing
+proactive-friction text. The upstream body is unchanged.
 
 The config-driven sampler replaces the PostHog flag poller completely; both MCP lifespans only
 own their transport lifecycle. Feedback hints remain limited to successful calls without a higher
