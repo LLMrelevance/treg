@@ -560,7 +560,8 @@ run alone does not enable routes.
 
 Aggregator keys
 (`TREG_OVERFLOW_KEY_ORTHOGONAL` / `_MONID`) are dashboard-managed on the web service and flow the same
-way. `TREG_OVERFLOW_MODE` (`off` default | `shadow` | `on`) and `TREG_OVERFLOW_DAILY_BUDGET_USD` (20)
+way. `TREG_OVERFLOW_MODE` (`off` default | `shadow` | `on`) and `TREG_OVERFLOW_DAILY_BUDGET_USD` (code
+default 20; production sets its own value in the private Blueprint)
 govern the overflow child cycle (`ops/capacity.md`); the keys serve nothing while the mode is `off`.
 
 `treg-worker asynctasks settle` is the second cron command. `treg-asynctasks-settle` runs every two
