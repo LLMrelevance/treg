@@ -1291,6 +1291,15 @@ sample size** per endpoint from `CallRecord` — which has recorded `endpoint_id
 `/catalog/endpoints/{id}`, attached to the endpoint **and every sibling**, because the choice is made
 on that page and an agent will not make a second round-trip to compare reliability.
 
+The same page states the one price the `cost` block cannot: what the call bills when treg's own
+account is out and the overflow relay serves it. `routers.catalog._overflow_disclosure` reads the
+enabled `OverflowRoute` through `domain.capacity.routes_view` (a read, the worker stays the only
+writer) and puts `overflow_price_usd`, `overflow_price_unit` and `overflow_via` on the endpoint view
+plus a hint, only when the deployment can actually relay it (`TREG_OVERFLOW_MODE=on`, a key for the
+aggregator, `platform_eligible`, an enabled route). A catalog-free endpoint with an overflow route is
+the case that made this necessary (`apollo.people.search`, 2026-09-08); the MCP `catalog_get` lifts
+the three fields onto its result so the schema advertises them.
+
 The aggregate is authoritative but no longer request-time. `stats.EndpointObservationReader` is the
 narrow domain port, and bootstrap supplies `CachedEndpointObservationReader` around a
 `PostgresEndpointObservationReader`. Entries are keyed by endpoint id. They are fresh for five

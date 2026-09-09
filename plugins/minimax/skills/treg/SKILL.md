@@ -135,8 +135,10 @@ Notes:
   - treg does **not** choose or fail over **between providers** for you. That is deliberate: only
     you know which inputs you hold, and treg relays rather than rewrites your request. If treg's
     own account for a provider is out it may serve the **same endpoint** through a treg-owned relay
-    (`X-Treg-Served-Via: overflow:<name>`, real price, same shape); a team opts out with
-    `treg org overflow off`.
+    (`X-Treg-Served-Via: overflow:<name>`, or `served_via` + a hint on the MCP `call` result; real
+    price, same shape). `catalog_get` shows that price up front as `overflow_price_usd` when the
+    deployment can relay the endpoint - a "free" endpoint with one may bill exactly that, so quote
+    it. A team opts out with `treg org overflow off`.
   - **Routed endpoints** (`treg.<capability>`, e.g. `treg.people.email.find`) are where you can
     ask treg to choose: POST the identity (`{full_name, domain}` | `{first_name, last_name, domain}` |
     `{linkedin_url}`); treg runs the best child (own keys first, then cheapest per hit), falls back

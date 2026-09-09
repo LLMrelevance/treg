@@ -206,7 +206,10 @@ pays the aggregator's real price, 0% markup, disclosed in-band when it ships (st
   endpoint, input}`), `parse()` unwraps the vendor status + body + the real in-band charge, and
   names who to blame when the aggregator itself refused (`AGGREGATOR_SIDE` = `aggregator_auth`,
   `aggregator_balance`, `malformed` - the call path marks the aggregator unhealthy for everyone, the
-  verifier leaves the route alone; `VENDOR_DRY`, folded in by `with_vendor_verdict` from the
+  verifier leaves the route alone; `contract` - the aggregator's own per-request refusal, including
+  Orthogonal's bare 400/422/404 with no vendor data - is request-scoped: child released, nothing
+  charged, no mark, `malformed` being reserved for non-JSON, 5xx and transport errors;
+  `VENDOR_DRY`, folded in by `with_vendor_verdict` from the
   signature table - the one place a relayed body is read - is the aggregator's account for THIS
   vendor (a relayed 402, Apollo's 422, a period 429): the call path marks
   `overflow:<aggregator>:<provider>` only, so one vendor's cap never takes the others offline.
@@ -279,7 +282,8 @@ the policy table. `rate_pressure` alerting is step C.
 ## Overflow, the child cycle (step E) — off by default
 
 `application/call/overflow.py` is documented in `architecture/proxy-model.md` § Overflow. Operating
-it: `TREG_OVERFLOW_MODE` = `off` (default) | `shadow` | `on`; `TREG_OVERFLOW_DAILY_BUDGET_USD` (20)
+it: `TREG_OVERFLOW_MODE` = `off` (default) | `shadow` | `on`; `TREG_OVERFLOW_DAILY_BUDGET_USD` (code
+default 20; production's value is set in treg-internal's Blueprint, $500 at the time of writing)
 per aggregator per UTC day is a hard admission cap backed by `OverflowSpend`. Before either an
 `on` call or a `shadow` probe goes to the network, a conditional atomic upsert reserves the route's
 estimated micro-USD only if the resulting daily total fits under the cap. Completion reconciles the
