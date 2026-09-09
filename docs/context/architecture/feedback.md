@@ -7,6 +7,7 @@ sources:
   - src/treg/application/feedback.py
   - src/treg/routers/feedback.py
   - src/treg/alembic/versions/0025_feedback.py
+  - src/treg/alembic/versions/0026_callreview.py
   - src/treg/web/feedback.md
   - tests/test_feedback.py
 related:
@@ -57,3 +58,12 @@ local write. Their existing call permissions and transport boundaries remain dis
 one document; CLI help and MCP share `FEEDBACK_DESCRIPTION`. The plugin generator propagates the
 short skill instructions to each installation format. Self-hosted submissions stay on the
 configured registry.
+
+## Call review storage
+
+`CallReview` (`callreview`, revision 0026) stores one rating per unique `call_id`, with team and
+caller identity, server-attributed endpoint/provider, optional `routed_via`, `invited`, request
+`client`, usefulness, optional reason and creation time. Endpoint/time has a composite index.
+`ORG_SCOPED_MODELS` includes reviews for team deletion. Reviews never create feedback reports.
+`ReviewUsefulness` is `useful`, `partly`, `not_useful`, or `not_sure`; shared guidance asks agents
+to rate after using the result and continue their task.
