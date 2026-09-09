@@ -407,6 +407,29 @@ async def test_a_hit_serves_stored_bytes_and_bills_like_live(clients: AsyncClien
     assert [row.get("cached") for row in rows[:2]] == [True, False]
 
 
+@pytest.mark.parametrize("cache_header", [True, False])
+async def test_archive_hit_never_invites_review(clients: AsyncClient, serve, monkeypatch, cache_header):
+    monkeypatch.setattr(get_settings(), "review_sample_rate", 1)
+    original = call_service._served_response
+
+    def stored_response(served, body):
+        response = original(served, body)
+        if not cache_header:
+            response.raw_headers = tuple((name, value) for name, value in response.raw_headers
+                                         if name.lower() != b"x-treg-cache")
+        return response
+
+    monkeypatch.setattr(call_service, "_served_response", stored_response)
+    live = await clients.get(f"/call/{EP}?aweme_id=7&count=5")
+    assert live.headers["X-Treg-Review"] == "requested"
+    await archive.drain()
+    hit = await clients.get(f"/call/{EP}?aweme_id=7&count=5")
+    assert hit.status_code == 200 and hit.content == live.content
+    assert "X-Treg-Review" not in hit.headers
+    await audit.drain()
+    assert (await clients.get("/calls")).json()[0]["cached"] is True
+
+
 async def test_a_hit_is_not_a_new_observation(clients: AsyncClient, serve):
     await clients.get(f"/call/{EP}?aweme_id=7")
     await archive.drain()
@@ -631,7 +654,8 @@ async def test_admin_archive_keys_endpoint(clients: AsyncClient, serve, monkeypa
     try:
         monkeypatch.setattr(get_settings(), "archive_mode", "serve")
         monkeypatch.setitem(catalog_store.load().by_id[EP], "cache", "transient")
-        await clients.get(f"/call/{EP}?aweme_id=7")   # live, recorded
+        await clients.get(f"/call/{EP}?aweme_id=7")   # live, recorded asynchronously
+        await archive.drain()
         await clients.get(f"/call/{EP}?aweme_id=7")   # hit
         await archive.drain()
         await audit.drain()

@@ -149,7 +149,8 @@ later for the timers; it complements `/admin/reconcile/repeats`, which prices wh
 
 Hooked in `call_tool` immediately after `_buffer_response` — the one line where "metered platform
 call, body already in memory" is a fact, which IS eligibility gate 3. Metered 2xx only; the
-`X-Treg-Cache`-style serve headers do not exist yet. `archive.record()` is fire-and-forget with
+serve path already emits `X-Treg-Cache: hit`. The call context also carries `cached` from
+`served_hit`, so review invitations can exclude archive hits independently of response headers. `archive.record()` is fire-and-forget with
 audit's discipline: bounded pending set (512), failures swallowed but logged at **ERROR** (a lost
 recording has to clear `FaultCaptureHandler`'s threshold to be reportable at all; degradations that
 cost nothing, like a lookup falling back to a live call, stay at WARNING), `drain()` on

@@ -883,6 +883,7 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
             if served is not None:
                 body = served["body"]
                 served_hit = True
+                request.context.cached = served_hit
                 archive_key_hash, archive_content_hash = served["key_hash"], served["content_hash"]
                 response = _served_response(served, body)
             else:

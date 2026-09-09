@@ -37,7 +37,7 @@ def test_invalid_rates(field, rate):
     ('direct', 199, {}, True, False), ('direct', 300, {}, True, False),
     ('direct', 503, {}, True, False),
     ('direct', 200, {'X-Treg-Idempotent-Replay': 'true'}, True, False),
-    ('direct', 200, {'X-Treg-Cache': 'hit'}, True, False),
+    ('cached', 200, {}, True, False),
     ('direct', 200, {}, 'exception', False),
 ])
 async def test_header_before_stream_without_changing_response(
@@ -53,7 +53,8 @@ async def test_header_before_stream_without_changing_response(
     async def close():
         consumed.append('close')
     async def execute(context, client):
-        if catalog == 'direct':
+        if catalog in ('direct', 'cached'):
+            context.cached = catalog == 'cached'
             context.marketplace = SimpleNamespace(endpoint_id='example.search')
         elif catalog == 'own':
             context.target = SimpleNamespace(tool=SimpleNamespace(name='example.search'))

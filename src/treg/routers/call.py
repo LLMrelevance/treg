@@ -318,7 +318,7 @@ async def call_tool(
             )
             if (catalog_call and 200 <= response.status_code < 300
                     and not response.headers.get("X-Treg-Idempotent-Replay")
-                    and response.headers.get("X-Treg-Cache") != "hit"
+                    and not context.cached
                     and hints.sampled("review", context.call_ref)):
                 response.headers["X-Treg-Review"] = "requested"
         except Exception:

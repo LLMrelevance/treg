@@ -100,8 +100,9 @@ pagination with optional `endpoint_id`. It is excluded from OpenAPI; there is no
 
 `routers.call.call_tool` sets `X-Treg-Review: requested` after constructing the streaming response,
 before streaming starts. Only resolved catalog calls (including routed parents) with a 2xx status,
-no idempotent-replay header, no `X-Treg-Cache: hit` archive signal, and a sampled call reference
-qualify. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
+no idempotent-replay header, `context.cached == False`, and a sampled call reference qualify.
+The service sets `context.cached` from `served_hit` when the archive answers; the hook does not
+depend on cache response headers. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
 is best-effort, has no database or body access, and does not change call service exits or writes.
 Plain HTTP gets only the header. Both MCP transports retain `call_id` and use their single hint
 slot with priority replay > 402 > review > feedback. Review invites rating after use; feedback
