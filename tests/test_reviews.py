@@ -164,3 +164,38 @@ async def test_mcp_review_schema():
         assert tool.annotations.destructive_hint is False
         assert tool.annotations.open_world_hint is False
         assert tool.annotations.idempotent_hint is False
+
+
+async def test_commit_failure_never_persists_or_acknowledges_a_review(clients, monkeypatch):
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    org = await seed(clients)
+    async def fail(self):
+        raise RuntimeError('commit unavailable')
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncSession, 'commit', fail)
+        with pytest.raises(RuntimeError, match='commit unavailable'):
+            await submit(clients, org)
+    assert await rows() == []
+    assert (await submit(clients, org)).status_code == 201
+
+
+async def test_concurrent_review_retries_share_one_receipt(clients):
+    import asyncio
+
+    org = await seed(clients)
+    first, second = await asyncio.gather(submit(clients, org), submit(clients, org))
+    assert sorted([first.status_code, second.status_code]) == [200, 201]
+    assert first.json()['review_id'] == second.json()['review_id']
+    assert len(await rows()) == 1
+
+
+async def test_public_demo_cannot_submit_reviews(clients):
+    from test_public_demo import _mint_public, _org_with_stripe_tool
+
+    org_id = await _org_with_stripe_tool(clients)
+    token = await _mint_public(clients, org_id)
+    response = await clients.post('/reviews', headers={'X-Treg-Token': token},
+                                  json={'call_id': 'id', 'usefulness': 'useful'})
+    assert response.status_code == 403
+    assert await rows() == []

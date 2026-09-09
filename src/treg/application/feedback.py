@@ -92,17 +92,18 @@ async def submit_review(
         existing = await reviews.get(db, call_id, org_id)
         if existing is not None:
             return existing.id, False
-        # A savepoint lets the UNIQUE index arbitrate concurrent retries without committing
-        # outside this use case or acknowledging unrelated integrity failures.
+        # Keep the savepoint open until the application's commit, mirroring money.topup:
+        # releasing the first savepoint can commit early with SQLite's deferred BEGIN.
+        nested = await db.begin_nested()
         try:
-            async with db.begin_nested():
-                row = reviews.add(
-                    db, org_id=org_id, user_email=user_email, call_id=call_id,
-                    endpoint_id=endpoint_id, provider=provider, routed_via=routed_via,
-                    invited=invited, client=client, usefulness=usefulness, reason=reason,
-                )
-                await db.flush()
+            row = reviews.add(
+                db, org_id=org_id, user_email=user_email, call_id=call_id,
+                endpoint_id=endpoint_id, provider=provider, routed_via=routed_via,
+                invited=invited, client=client, usefulness=usefulness, reason=reason,
+            )
+            await db.flush()
         except IntegrityError:
+            await nested.rollback()
             existing = await reviews.get(db, call_id, org_id)
             if existing is None:
                 raise

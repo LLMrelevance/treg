@@ -7,6 +7,8 @@ sources:
   - src/treg/domain/feedback/reports.py
   - src/treg/domain/feedback/reviews.py
   - src/treg/hints.py
+  - src/treg/config.py
+  - src/treg/routers/call.py
   - src/treg/application/feedback.py
   - src/treg/routers/feedback.py
   - src/treg/alembic/versions/0025_feedback.py
@@ -47,7 +49,7 @@ that the reported problem is true. Intake does not rank providers or adjust char
 `GET /feedback/{feedback_id}` returns the report only to its team; other teams receive 404.
 `GET /admin/feedback` uses `require_superadmin` and the admin pool, with category filtering and
 bounded descending-ID pagination (`limit`, `before`, `next_before`). It returns internal
-attribution too. There is no external notification, issue sync, public feed, or review workflow.
+attribution too. There is no external notification, issue sync, or public feed.
 `Feedback` participates in `ORG_SCOPED_MODELS`, so team deletion removes its reports.
 
 CLI `cmd_feedback` sends the same payload to its configured registry, reading a prepared message
@@ -80,7 +82,8 @@ ledger-only evidence, which lacks status/provider/cache attribution. Own-tool re
 400. A routed parent uses its successful child's endpoint/provider when present, retaining the
 parent endpoint as `routed_via`; otherwise it retains parent attribution. `invited` is recomputed
 from a 2xx, non-cached record and the current review sampling rate. Retries return the original
-ID and `already_reviewed`; a unique index also arbitrates concurrent submissions. The sole writer
+ID and `already_reviewed`; a unique index also arbitrates concurrent submissions. Its savepoint
+stays open until the application commit, avoiding SQLite deferred-BEGIN early commits. The sole writer
 is `domain.feedback.reviews`; the moved `reports` module preserves feedback behavior.
 
 `hints.sampled(kind, sample_id)` hashes `kind:sample_id` with SHA-256 into the same 64-bit bucket
@@ -110,3 +113,49 @@ priority hint; missing call references use a fresh sampling ID without inventing
 `mcp_hint_attached` is a best-effort analytics event with `kind`, `surface` and available `call_id`,
 never upstream contents or credentials. Attachment does not prove display or reading. No session
 reminder cap or adaptive sampling is implemented.
+
+## Known biases
+
+Models lean toward `useful`, ratings often precede actual use despite the instructions, and
+models differ in how they use the scale. A score is only meaningful when comparing sibling
+endpoints of one capability. Phase 1 collects only: no aggregation, catalog scores, ranking,
+team-side read route, dashboard, or adaptive per-endpoint sampling.
+
+## Response-rate query
+
+For PostgreSQL, bind `:window_start`, `:window_end`, `:as_of` as naive UTC timestamps and
+`:review_rate` to the configured rate for that window. Split windows when the rate changes:
+`invited` reflects the rate at submission, so historical rate changes cannot be reconstructed
+from that flag alone. The first audit row per org/reference forms the call cohort. Child refs
+contain `:` and are excluded; replays do not write a new call record. Audit is best-effort, so
+this denominator is observed eligible calls, not proof every invitation was displayed.
+
+The numerator is invited review rows for that cohort submitted by `:as_of`, grouped by the
+original call's `client` (the review request may use a different runtime). Keep the reporting
+cutoff explicit to allow delayed ratings. This response rate is the decision input for phase 2.
+
+```sql
+WITH calls AS (
+  SELECT DISTINCT ON (org_id, call_ref) org_id, call_ref, client
+  FROM callrecord
+  WHERE created_at >= :window_start AND created_at < :window_end
+    AND endpoint_id IS NOT NULL AND status_code >= 200 AND status_code < 300
+    AND NOT cached AND call_ref ~ '^[A-Za-z0-9_-]+$'
+  ORDER BY org_id, call_ref, id
+), hashed AS (
+  SELECT calls.*, ('x' || substr(encode(sha256(convert_to('review:' || call_ref,
+    'UTF8')), 'hex'), 1, 16))::bit(64)::bigint AS signed_bucket
+  FROM calls
+), invited_calls AS (
+  SELECT * FROM hashed
+  WHERE (CASE WHEN signed_bucket < 0
+    THEN signed_bucket::numeric + 18446744073709551616
+    ELSE signed_bucket::numeric END) < :review_rate * 18446744073709551616
+)
+SELECT c.client, count(*) AS invited_calls, count(r.id) AS invited_reviews,
+       count(r.id)::numeric / NULLIF(count(*), 0) AS response_rate
+FROM invited_calls c
+LEFT JOIN callreview r ON r.org_id = c.org_id AND r.call_id = c.call_ref
+  AND r.invited AND r.created_at <= :as_of
+GROUP BY c.client ORDER BY c.client;
+```

@@ -688,3 +688,25 @@ async def test_review_hint_wins_over_feedback_and_replay_wins_over_review(client
         assert 'stored answer' in replay['hint']
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(('path', 'tool'), [('/mcp/', 'call'), ('/mcp/v2/', 'catalog_call_read')])
+async def test_balance_hint_wins_with_all_sampling_enabled(clients, monkeypatch, path, tool):
+    from treg import hints
+    from treg.application.call import service as call_service
+    from test_marketplace_call import _fake_relay
+
+    monkeypatch.setenv('TREG_PLATFORM_KEY_TIKHUB', 'SYNTHETIC-PLATFORM-KEY')
+    monkeypatch.setenv('TREG_PLATFORM_PROVIDERS', 'tikhub')
+    get_settings.cache_clear()
+    monkeypatch.setattr(hints, 'sampled', lambda kind, ref: True)
+    monkeypatch.setattr(call_service, 'relay', _fake_relay(402, b'{"error":"payment required"}'))
+    try:
+        async with paired_mcp_session() as client:
+            result = await _call_tool(client, tool, {
+                'endpoint_id': 'tikhub.tiktok.video.comments', 'params': {'aweme_id': '7'},
+            }, clients.headers['X-Treg-Token'], path=path)
+        assert result['status'] == 402
+        assert result['hint'] == "the team's prepaid balance is not enough for this call"
+    finally:
+        get_settings.cache_clear()
