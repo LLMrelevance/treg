@@ -330,6 +330,8 @@ When invited to review a catalog call, use its result first, then call
 `review(call_id, usefulness, reason?)` over MCP or `treg review CALL_ID USEFULNESS [--reason "..."]`.
 Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. Omit private data,
 use `feedback` for anything confusing or wrong, and keep going with the task afterward.
+Only the invited call needs a review: one per invitation. Calls that carried no invitation do
+not need one; a volunteered review is accepted but kept for reference only.
 
 ## Rules
 - Secrets are **write-only** — the API never returns a stored value, to you or to anyone.

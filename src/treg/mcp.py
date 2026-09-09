@@ -161,7 +161,8 @@ mcp = MCPServer(
         "catalog_get (params) → call. Multiple providers for one job? catalog_get ranks them by "
         "measured success, speed and price — you pick."
         " When a call result carries a review invitation, use the result first, then call "
-        "review(call_id, usefulness, reason?) and keep going with the task."
+        "review(call_id, usefulness, reason?) and keep going with the task. Only the invited call "
+        "needs a review: one per invitation."
     ),
     middleware=[_StaticSurfaceCapabilities()],
 )
@@ -1156,7 +1157,8 @@ directory_mcp = MCPServer(
         "catalog_get returns parameters, provider documentation, price and reliability; "
         "catalog_call_read and catalog_call_write execute the selected endpoint."
         " When a call result carries a review invitation, use the result first, then call "
-        "review(call_id, usefulness, reason?) and keep going with the task."
+        "review(call_id, usefulness, reason?) and keep going with the task. Only the invited call "
+        "needs a review: one per invitation."
     ),
     middleware=[_StaticSurfaceCapabilities()],
 )

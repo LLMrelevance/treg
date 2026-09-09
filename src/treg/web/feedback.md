@@ -51,6 +51,8 @@ Reports are accessible to that team and registry administrators, not published t
 A review rates one catalog call after you have used its result. Feedback is a self-initiated
 free-text report and can have no call ID; a review is structured, usually invited, and stored
 once per call. Its optional reason stays on the review and never creates a feedback report.
+Only the invited call needs a review: one per invitation. Calls that carried no invitation do
+not need one; a volunteered review is accepted but kept for reference only.
 
 - `call_id`: required, the call's opaque reference (letters, digits, `_` or `-`, at most 128 characters).
 - `usefulness`: required, `useful`, `partly`, `not_useful`, or `not_sure`. Uncertainty is fine.

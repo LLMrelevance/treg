@@ -82,7 +82,10 @@ ledger-only evidence, which lacks status/provider/cache attribution. Own-tool re
 400. A routed parent uses its successful child's endpoint/provider when present, retaining the
 parent endpoint as `routed_via`; otherwise it retains parent attribution. `invited` is recomputed
 from a 2xx, non-cached record with `credential_tier == "platform"` and the current review
-sampling rate. Routed and own-key catalog calls can still be reviewed uninvited. Retries return
+sampling rate. Routed and own-key catalog calls can still be reviewed uninvited. Every agent-facing
+text says one review per invitation: volunteered reviews are accepted and labelled `invited=false`,
+but they are not requested, and a future score must use invited rows only (an agent that reviews
+every call of a batch, seen in production on launch day, would otherwise weigh as much as a team). Retries return
 the original ID and `already_reviewed`; a unique index also arbitrates concurrent submissions. Its savepoint
 stays open until the application commit, avoiding SQLite deferred-BEGIN early commits. The sole writer
 is `domain.feedback.reviews`; the moved `reports` module preserves feedback behavior.

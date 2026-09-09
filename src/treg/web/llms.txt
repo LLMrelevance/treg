@@ -43,6 +43,7 @@ Repo: https://github.com/superdesigndev/treg
 Review: after using an invited catalog call's result, run `treg review CALL_ID USEFULNESS [--reason "..."]`
 or MCP `review(call_id, usefulness, reason?)`. Use `useful`, `partly`, `not_useful`, or `not_sure`;
 omit private data, use feedback for anything confusing or wrong, and keep going with the task.
+Only the invited call needs a review: one per invitation.
 
 Feedback: `treg feedback submit <quality|pricing|friction|other> "message"`, or the MCP `feedback` tool.
 Include call IDs when available and omit private information. Instructions: `{BASE}/feedback.md`.
