@@ -23,7 +23,7 @@ from ...sandbox_identity import visitor_name
 from ...domain.capacity import signatures as capacity_signatures
 from ...domain.capacity.view import view as capacity_view
 from ...infra.upstream.limiter import limiter as provider_limiter
-from ...infra.upstream.relay import relay
+from ...infra.upstream.relay import relay, scope_shared_idempotency_key
 from .. import asynctasks as async_task_app
 from ...domain import asynctasks as asynctasks_rules
 from .authorize import authorize_call, enforce_public_demo_limit
@@ -851,14 +851,20 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
         # is `expire_on_commit=False`, so `tool`/`secrets`/`caller.org` stay usable without a reload.
         await db.commit()
         try:
+            platform_tier = mk is not None and mk.tier == "platform"
+            raw_headers = tuple(request.headers.raw)
+            if platform_tier:
+                # Rewrite 4 of the relay's faithfulness contract: every org shares ONE provider
+                # account here, so a caller's Idempotency-Key must be partitioned by org before it
+                # reaches a provider that honors it (relay.py explains the leak it closes).
+                raw_headers = scope_shared_idempotency_key(raw_headers, caller.org_id)
             upstream_request = UpstreamRequest(
                 method=request.method,
-                raw_headers=tuple(request.headers.raw),
+                raw_headers=raw_headers,
                 query_items=tuple(request.query_params.multi_items()),
                 body_stream=request.stream,
                 has_body=request.has_body,
             )
-            platform_tier = mk is not None and mk.tier == "platform"
             if platform_tier:
                 # Burst smoothing, half one (plan §4.4): many callers share treg's key, so a call that
                 # would exceed the provider's published rate waits briefly (≤ 2 s, in-process, no DB —
