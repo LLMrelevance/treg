@@ -1,0 +1,135 @@
+"""Structured catalog reviews through the public HTTP boundary."""
+import pytest
+from sqlmodel import select
+
+from treg.config import get_settings
+from treg.infra.db import session_maker
+from treg.models import CallRecord, CallReview, Feedback, LedgerEntry
+
+
+async def seed(clients, **values):
+    org = (await clients.post('/orgs', json={'name': 'Review source'})).json()
+    async with session_maker() as db:
+        db.add(CallRecord(org_id=org['org_id'], user_email='tim@superdesign.dev',
+                          tool_name='example', method='GET', path='/',
+                          **({'call_ref': 'review-call', 'status_code': 200,
+                              'endpoint_id': 'example.search', 'provider': 'example'} | values)))
+        await db.commit()
+    return org
+
+
+async def rows():
+    async with session_maker() as db:
+        return list((await db.execute(select(CallReview))).scalars())
+
+
+async def submit(clients, org, **values):
+    return await clients.post('/reviews', headers={'X-Treg-Token': org['token'],
+                                                  'X-Treg-Client': 'review-test'},
+                              json={'call_id': 'review-call', 'usefulness': 'useful'} | values)
+
+
+async def test_review_receipt_retry_privacy_and_cleanup(clients):
+    org = await seed(clients)
+    response = await submit(clients, org, reason='  Helped the task.  ')
+    assert response.status_code == 201, response.text
+    retry = await submit(clients, org, usefulness='not_useful')
+    assert retry.status_code == 200
+    assert retry.json() == {'review_id': response.json()['review_id'], 'status': 'already_reviewed'}
+    row, = await rows()
+    assert (row.reason, row.usefulness, row.client, row.provider) == (
+        'Helped the task.', 'useful', 'review-test', 'example')
+    async with session_maker() as db:
+        assert list((await db.execute(select(Feedback))).scalars()) == []
+    assert (await clients.post('/reviews', json={'call_id': 'review-call',
+                                                'usefulness': 'useful'})).status_code == 404
+    assert (await clients.get('/admin/reviews')).status_code == 403
+    slug = next(item['slug'] for item in (await clients.get('/orgs')).json()
+                if item['org_id'] == org['org_id'])
+    deleted = await clients.delete(f"/orgs/{org['org_id']}", params={'confirm': slug},
+                                   headers={'X-Treg-Token': org['token']})
+    assert deleted.status_code == 200, deleted.text
+    assert await rows() == []
+
+
+async def test_missing_and_ledger_only_are_retryable(clients):
+    org = await seed(clients)
+    async with session_maker() as db:
+        db.add(LedgerEntry(id='review-ledger', org_id=org['org_id'], kind='settle',
+                           amount_micro=0, call_id='ledger-only', endpoint_id='example.search'))
+        await db.commit()
+    for ref in ['unknown', 'ledger-only']:
+        response = await submit(clients, org, call_id=ref)
+        assert response.status_code == 404
+        assert 'Retry shortly' in response.text
+    assert await rows() == []
+
+
+async def test_own_tool_cannot_be_reviewed(clients):
+    org = await seed(clients, endpoint_id=None)
+    assert (await submit(clients, org)).status_code == 400
+    assert await rows() == []
+
+
+@pytest.mark.parametrize('child', [True, False])
+async def test_routed_attribution(clients, child):
+    org = await seed(clients, endpoint_id='treg.search', provider='treg', credential_tier='routed')
+    async with session_maker() as db:
+        for ref, status, endpoint in [('review-call:r0', 503, 'failed.search'),
+                                      ('review-call:r1', 200 if child else 500, 'winner.search'),
+                                      ('reviewXcall:r2', 200, 'unrelated.search')]:
+            db.add(CallRecord(org_id=org['org_id'], user_email='tim@superdesign.dev',
+                              tool_name='example', method='GET', path='/', call_ref=ref,
+                              status_code=status, endpoint_id=endpoint, provider=endpoint.split('.')[0]))
+        await db.commit()
+    assert (await submit(clients, org)).status_code == 201
+    row, = await rows()
+    assert row.routed_via == 'treg.search'
+    assert row.endpoint_id == ('winner.search' if child else 'treg.search')
+    assert row.provider == ('winner' if child else 'treg')
+
+
+@pytest.mark.parametrize('rate,status,cached,invited', [
+    (1, 200, False, True), (0, 200, False, False),
+    (1, 500, False, False), (1, 200, True, False),
+])
+async def test_invited_recomputed(clients, monkeypatch, rate, status, cached, invited):
+    monkeypatch.setattr(get_settings(), 'review_sample_rate', rate)
+    org = await seed(clients, status_code=status, cached=cached)
+    assert (await submit(clients, org)).status_code == 201
+    row, = await rows()
+    assert row.invited is invited
+
+
+@pytest.mark.parametrize('fields', [
+    {'call_id': 'private@example.com'}, {'call_id': 'x' * 129}, {'call_id': ''},
+    {'usefulness': 'excellent'}, {'reason': '  '}, {'reason': 'x' * 201},
+    {'endpoint_id': 'spoofed'}, {'invited': True},
+])
+async def test_review_validation(clients, fields):
+    response = await clients.post('/reviews', json={'call_id': 'id', 'usefulness': 'partly'} | fields)
+    assert response.status_code == 422
+    assert await rows() == []
+
+
+async def test_admin_review_pagination(clients, monkeypatch):
+    org = await seed(clients)
+    await submit(clients, org)
+    async with session_maker() as db:
+        for ref, endpoint in [('second', 'example.search'), ('third', 'other.search')]:
+            db.add(CallRecord(org_id=org['org_id'], user_email='tim@superdesign.dev',
+                              tool_name='example', method='GET', path='/', status_code=200,
+                              call_ref=ref, endpoint_id=endpoint))
+        await db.commit()
+    await submit(clients, org, call_id='second')
+    await submit(clients, org, call_id='third')
+    monkeypatch.setattr(get_settings(), 'admin_token', 'review-admin')
+    headers = {'X-Treg-Token': 'review-admin'}
+    first = (await clients.get('/admin/reviews', headers=headers,
+                               params={'limit': 1, 'endpoint_id': 'example.search'})).json()
+    second = (await clients.get('/admin/reviews', headers=headers, params={
+        'limit': 1, 'endpoint_id': 'example.search', 'before': first['next_before'],
+    })).json()
+    assert first['items'][0]['id'] > second['items'][0]['id']
+    assert second['items'][0]['endpoint_id'] == 'example.search'
+    assert (await clients.get('/admin/reviews', headers=headers, params={'limit': 101})).status_code == 422

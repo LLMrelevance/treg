@@ -3,7 +3,10 @@ title: Feedback - private intake for problems and suggestions
 status: shipped
 sources:
   - src/treg/feedback_contract.py
-  - src/treg/domain/feedback.py
+  - src/treg/domain/feedback/__init__.py
+  - src/treg/domain/feedback/reports.py
+  - src/treg/domain/feedback/reviews.py
+  - src/treg/hints.py
   - src/treg/application/feedback.py
   - src/treg/routers/feedback.py
   - src/treg/alembic/versions/0025_feedback.py
@@ -67,3 +70,23 @@ caller identity, server-attributed endpoint/provider, optional `routed_via`, `in
 `ORG_SCOPED_MODELS` includes reviews for team deletion. Reviews never create feedback reports.
 `ReviewUsefulness` is `useful`, `partly`, `not_useful`, or `not_sure`; shared guidance asks agents
 to rate after using the result and continue their task.
+
+
+`application.feedback.submit_review` owns one transaction. It looks up call references only in
+its caller's team (audit and ledger); a missing audit record receives a retryable 404, including
+ledger-only evidence, which lacks status/provider/cache attribution. Own-tool records receive
+400. A routed parent uses its successful child's endpoint/provider when present, retaining the
+parent endpoint as `routed_via`; otherwise it retains parent attribution. `invited` is recomputed
+from a 2xx, non-cached record and the current review sampling rate. Retries return the original
+ID and `already_reviewed`; a unique index also arbitrates concurrent submissions. The sole writer
+is `domain.feedback.reviews`; the moved `reports` module preserves feedback behavior.
+
+`hints.sampled(kind, sample_id)` hashes `kind:sample_id` with SHA-256 into the same 64-bit bucket
+construction for both kinds. `TREG_REVIEW_SAMPLE_RATE` and `TREG_FEEDBACK_HINT_RATE` are bounded
+0..1 floats, default 0. Sampling is local and deterministic under the current configuration.
+
+`POST /reviews` uses `require_member` and returns 201 (`review_id`, `status: received`) on
+insertion or 200 on retry. `ReviewIn` rejects extra fields, requires a bounded `CallReference`
+and usefulness enum, and trims an optional 1-200 character reason with feedback's privacy rules.
+`GET /admin/reviews` is superadmin-only, uses the admin pool, and provides bounded descending-ID
+pagination with optional `endpoint_id`. It is excluded from OpenAPI; there is no team read route.
