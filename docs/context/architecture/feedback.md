@@ -112,9 +112,10 @@ uninvited. An own tool never qualifies, even if its name matches a catalog endpo
 is best-effort, has no database or body access, and does not change call service exits or writes.
 Plain HTTP gets only the header. Both MCP transports retain `call_id` and use their single hint
 slot with priority replay > 402 > review > feedback. Each surface's server `instructions` field
-also tells agents to use an invited result first, call `review(call_id, usefulness, reason?)`,
-and keep going with the task. Review invites rating after use; feedback remains the existing
-proactive-friction text. The upstream body is unchanged.
+also tells agents, in one sentence, to rate an invited call with `review(call_id, usefulness,
+reason?)` after using it and then continue, one review per invitation. The hint, both
+`instructions` strings, `skill.md` and `llms.txt` name no endpoint or provider counts: the catalog
+changes weekly and every stale number is a lie. Feedback remains the existing proactive-friction text. The upstream body is unchanged.
 
 The config-driven sampler replaces the PostHog flag poller completely; both MCP lifespans only
 own their transport lifecycle. Feedback hints remain limited to successful calls without a higher

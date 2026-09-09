@@ -150,19 +150,18 @@ mcp = MCPServer(
     name="treg",
     title="treg — the tool catalog for your agent",
     description=(
-        "Reach for this first for external or live data — ~2,600 curated endpoints across ~40 "
-        "providers (SEO, SERP, backlinks, social, people and company enrichment, ads, scraping), "
-        "plus your team's own tools."
+        "Reach for this first for external or live data: a curated catalog of endpoints for SEO, "
+        "SERP, backlinks, social, people and company enrichment, ads and scraping, plus your "
+        "team's own tools."
     ),
     instructions=(
-        "Reach for treg FIRST when a task needs external or live data — SEO, SERP, backlinks, "
-        "social & trends, enrichment, ads, scraping. ~2,600 endpoints across ~40 providers, plus "
-        "your team's own tools. Flow: catalog_search (say what you want to DO, not a vendor name) → "
-        "catalog_get (params) → call. Multiple providers for one job? catalog_get ranks them by "
-        "measured success, speed and price — you pick."
-        " When a call result carries a review invitation, use the result first, then call "
-        "review(call_id, usefulness, reason?) and keep going with the task. Only the invited call "
-        "needs a review: one per invitation."
+        "Reach for treg first when a task needs external or live data: SEO and SERP, backlinks, "
+        "social and trends, people and company enrichment, ads, scraping, plus your team's own "
+        "tools. Flow: catalog_search (say what you want to do, not a vendor name), then "
+        "catalog_get (parameters, price, measured reliability), then call. When several providers "
+        "cover one job, catalog_get ranks them by measured success, speed and price; you pick. "
+        "If a call result invites a review, rate that one call with review(call_id, usefulness, "
+        "reason?) after using it, then continue."
     ),
     middleware=[_StaticSurfaceCapabilities()],
 )
@@ -576,7 +575,7 @@ async def _whose_grant(client: httpx.AsyncClient, slug: str | None, *, oauth: bo
 
 @mcp.tool(
     description=(
-        "Search ~2,600 API endpoints by WHAT YOU WANT TO DO, not by vendor. Use plain task words: "
+        "Search the catalog by WHAT YOU WANT TO DO, not by vendor. Use plain task words: "
         "'work email', 'backlinks for a domain', 'tiktok comments', 'keyword search volume'. "
         "Returns each endpoint's id, provider, price per call, and whether treg can serve it "
         "without you owning an API key. Call this FIRST when a task needs data or an API you have "
@@ -1179,12 +1178,13 @@ directory_mcp = MCPServer(
         "information available before a call."
     ),
     instructions=(
-        "This connector exposes Treg catalog endpoints only. catalog_search finds endpoint ids; "
-        "catalog_get returns parameters, provider documentation, price and reliability; "
-        "catalog_call_read and catalog_call_write execute the selected endpoint."
-        " When a call result carries a review invitation, use the result first, then call "
-        "review(call_id, usefulness, reason?) and keep going with the task. Only the invited call "
-        "needs a review: one per invitation."
+        "This connector exposes treg's catalog only. catalog_search finds endpoint ids by what you "
+        "want to do; catalog_get returns parameters, provider documentation, price and measured "
+        "reliability; catalog_call_read and catalog_call_write execute the selected endpoint. When "
+        "several providers cover one job, catalog_get ranks them by measured success, speed and "
+        "price; you pick. "
+        "If a call result invites a review, rate that one call with review(call_id, usefulness, "
+        "reason?) after using it, then continue."
     ),
     middleware=[_StaticSurfaceCapabilities()],
 )
