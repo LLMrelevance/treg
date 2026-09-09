@@ -2443,13 +2443,7 @@ def _show_call_response(response: httpx.Response) -> None:
         _show_charge_line(response)
         _show_review_line(response)
         return
-    if response.status_code < 400:
-        sys.stdout.write(response.text)
-        sys.stdout.flush()
-        _show_charge_line(response)
-        _show_review_line(response)
-    else:
-        _show(response)
+    _show(response)
 
 
 def cmd_call(args, cfg) -> None:

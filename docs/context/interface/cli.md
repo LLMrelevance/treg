@@ -30,8 +30,8 @@ failures report an unconfirmed outcome, not a definite failure. Bare `treg feedb
 contract's enum and description with MCP. It validates the reference and trimmed reason locally,
 posts to `/reviews`, prints a receipt, and emits structured errors without echoing rejected input.
 A transport failure explicitly leaves the outcome unconfirmed. `_show_review_line`, beside the
-charge line, prints the sampled `X-Treg-Review: requested` invitation only on stderr. Successful
-call responses retain their body formatting on stdout, including JSON whitespace.
+charge line, prints the sampled `X-Treg-Review: requested` invitation only on stderr. Call responses
+retain the existing `_show` formatting on stdout, including pretty-printed JSON.
 
 ## Instagram grants
 

@@ -70,7 +70,7 @@ def test_invitation_only_on_stderr(capsys, requested):
     })
     cli._show_call_response(response)
     output = capsys.readouterr()
-    assert output.out == 'raw upstream text'
+    assert output.out == 'raw upstream text\n'
     assert ('treg review call-id' in output.err) is requested
 
 
@@ -81,11 +81,11 @@ def test_cli_review_help_shares_description():
     assert REVIEW_DESCRIPTION in sub.choices['review'].format_help().replace('\n', ' ') or sub.choices['review'].description == REVIEW_DESCRIPTION
 
 
-def test_invitation_preserves_json_bytes(capsys):
+def test_invitation_preserves_pretty_printed_json(capsys):
     body = '{"items": [1,  2]}\n'
     cli._show_call_response(httpx.Response(200, text=body, headers={
         'content-type': 'application/json', 'X-Treg-Call-Id': 'call-id', 'X-Treg-Review': 'requested',
     }))
     output = capsys.readouterr()
-    assert output.out == body
+    assert output.out == json.dumps(json.loads(body), indent=2) + "\n"
     assert 'treg review call-id' in output.err
