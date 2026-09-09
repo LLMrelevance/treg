@@ -471,7 +471,10 @@ the deferred-settlement design. `produces` maps response JSON paths to provider-
 kinds; `requires` binds a path/query parameter to one of those kinds. On treg's shared key, a 2xx
 producer records the opaque id for the caller org, and a consumer is refused before relay unless the
 same org owns that provider/kind/id tuple. This covers Apify run/dataset ids, Bright Data snapshot
-ids, and CompanyEnrich bulk job ids without changing their billing behavior. The validator requires
+ids, CompanyEnrich bulk job ids and LeadsForge enrichment/followers job ids without changing their
+billing behavior. Ownership is only as trustworthy as the producer's answer: a provider that dedupes
+on `Idempotency-Key` would hand one org another's job under a shared label, which is why the relay
+re-scopes that header per org on treg's key ([proxy-model](proxy-model.md)). The validator requires
 declared parameters and exact non-empty `{kind, path}` / `{kind, param}` shapes. BYOK does not use
 this metadata because the provider account itself belongs to the caller.
 Formal descriptors also materialize their poll/fetch ids under endpoint-namespaced resource kinds;

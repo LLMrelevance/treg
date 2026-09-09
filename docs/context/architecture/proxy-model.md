@@ -84,6 +84,13 @@ incl. duplicates, headers, cookies, body bytes):
 Faithfulness mechanics inside `relay()`:
 - request headers rebuilt from `UpstreamRequest.raw_headers` into an `httpx.Headers` multidict (preserves
   duplicate headers / cookies); injection (`headers[name] = v`) overwrites only the named one.
+- on the platform tier only, `service` first passes the raw headers through
+  `relay.scope_shared_idempotency_key`, which replaces the caller's `Idempotency-Key` with a digest of
+  (org, label). Every org shares one provider account on treg's key, and a provider that honors the
+  header (LeadsForge does) would otherwise return org A's job to org B under the same label — and
+  `resource_ownership.produces` would then record A's job id as B's. Treg's own idempotency table
+  already replays a caller's answer for the same label, so the caller loses nothing. A team's own key
+  relays the header verbatim: that account is theirs.
 - query as the router-captured ordered pairs in `UpstreamRequest.query_items` (keeps duplicate keys
   like `?tag=a&tag=b`).
 - path rebuilt from `request.scope["raw_path"]` (in `call_tool`), not Starlette's URL-decoded path
