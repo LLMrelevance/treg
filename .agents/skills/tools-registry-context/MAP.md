@@ -85,6 +85,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/application/call/route.py` | architecture/catalog.md, architecture/import-boundaries.md |
 | `src/treg/application/call/service.py` | architecture/archive.md, architecture/import-boundaries.md, architecture/instagram-oauth.md, architecture/money.md, architecture/proxy-model.md, interface/api.md |
 | `src/treg/application/call/settle.py` | architecture/import-boundaries.md, architecture/money.md, architecture/proxy-model.md, interface/api.md |
+| `src/treg/application/call/sumble.py` | architecture/sumble.md |
 | `src/treg/application/call/types.py` | architecture/import-boundaries.md, architecture/proxy-model.md, interface/api.md |
 | `src/treg/application/connect.py` | architecture/auth-secrets.md, architecture/composition.md, guides/expanding-a-category.md, interface/api.md |
 | `src/treg/application/feedback.py` | architecture/feedback.md |
@@ -165,6 +166,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/catalog/examples/quickenrich.x.industries.json` | architecture/catalog.md |
 | `src/treg/catalog/examples/quickenrich.x.revenue-ranges.json` | architecture/catalog.md |
 | `src/treg/catalog/examples/replicate.image-gen.flux-schnell.json` | architecture/catalog.md |
+| `src/treg/catalog/examples/sumble.organizations.json` | architecture/sumble.md |
 | `src/treg/catalog/examples/tomba.people.email.verify.json` | architecture/catalog.md |
 | `src/treg/catalog/examples/trykitt.people.email.find.json` | architecture/catalog.md |
 | `src/treg/catalog/examples/trykitt.people.email.verify.json` | architecture/catalog.md |
@@ -185,6 +187,8 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/catalog/quickenrich.yaml` | architecture/catalog.md |
 | `src/treg/catalog/replicate.extended.yaml` | architecture/catalog.md |
 | `src/treg/catalog/replicate.yaml` | architecture/catalog.md |
+| `src/treg/catalog/sumble.extended.yaml` | architecture/sumble.md |
+| `src/treg/catalog/sumble.yaml` | architecture/sumble.md |
 | `src/treg/catalog/tikhub.extended.yaml` | architecture/catalog.md |
 | `src/treg/catalog/tomba.yaml` | architecture/catalog.md, architecture/money.md |
 | `src/treg/catalog/trykitt.yaml` | architecture/catalog.md |
@@ -308,6 +312,7 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/web/landing.html` | interface/seo.md |
 | `src/treg/web/llms.txt` | interface/seo.md |
 | `src/treg/web/logos/contactout.svg` | architecture/contactout.md |
+| `src/treg/web/logos/sumble.svg` | architecture/sumble.md |
 | `src/treg/web/media/astra/page.css` | interface/seo.md |
 | `src/treg/web/media/astra/page.js` | interface/seo.md |
 | `src/treg/web/people-search.html` | interface/seo.md |
@@ -360,6 +365,7 @@ Regenerate via `scripts/build-map.py`.
 | `tests/test_reviews.py` | architecture/feedback.md |
 | `tests/test_router_dependencies.py` | architecture/multi-tenancy.md |
 | `tests/test_routing.py` | architecture/catalog.md, architecture/contactout.md |
+| `tests/test_sumble.py` | architecture/sumble.md |
 | `tests/test_tag_billing.py` | architecture/proxy-model.md |
 | `tests/test_tag_billing_adversarial.py` | architecture/proxy-model.md |
 | `tests/test_token_revocation.py` | architecture/multi-tenancy.md |
@@ -384,6 +390,7 @@ Regenerate via `scripts/build-map.py`.
 | `architecture/money.md` | `__init__.py`, `settlement.py`, `__init__.py`, `models.py`, `billing.py`, `idempotency.py`, `intake.py`, `resolve.py`, `service.py`, `reserve.py`, `settle.py`, `tomba.yaml`, `asynctasks.py`, `0017_async_task_record.py`, `0018_async_resource_ownership.py`, `0019_async_poll_failures.py`, `referrals.py`, `budgets.py`, `__init__.py`, `stripe.py`, `reconcile.py`, `referrals.py`, `api.py`, `signup.py`, `admin.py`, `billing.py`, `call.py`, `orgs.py`, `referrals.py`, `test_call_architecture.py`, `test_asynctasks.py` |
 | `architecture/multi-tenancy.md` | `models.py`, `api.py`, `caller_metadata.py`, `auth.py`, `asynctasks.py`, `resolve.py`, `signup.py`, `access.py`, `budgets.py`, `publicdemo.py`, `teams.py`, `usage.py`, `access.py`, `session.py`, `test_auth.py`, `test_token_revocation.py`, `auth.py`, `orgs.py`, `resources.py`, `bundles.py`, `db.py`, `0017_async_task_record.py`, `0018_async_resource_ownership.py`, `test_router_dependencies.py`, `test_asynctasks.py` |
 | `architecture/proxy-model.md` | `relay.py`, `ssrf.py`, `api.py`, `authorize.py`, `idempotency.py`, `intake.py`, `resolve.py`, `reserve.py`, `settle.py`, `evidence.py`, `service.py`, `types.py`, `asynctasks.py`, `client_identity.py`, `call_surface.py`, `sandbox_identity.py`, `access.py`, `publicdemo.py`, `usage.py`, `call.py`, `test_call_application_contract.py`, `test_call_cancellation.py`, `test_error_capture.py`, `test_marketplace_call.py`, `test_oauth_billed.py`, `test_passthrough.py`, `test_tag_billing.py`, `test_tag_billing_adversarial.py`, `test_call_architecture.py`, `test_asynctasks.py` |
+| `architecture/sumble.md` | `sumble.yaml`, `sumble.extended.yaml`, `sumble.organizations.json`, `sumble.py`, `test_sumble.py`, `sumble.svg` |
 | `architecture/super-admin.md` | `api.py`, `admin.py`, `access.py`, `config.py` |
 | `foundation/charter.md` | `2026-06-30-jason-tools-registry.md`, `README.md` |
 | `guides/expanding-a-category.md` | `oauth_providers.py`, `authorization.py`, `oauth_flow.py`, `oauth_exchange.py`, `connect.py`, `connections.py`, `config.py` |

@@ -553,6 +553,10 @@ def _marketplace_pricing(
     """
     if not cost:
         return 0, 0
+    if provider == "sumble" and cost.get("sumble"):
+        from . import sumble
+        credit = _usd_to_micro(float(cost.get("usd") or 0) * int(cost.get("per") or 1))
+        return sumble.estimate(cost["sumble"], _json_object(body)) * credit, credit
     if provider == "contactout":
         from . import contactout
         request = _json_object(body) if body else dict(query.multi_items())
@@ -1356,6 +1360,9 @@ async def _resolve_marketplace_call(
     async_owner_call_id = None
     if cost is not None:
         _enforce_platform_request(ep, body)
+        if service == "sumble":
+            from . import sumble
+            sumble.enforce(ep, _strict_json_object(body, ep["id"]) if has_body else {}, query)
         if service == "contactout":
             # Fixed catalog splits must not silently fall into ContactOut's personal+work default.
             inputs = ep.get("input") or {}

@@ -577,6 +577,16 @@ adapters:
           location: "join(company.locations.headquarters.city.name, company.locations.headquarters.country.name)",
           linkedin_url: company.socials.linkedin.url}
     miss: "company.about.name == null"
+  sumble.organizations:
+    test_identity: {domain: stripe.com}
+    accepts: [[domain], [name]]
+    in: {}
+    in_expr: {body.organizations: "list(obj('url', domain, 'name', name))"}
+    const: {body.select: {attributes: [id, name, url, employee_count, industry]}}
+    cost_units: "3"
+    out: {name: "organizations[0].attributes.name", domain: "organizations[0].attributes.url",
+          employees: "organizations[0].attributes.employee_count", industry: "organizations[0].attributes.industry"}
+    miss: "matched_count == 0"
   hunter.companies.enrich:
     accepts: [[domain]]
     in:  {domain: queryParams.domain}

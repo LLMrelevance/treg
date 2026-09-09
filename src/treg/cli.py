@@ -4660,6 +4660,9 @@ def _cost_label(cost) -> str:
     """A price you can scan in a column: "$0.001/success", "free", "quota rows"."""
     if not isinstance(cost, dict):
         return "-"
+    if cost.get("display_unit") and cost.get("display_usd") is not None:
+        return (f"${cost['display_usd']:.3g}" + cost.get("display_suffix", "")
+                + "/" + cost["display_unit"])
     kind = (cost.get("type") or "").replace("_", " ")
     value, currency = cost.get("value"), cost.get("currency") or ""
     if value in (None, "") and isinstance(cost.get("table"), list):
@@ -4881,6 +4884,9 @@ def _cost_usd(cost: dict | None) -> str:
     column, so USD stands alone here; `treg catalog get` carries the native amount alongside it."""
     if not isinstance(cost, dict):
         return "-"
+    if cost.get("display_unit") and cost.get("display_usd") is not None:
+        return (f"${cost['display_usd']:.3g}" + cost.get("display_suffix", "")
+                + "/" + cost["display_unit"])
     usd = cost.get("usd")
     if usd is None:
         # no rate for this unit (a provider that publishes no per-credit price): the native
