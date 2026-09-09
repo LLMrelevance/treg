@@ -164,12 +164,16 @@ with synthetic values. Shared billing tests use small inline payloads, following
 provider tests. Dollar provenance stays documented: the live meter
 proved credit counts, not cash spent on the free account.
 
-The list rate in `fx.yaml` is the requested treg rate of $0.0048 per credit, independent of upstream plan.
+The base list rate in `fx.yaml` is $0.004834 per credit before configured platform margin.
+It uses the purchased Starter monthly plan: $29 / 6,000 credits, rounded up to 4,834 micro-USD.
+This assumes all monthly credits are used; unused credits increase effective cost. Direct tools,
+settlement and routed estimates share this rate.
 Free/Starter/Growth are subscription allowances; GTM Unlimited is a subscription with no finite
 API allowance. The free subscription does not make billed enrichment a treg trial-priced product.
 See [money](money.md) for reservation/settlement and [capacity](../ops/capacity.md) for renewal
 and API balance reporting. Unlimited-plan status requires live verification; missing balance data remains unknown.
-No subscription was purchased and production was not enabled.
+Starter has been purchased. Six routed live checks on Starter used three credits and confirmed
+the existing response and credit rules. This price change does not enable production.
 
 ## MillionVerifier email verification (2026-09-08)
 
@@ -737,12 +741,6 @@ when a rate moves. `cost.usd` is added at SERVE time by `Catalog.cost_view` from
 rate refresh re-prices the whole catalog without touching a provider file. Clients (dashboard cards,
 `treg catalog search`, `treg catalog get`) lead with `usd` because a column is only comparable in
 one unit, and fall back to the native amount when `usd` is null.
-
-Optional `cost.display_units` describes alternative units at the same numeric rate. Each row has
-`condition`, a short `unit`, and optional longer `detail`. The dashboard uses these for the compact
-price label, tooltip and expanded price rules, with amounts from `cost.usd`. This is display metadata;
-reserve, settlement and routing estimates still use their existing pricing rules. QuickEnrich domain
-search uses page without title and contact with title; empty pages remain free.
 
 The full block:
 
@@ -1521,7 +1519,8 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
 - **The generated row** — `routing/synthetic.py`: every capability with ≥ 2 verified children gets
   `treg.<capability>` (`provider: treg`, `kind: routed`, `POST /<capability>`, `input` = the
   contract, `cost` = the children's range, `routed_children`). Never hand-written; not in any
-  provider file. `catalog_get` on it returns the contract and the ranked **plan** (the quote) —
+  provider file.
+  `catalog_get` on it returns the contract and the ranked **plan** (the quote) —
   nothing is reserved.
 - **Ranking** — `routing/plan.py`: own keys (tier 2) first at cost 0; then
   `expected_cost_per_hit = cost_at(request) × P(billed) / P(hit)` where `cost_at` prices *this*

@@ -1354,7 +1354,7 @@ async def test_routed_enrichment_adapter_requests_and_usage(
     assert result['output'][field]
     assert result['raw'] == raw
     assert seen[0][2:] == (query, body)
-    assert before - await _balance(clients) == credits * 4800
+    assert before - await _balance(clients) == credits * 4834
     if endpoint == 'people.search':
         assert 'email' not in result['output']['people'][0]
         assert result['output']['next_cursor'] == 'next'
@@ -1373,7 +1373,7 @@ def test_search_adapters_preserve_filters_and_fixed_page_quote():
     from treg.domain.catalog.routing.contracts import adapter_accepts
     cat = catalog_store.load()
     ad = cat.adapters['quickenrich.people.search.domain']
-    for title, expected in [(None, 4800), ('CEO', 96000)]:
+    for title, expected in [(None, 4834), ('CEO', 96680)]:
         given = {'company_domain': 'example.com', 'limit': 1}
         if title:
             given['title'] = title
@@ -1424,7 +1424,7 @@ async def test_routed_discovery_miss_tries_domain_search(clients, platform_on, m
     assert response.status_code == 200, response.text
     assert response.json()['_treg']['served_by'] == 'quickenrich.people.search.domain'
     assert [s[1] for s in seen] == ['POST', 'GET']
-    assert before - await _balance(clients) == 4800
+    assert before - await _balance(clients) == 4834
 
 
 async def test_routed_contact_miss_uses_next_provider(clients, enrichment_on, monkeypatch):
@@ -1445,8 +1445,32 @@ async def test_routed_contact_miss_uses_next_provider(clients, enrichment_on, mo
     assert before - await _balance(clients) == 8900
 
 
-@pytest.mark.parametrize('expression,expected', [('0', 0), ('2', 9600), ('-1', None), ('true', None), ("'2'", None)])
+@pytest.mark.parametrize('expression,expected', [('0', 0), ('2', 9668), ('-1', None), ('true', None), ("'2'", None)])
 def test_adapter_unit_quote_requires_nonnegative_integer(expression, expected):
     from dataclasses import replace
     ad = replace(catalog_store.load().adapters['quickenrich.people.search.domain'], cost_units=expression)
-    assert cost_at({'usd': 0.0048}, {}, ad) == expected
+    assert cost_at({'usd': 0.004834}, {}, ad) == expected
+
+
+@pytest.mark.parametrize('endpoint,given,expected', [
+    ('people.email.find', {'first_name': 'Example', 'last_name': 'Person', 'domain': 'example.com'}, 4834),
+    ('people.phone.find', {'linkedin_url': 'https://linkedin.com/in/example'}, 4834),
+    ('people.enrich', {'email': 'person@example.com'}, 4834),
+    ('people.search', {'company_domain': 'example.com', 'limit': 10}, 0),
+    ('people.search.domain', {'company_domain': 'example.com', 'limit': 1}, 4834),
+    ('people.search.domain', {'company_domain': 'example.com', 'title': 'CEO', 'limit': 1}, 96680),
+    ('companies.search', {'domain': 'example.com'}, 48340),
+    ('companies.search', {'domain': 'example.com', 'limit': 1}, 4834),
+    ('companies.search', {'domain': 'example.com', 'limit': 100}, 483400),
+])
+def test_enrichment_route_quote_matches_direct_reservation(endpoint, given, expected):
+    from treg.application.call.resolve import _marketplace_pricing
+    from treg.domain.catalog.routing.contracts import adapter_accepts
+    cat = catalog_store.load()
+    ep = cat.by_id['quickenrich.' + endpoint]
+    ad = cat.adapters[ep['id']]
+    ident, _ = canonical_identity(cat.contracts[ep['capability']], given)
+    query, body = ad.to_upstream(ident, adapter_accepts(ad, ident))
+    cost = cat.cost_view(ep['cost'], ep['provider'])
+    direct, _ = _marketplace_pricing(ep['provider'], ep['id'], cost, query, json.dumps(body).encode())
+    assert direct == cost_at(cost, ident, ad) == expected

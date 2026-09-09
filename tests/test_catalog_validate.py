@@ -493,19 +493,3 @@ def test_async_descriptor_rejects_a_retired_or_broken_poll_target():
     validator.check_async_descriptor(_valid_async(), "demo.yaml:submit", "demo", index,
                                      {"type": "per_success"}, errors)
     assert any("marked 'retired'" in e for e in errors)
-
-
-@pytest.mark.parametrize('rows,valid', [
-    ([{'condition': 'Without filter', 'unit': 'page', 'detail': 'nonempty page'},
-      {'condition': 'With filter', 'unit': 'contact'}], True),
-    ([], False), (None, False), ('page', False), ([None], False),
-    ([{'condition': 'With filter', 'unit': ''}], False),
-    ([{'condition': 'With filter', 'unit': 'contact', 'detail': 12}], False),
-])
-def test_alternative_price_units_require_readable_labels(rows, valid):
-    cost = {'type': 'per_result', 'value': 1, 'currency': 'USD', 'per': 1,
-            'unit': 'record', 'source': 'docs', 'source_url': 'https://example.com/pricing',
-            'checked': '2026-09-09', 'confidence': 'documented', 'display_units': rows}
-    errors = []
-    validator.check_cost(cost, 'catalog:test', errors, [])
-    assert (not errors) is valid

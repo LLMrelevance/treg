@@ -5581,12 +5581,6 @@ createApp({
       return s.replace(/0+$/,'').replace(/\.$/,''); },
     priceUnit(type){ return {per_call:'call', per_success:'success', per_result:'result', quota_rows:'row'}[type]
                         || String(type||'').replace(/_/g,' '); },
-    costUnit(c){ return c&&c.display_units&&c.display_units.length
-      ? [...new Set(c.display_units.map(r=>r.unit))].join(' or ')
-      : (c&&c.type==='quota_rows'?'call':this.priceUnit(c&&c.type)); },
-    costRules(c){ if(!c||!Array.isArray(c.display_units)) return [];
-      const amount=typeof c.usd==='number'?'$'+this.usdNum(c.usd):this.nativeAmount(c);
-      return c.display_units.map(r=>r.condition+': '+amount+' per '+(r.detail||r.unit)+'.'); },
     // "¥0.10" — the provider's own figure, shown next to the converted one, never instead of it.
     nativeAmount(c){
       if(!c || c.currency==='USD' || c.value==null) return '';
@@ -5770,7 +5764,6 @@ createApp({
       if(c && c.type!=='free' && c.value==null)
         out.push('Billed per '+this.priceUnit(c.type)+' — the provider does not publish the rate, so '
                  +'the number is in your plan on their dashboard.');
-      out.push(...this.costRules(c));
       if(c && c.note) out.push(c.note);
       const limits=this.provFact(e.provider,'limits'); if(limits) out.push('Limits: '+limits);
       const pricing=this.provFact(e.provider,'pricing_url'); if(pricing) out.push('Rate card: '+pricing);
@@ -5810,15 +5803,15 @@ createApp({
         const n=Number(c.value); return n+' row'+(n===1?'':'s')+'/call'; }
       // A published number the FX table can't convert (an unknown currency) still beats silence —
       // fall back to the native figure rather than dropping the price entirely.
-      if(typeof c.usd!=='number') return this.nativeAmount(c)+'/'+this.costUnit(c);
-      const unit=this.costUnit(c);
+      if(typeof c.usd!=='number') return this.nativeAmount(c)+'/'+this.priceUnit(c.type);
+      const unit=(c.type==='quota_rows'?'call':this.priceUnit(c.type));
       // A price table (generation models) is a range: cheapest row up to the validated ceiling.
       if(typeof c.usd_min==='number' && c.usd_min<c.usd) return '$'+this.usdNum(c.usd_min)+'-$'+this.usdNum(c.usd)+'/'+unit;
       return '$'+this.usdNum(c.usd)+'/'+unit; },
     costTitle(c){ if(!c) return 'The catalog has no price for this endpoint';
       const nat=this.nativeAmount(c);
-      return [...this.costRules(c), c.note,
-              nat ? 'billed as '+nat+'/'+this.costUnit(c)+', converted at the catalog’s FX rate' : '',
+      return [c.note,
+              nat ? 'billed as '+nat+'/'+this.priceUnit(c.type)+', converted at the catalog’s FX rate' : '',
               c.value==null&&c.type!=='free' ? 'billed '+c.type.replace(/_/g,' ')+' — the provider does not publish the rate, check your plan in their dashboard' : ''].filter(Boolean).join(' — ')
         || 'What this endpoint costs at the provider'; },
     openDetail(kind, name, fromPop){ this.resetConfirms();

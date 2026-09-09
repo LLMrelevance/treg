@@ -1,9 +1,9 @@
 # Full surface: six authenticated data routes here; five public lookup utilities in quickenrich.extended.yaml.
 # No account balance or email verification endpoint exists in the published API.
-# Live key in hand: free subscription on app.quickenrich.io; api.quickenrich.io is not required.
-# Platform list rate remains $0.0048/credit even while using a free subscription. BYOK is never metered.
+# Live key verified on Free and Starter at app.quickenrich.io; api.quickenrich.io is not required.
+# Platform base rate: $0.004834/credit, from Starter $29/6000 rounded up to micro-USD. BYOK is never metered.
 # Pricing plans: Free/Starter/Growth renew credits monthly; GTM Unlimited has unlimited API credits.
-# No auto-top-up, prepaid packs, automatic upgrade or purchased subscription is implied.
+# No auto-top-up, prepaid packs or automatic upgrade.
 provider: quickenrich
 source:
   docs: https://app.quickenrich.io/docs
@@ -162,9 +162,6 @@ endpoints:
     source_url: https://app.quickenrich.io/docs
     checked: '2026-09-08'
     confidence: documented
-    display_units:
-    - {condition: Without title, unit: page, detail: nonempty page}
-    - {condition: With title, unit: contact, detail: contact with email or phone}
     note: 'Without title: one credit per nonempty page. With title: one per employee with email and/or phone (both
       together still one). Empty pages are free. Holds reserve at most 20 credits with title, one without.'
   docs_url: https://app.quickenrich.io/docs

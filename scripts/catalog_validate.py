@@ -470,15 +470,6 @@ def check_cost(cost: dict, where: str, errors: list[str], warnings: list[str],
     """
     if cost.get("type") not in COST_TYPES:
         fail(errors, where, f"cost.type missing or not one of {sorted(COST_TYPES)}")
-    if "display_units" in cost:
-        rows = cost["display_units"]
-        if not isinstance(rows, list) or not rows or any(
-            not isinstance(row, dict) or any(not isinstance(row.get(k), str) or not row[k].strip()
-                                              for k in ("condition", "unit"))
-            or ("detail" in row and (not isinstance(row["detail"], str) or not row["detail"].strip()))
-            for row in rows
-        ):
-            fail(errors, where, "cost.display_units must list nonempty condition/unit strings and optional detail")
     value, conf = cost.get("value"), cost.get("confidence")
     if conf is not None and conf not in CONFIDENCES:
         fail(errors, where, f"cost.confidence '{conf}' not one of {sorted(CONFIDENCES)}")

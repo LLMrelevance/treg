@@ -1910,9 +1910,9 @@ def test_tomba_unknown_page_size_does_not_guess_from_email_count(page_size):
     assert call_settle._observed_cost_micro(mk, body) is None
 
 
-@pytest.mark.parametrize('credits,expected', [(0, 0), (1, 4800), (6, 28800), (-1, None), (True, None), ('1', None), (float('inf'), None)])
+@pytest.mark.parametrize('credits,expected', [(0, 0), (1, 4834), (6, 29004), (-1, None), (True, None), ('1', None), (float('inf'), None)])
 def test_quickenrich_settles_reported_credits_at_frozen_rate(credits, expected):
-    mk = _mk('quickenrich', endpoint_id='quickenrich.people.email.find', cost_type='per_success', unit_micro=4800)
+    mk = _mk('quickenrich', endpoint_id='quickenrich.people.email.find', cost_type='per_success', unit_micro=4834)
     assert call_settle._observed_cost_micro(mk, json.dumps({'meta': {'credits_used': credits}}).encode()) == expected
 
 
@@ -1930,24 +1930,24 @@ def test_quickenrich_settles_reported_credits_at_frozen_rate(credits, expected):
     ('companies.search', [], '', 0),
 ])
 def test_quickenrich_fallback_counts_billable_results(endpoint, data, title, credits):
-    mk = _mk('quickenrich', endpoint_id='quickenrich.' + endpoint, cost_type='per_success', unit_micro=4800,
+    mk = _mk('quickenrich', endpoint_id='quickenrich.' + endpoint, cost_type='per_success', unit_micro=4834,
              request_data={'queryParams': {'title': title}})
-    assert call_settle._observed_cost_micro(mk, json.dumps({'success': True, 'data': data}).encode()) == credits * 4800
+    assert call_settle._observed_cost_micro(mk, json.dumps({'success': True, 'data': data}).encode()) == credits * 4834
 
 
 @pytest.mark.parametrize('endpoint,query,body,expected', [
-    ('people.search.domain', {}, {}, 4800),
-    ('people.search.domain', {'title': 'CEO'}, {}, 96000),
-    ('companies.search', {}, {}, 48000),
-    ('companies.search', {}, {'per_page': 1}, 4800),
-    ('companies.search', {}, {'per_page': 100}, 480000),
+    ('people.search.domain', {}, {}, 4834),
+    ('people.search.domain', {'title': 'CEO'}, {}, 96680),
+    ('companies.search', {}, {}, 48340),
+    ('companies.search', {}, {'per_page': 1}, 4834),
+    ('companies.search', {}, {'per_page': 100}, 483400),
 ])
 def test_quickenrich_reserves_real_page_size(endpoint, query, body, expected):
     cat = catalog_store.load()
     ep = cat.by_id['quickenrich.' + endpoint]
     cost = cat.cost_view(ep['cost'], 'quickenrich')
     estimate, unit = call_resolution._marketplace_pricing('quickenrich', ep['id'], cost, query, json.dumps(body).encode())
-    assert (estimate, unit) == (expected, 4800)
+    assert (estimate, unit) == (expected, 4834)
 
 
 async def test_quickenrich_platform_meter_and_free_discovery(clients, platform_on, monkeypatch):
@@ -1955,7 +1955,7 @@ async def test_quickenrich_platform_meter_and_free_discovery(clients, platform_o
     monkeypatch.setenv('TREG_PLATFORM_PROVIDERS', 'quickenrich')
     get_settings.cache_clear()
     before = await _balance(clients)
-    for status, credits, expected in [(200, 1, 4800), (200, 0, 0), (401, 1, 0), (429, 1, 0), (500, 1, 0)]:
+    for status, credits, expected in [(200, 1, 4834), (200, 0, 0), (401, 1, 0), (429, 1, 0), (500, 1, 0)]:
         raw = json.dumps({'success': status == 200, 'data': {}, 'meta': {'credits_used': credits}}).encode()
         monkeypatch.setattr(call_service, 'relay', _fake_relay(status, raw))
         response = await clients.get('/call/quickenrich.people.email.find?linkedin_url=https://linkedin.com/in/example')
@@ -1969,20 +1969,20 @@ async def test_quickenrich_platform_meter_and_free_discovery(clients, platform_o
 
 
 @pytest.mark.parametrize('endpoint,data,credits,expected', [
-    ('people.email.find', {'email': 'person@example.com'}, 1, 4800),
-    ('people.phone.find', {'employee_phone': '+15550101000'}, 1, 4800),
-    ('people.enrich', {'email': 'person@example.com'}, 1, 4800),
+    ('people.email.find', {'email': 'person@example.com'}, 1, 4834),
+    ('people.phone.find', {'employee_phone': '+15550101000'}, 1, 4834),
+    ('people.enrich', {'email': 'person@example.com'}, 1, 4834),
     ('people.email.find', [], 0, 0),
     ('people.phone.find', [], 0, 0),
-    ('people.search.domain', [{'email': 'person@example.com'}] * 20, 1, 4800),
-    ('people.search.domain', [{'email': 'person@example.com'}] * 6 + [{'email': 'N/A'}] * 2, 6, 28800),
-    ('companies.search', [{'company_name': 'Example'}], 1, 4800),
+    ('people.search.domain', [{'email': 'person@example.com'}] * 20, 1, 4834),
+    ('people.search.domain', [{'email': 'person@example.com'}] * 6 + [{'email': 'N/A'}] * 2, 6, 29004),
+    ('companies.search', [{'company_name': 'Example'}], 1, 4834),
     ('companies.search', [], 0, 0),
 ])
 def test_quickenrich_reported_usage_across_endpoints(endpoint, data, credits, expected):
     """Billing-relevant shapes from live checks; reported usage wins over result count."""
     body = json.dumps({'success': True, 'data': data, 'meta': {'credits_used': credits}}).encode()
-    mk = _mk('quickenrich', endpoint_id='quickenrich.' + endpoint, unit_micro=4800)
+    mk = _mk('quickenrich', endpoint_id='quickenrich.' + endpoint, unit_micro=4834)
     assert call_settle._observed_cost_micro(mk, body) == expected
 
 
