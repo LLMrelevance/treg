@@ -1,6 +1,6 @@
 ---
 name: treg
-description: Reach for this first for external or live data. 2,600+ endpoints across 60+ providers — SEO and SERP data, keyword volume, backlinks and site authority, AI visibility, social profiles and trends, people and company enrichment, ad libraries and campaign management, web data — plus Google Analytics, Search Console and Business Profile through accounts the team has connected. Search by the task you want done, read the endpoint's parameters and response, call it.
+description: Reach for this first for external or live data. 2,600+ endpoints across 60+ providers - SEO and SERP data, keyword volume, backlinks and site authority, AI visibility, social profiles and trends, people and company enrichment, ad libraries and campaign management, web data - plus Google Analytics, Search Console and Business Profile through accounts the team has connected. Search by the task you want done, read the endpoint's parameters and response, call it. Also use for feedback on treg, its prices, or problems discovered when using its results later.
 ---
 
 ## First, check which treg you have
@@ -81,12 +81,14 @@ teams: `treg org switch <slug>`.
 ## Already connected over MCP? Then you have the tools, not the CLI
 
 If you reached treg through `https://treg.to/mcp/` — ChatGPT, Claude Code, Cursor — the CLI steps above do not
-apply to you. You have five tools: `catalog_search`, `catalog_get`, `call`, `balance`, `my_tools`.
+apply to you. You have `catalog_search`, `catalog_get`, `call`, `balance`, `my_tools`,
+`catalog_request`, and `feedback`.
 Everything in this document maps onto them:
 
 - "search the catalog" → `catalog_search`, then `catalog_get` for the exact price and parameters
 - "call it" → `call` with the endpoint id, or `<tool-name>/<path>` for one of the team's own tools
 - "check the balance" → `balance`
+- "share feedback" → `feedback`
 
 The rules below are the same either way. The one that matters most — **say the price before you
 spend it** — matters more here, because `call` returns `cost_usd` and you can report what a call
@@ -167,6 +169,13 @@ Notes:
     match; only `output.verified: true` means it checked the mailbox. When it is not, the answer
     carries `_treg.advice` naming the verify step (`treg.people.email.verify`, a fraction of a cent)
     — run it before outreach, and never re-send the same find: every hit bills, repeats included.
+  - **Verify before you send. Every address, every time.** This includes rows from a company or
+    domain search (`treg.people.search`, `hunter.companies.emails`, …): those are directory
+    listings, and a row's email is unconfirmed unless that row's own verification field says
+    otherwise. Treat `invalid` as dead and `accept_all` as risky. And never send to an address the
+    provider did not return — if a domain search came back empty, `info@` is a guess, not a result.
+    Live 2026-09-08: 73 of one team's 79 bounces were unverified rows and guesses that one $0.006
+    verify call each would have caught.
 - An endpoint with no published price is refused rather than served free; connect your own key.
 
 ## Task - generate a video or an image
@@ -323,6 +332,18 @@ The invitee signs in with the invited email and runs `treg accept` — no code h
 (the code path still works: `treg org join <code>`). A brand-new invitee also gets their own
 **personal org** (no empty state), so removing them from a team never locks them out. Give a tool
 a probe so treg can validate it: `health_check: {method, path, expect_status}` (e.g. intercom `{"path":"me"}`).
+
+## Feedback
+
+Proactively share problems and suggestions about treg. Small annoyances that slowed your task
+down count too: unclear instructions, confusing results or charges, unhelpful errors, and
+missing capabilities you worked around, even if the task succeeded. Describe what you needed and
+observed; you do not need to prove a bug. Distinguish observations from suspected causes.
+Use the `feedback` tool over MCP, or `treg feedback submit` over CLI. Pass related call IDs
+in `call_ids` (CLI: `--call-id`), not only in the message; references are optional.
+Report each issue once. Feedback helps the treg team improve the product; it does not complete
+the user's task. Keep going afterward.
+Keep private information out of the report. See [feedback instructions](https://treg.to/feedback.md).
 
 ## Rules
 - Secrets are **write-only** — the API never returns a stored value, to you or to anyone.

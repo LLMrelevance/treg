@@ -6,7 +6,7 @@ sources:
   - src/treg/application/arena.py
   - src/treg/routers/arena.py
   - src/treg/models.py
-  - src/treg/alembic/versions/0025_enrich_arena.py
+  - src/treg/alembic/versions/0026_enrich_arena.py
   - src/treg/domain/governance/teams.py
   - src/treg/routers/auth.py
   - src/treg/bootstrap.py

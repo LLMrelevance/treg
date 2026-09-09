@@ -1256,6 +1256,72 @@ HUNTER = OAuthProvider(
     probe_path="/account",  # free — consumes no search/verification/enrichment credits
 )
 
+TRYKITT = OAuthProvider(
+    service="trykitt",
+    display_name="Kitt AI",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="your Kitt AI API key",
+    token_header="x-api-key",
+    token_format="{secret}",
+    setup_url="https://admin.trykitt.ai/",
+    setup_action_label="Get your Kitt AI API key",
+    setup_steps=("Sign in to Kitt AI and open API Key in the sidebar.", "Copy your API key."),
+    setup_note="Find verified work emails or verify an existing address. Free API access has variable capacity; PAYG charges per found email and per verification, including unknown/catchall results.",
+    auth_uri="", token_uri="", scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="Enrichment",
+    summary="Find verified work emails and verify email deliverability, including catch-all addresses.",
+    base_url="https://api.trykitt.ai",
+    docs_url="https://documenter.getpostman.com/view/479833/2s93m62NHf",
+    probe_path="/credit",  # Live: valid zero balance is 200; garbage key is 401.
+)
+
+CONTACTOUT = OAuthProvider(
+    service="contactout", display_name="ContactOut", auth_kind="key",
+    token_label="API token", token_placeholder="your ContactOut API token",
+    token_header="token", token_format="{secret}",
+    setup_url="https://contactout.com/meeting",
+    setup_action_label="Get your ContactOut API token",
+    setup_steps=("Request API access from ContactOut and copy your API token.",),
+    setup_note="Your own key is billed by ContactOut, never metered by treg. Connection checks use the account stats endpoint.",
+    auth_uri="", token_uri="", scopes={}, client_id_setting="", client_secret_setting="",
+    category="Enrichment",
+    summary="Find work emails, personal emails and phones from LinkedIn; search people and companies.",
+    base_url="https://api.contactout.com", docs_url="https://api.contactout.com/",
+    probe_path="/v1/stats", token_ok_field="status_code", token_ok_value="200",
+    # Live: garbage token returns HTTP 401; the supplied platform token returns 200.
+)
+
+MILLIONVERIFIER = OAuthProvider(
+    service="millionverifier",
+    display_name="MillionVerifier",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="your MillionVerifier API key",
+    token_location="query",
+    token_param="api",
+    token_format="{secret}",
+    setup_url="https://app.millionverifier.com/api",
+    setup_action_label="Get your MillionVerifier API key",
+    setup_steps=(
+        "Sign in to MillionVerifier and open Account settings → API Keys.",
+        "Add an API key if needed, make sure it is active, and copy it.",
+    ),
+    setup_note="Prepaid credits never expire. Risky (unknown and catch-all) results receive automatic credit returns for eligible accounts; the credits check is free.",
+    auth_uri="", token_uri="",
+    scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="Enrichment",
+    summary="Verify email deliverability and identify catch-all, disposable and role addresses.",
+    base_url="https://api.millionverifier.com",
+    docs_url="https://developer.millionverifier.com/",
+    probe_path="/api/v3/credits",
+    # Live 2026-09-08: HTTP 200 {result: error, error: apikey_not_found} for a garbage key.
+    # Do not require a truthy credits balance: a valid exhausted account can still connect.
+    token_reject_field="error",
+)
+
 MINIMAX = OAuthProvider(
     service="minimax",
     display_name="MiniMax",
@@ -1870,6 +1936,45 @@ EXA = OAuthProvider(
     probe_path="/contents",
     probe_method="POST",
     probe_json={"urls": ["https://example.com"], "text": {"maxCharacters": 1}},
+)
+
+CLORO = OAuthProvider(
+    service="cloro",
+    display_name="cloro",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="sk_live_…",
+    # cloro reads the key from Authorization. It accepts "Bearer <key>", "ApiKey <key>" and the bare
+    # key; Bearer is the documented form, so that is the one treg sends. Header, so the key never
+    # lands in a logged URL. Keys are `sk_live_` / `sk_test_` + 32 hex characters.
+    setup_url="https://dashboard.cloro.dev",
+    setup_action_label="Get your cloro API key",
+    setup_steps=(
+        "Sign in to the cloro dashboard and open API keys.",
+        "Create a key and copy it — the full key is shown only once.",
+    ),
+    setup_note=(
+        "Every monitor call spends credits from your cloro balance (Google 5, AI Mode / Gemini / "
+        "Perplexity 6, ChatGPT / Copilot 7, each including the +2 sync surcharge; optional "
+        "include flags and US state targeting add more). The free plan grants 500 credits a "
+        "month. Connecting spends nothing — the probe is the free credit-balance route."
+    ),
+    auth_uri="", token_uri="",
+    scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="SEO",
+    summary=(
+        "Ask ChatGPT, Gemini, Copilot, Perplexity and Google AI Mode a prompt from any country and "
+        "read the answer, its cited sources and its shopping cards as structured data — plus "
+        "Google Search and Google News SERPs."
+    ),
+    base_url="https://api.cloro.dev",
+    docs_url="https://cloro.dev/docs/api-reference/introduction",
+    # Credit balance: free, charges nothing, and separates a bad key from a good one distinctly.
+    # A well-formed but unknown key answers 401 INVALID_OR_EXPIRED_API_KEY, a malformed one 401
+    # INVALID_API_KEY_FORMAT, and no header at all 401 MISSING_API_KEY (all verified live
+    # 2026-09-05). A valid key answers 200 with the balance.
+    probe_path="/v1/credits",
 )
 
 
@@ -2672,11 +2777,11 @@ REGISTRY: dict[str, OAuthProvider] = {
         GOOGLE_ADS, YOUTUBE,
         LINKEDIN, SLACK, X, TIKTOK, FACEBOOK, INSTAGRAM, META_ADS,
         # API-key providers
-        APOLLO, PDL, AKTA, HUNTER, CRUNCHBASE, MINIMAX, OPENROUTER, REPLICATE,
+        APOLLO, PDL, AKTA, HUNTER, TRYKITT, CONTACTOUT, MILLIONVERIFIER, CRUNCHBASE, MINIMAX, OPENROUTER, REPLICATE,
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,
         SCRAPECREATORS,
         # SEO API-key providers
-        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA,
+        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA, CLORO,
         # more Enrichment API-key providers
         LUSHA, CORESIGNAL, DIFFBOT, THECOMPANIESAPI, LEADMAGIC, FIBER_AI, CRUSTDATA, AVIATO,
         COMPANYENRICH, OCEANIO, TOMBA, PREDICTLEADS, FINDYMAIL, BRANDDEV, ICYPEAS, LEADSFORGE,

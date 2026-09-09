@@ -31,6 +31,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import webbrowser
@@ -41,6 +42,7 @@ from urllib.parse import parse_qsl, quote, urlsplit
 import httpx
 
 from . import agents as _agents
+from .feedback_contract import FEEDBACK_CATEGORIES, FEEDBACK_DESCRIPTION
 # One source of truth for the proxy's default port (help text below). Importing the module is cheap —
 # it pulls only stdlib plus httpx, which the CLI already has; `cryptography` stays lazy inside it.
 from .localproxy import DEFAULT_PORT as _PROXY_DEFAULT_PORT
@@ -4947,6 +4949,64 @@ def _catalog_search(query: str, args, cfg) -> None:
     _dim(f"\ntreg catalog get {rows[0]['id']}   # params, cost, example response")
 
 
+def _feedback_error(code: str, message: str, **details) -> None:
+    print(json.dumps({"error": code, "message": message, **details}))
+    raise SystemExit(1)
+
+
+def _feedback_request(cfg, method: str, path: str, **kwargs) -> None:
+    submitting = method == "POST"
+    uncertain = "Could not confirm whether feedback was saved. Check connectivity before submitting again."
+    try:
+        with _client(cfg) as client:
+            response = client.request(method, path, **kwargs)
+    except httpx.RequestError:
+        _feedback_error("submission_unconfirmed" if submitting else "request_failed",
+                        uncertain if submitting else "Could not retrieve feedback. Check connectivity and retry.")
+    # Validation responses can echo rejected input. Never print arbitrary response bodies on errors.
+    if response.status_code >= 400:
+        errors = {
+            401: ("authentication_required", "Sign in with `treg login`, or check the configured token."),
+            403: ("access_denied", "Check the active team and your token's permissions."),
+            404: ("not_found", "No feedback is available with this ID in the active team. Check the ID and team."),
+            422: ("invalid_feedback", "Check the fields with `treg feedback submit --help`. "
+                  "Messages must contain 1-2000 characters; at most 100 call IDs are allowed."),
+            429: ("rate_limited", "This team has reached its feedback submission limit. Try again later."),
+        }
+        code, message = errors.get(response.status_code, (
+            "submission_unconfirmed" if submitting else "request_failed",
+            uncertain if submitting else "Could not retrieve feedback. Try again later.",
+        ))
+        _feedback_error(code, message, http_status=response.status_code)
+    try:
+        body = response.json()
+    except ValueError:
+        _feedback_error("invalid_response", uncertain if submitting else "Invalid response. Retry the lookup later.")
+    print(json.dumps(body, indent=2))
+
+
+def cmd_feedback(args, cfg) -> None:
+    if args.message == "-" and sys.stdin.isatty():
+        _feedback_error("stdin_required", "Pipe sanitized text or redirect a file into stdin when using '-'.")
+    message = sys.stdin.read() if args.message == "-" else args.message
+    length = len(message.strip())
+    if not 1 <= length <= 2000:
+        _feedback_error("invalid_message", "Message must contain 1-2000 characters after trimming. "
+                        "Edit the description and submit again.", actual_length=length, max_length=2000)
+    body = {"category": args.category, "message": message}
+    if args.call_id:
+        body["call_ids"] = args.call_id
+    if args.endpoint_id:
+        body["endpoint_id"] = args.endpoint_id
+    _feedback_request(cfg, "POST", "/feedback", json=body)
+
+
+def cmd_feedback_get(args, cfg) -> None:
+    if args.feedback_id < 1:
+        _feedback_error("invalid_id", "Feedback ID must be a positive integer from a submission receipt.")
+    _feedback_request(cfg, "GET", f"/feedback/{args.feedback_id}")
+
+
 def _catalog_request(text: str, cfg) -> None:
     """File a "the catalog doesn't have X" report — the demand signal that steers which provider
     gets keyed next. Open endpoint (rate-limited server-side); a configured token just adds
@@ -5330,6 +5390,7 @@ HELP_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         ("call", "Call a tool: a catalog endpoint by id, or one of your own by URL."),
         ("balance", "Prepaid balance: credit left, calls in flight, recent spend."),
         ("topup", "Add funds, or set up automatic top-ups."),
+        ("feedback", "Share a problem or suggestion about treg."),
     ]),
     ("YOUR OWN TOOLS — what your team already has", [
         ("tool", "Manage tools (endpoint or CLI)."),
@@ -5955,6 +6016,50 @@ def build_parser() -> argparse.ArgumentParser:
     im = sub.add_parser("import", description="(deprecated) old name for `treg upload`.", formatter_class=_RAWFMT)
     _upload_args(im)
 
+    fb = mk(sub, "feedback", "Submit or retrieve private team feedback.",
+            'treg feedback submit friction "The pagination example is unclear."',
+            'treg feedback submit quality "The result is outdated." --call-id CALL_ID --endpoint-id PROVIDER.ENDPOINT',
+            'treg feedback submit other - < sanitized-feedback.txt',
+            'treg feedback get 123')
+    fb.description = textwrap.fill(FEEDBACK_DESCRIPTION, width=88)
+    feedback_fields = (
+        "\n\nSubmission fields:\n"
+        "  category       Required: quality (results), pricing (charges/prices),\n"
+        "                 friction (using treg), other (requests/suggestions).\n"
+        "  message        Required: what you needed and what happened, 1-2000 characters.\n"
+        "                 State uncertainty; use - to read sanitized text from stdin.\n"
+        "  --call-id ID   Optional: the treg call ID returned with the relevant call.\n"
+        "                 Repeat for multiple calls (up to 100); sent as call_ids.\n"
+        "                 IDs written only in message are not linked automatically.\n"
+        "  --endpoint-id ID\n"
+        "                 Optional: public catalog endpoint ID; sent as endpoint_id.\n"
+        "\nReceipt: JSON with feedback_id and status=received. Retrieve with:\n"
+        "  treg feedback get FEEDBACK_ID\n"
+        "Reports go to your configured registry and active team, cost nothing, and\n"
+        "are visible to that team and registry administrators. No automatic reply.\n"
+    )
+    fb.epilog += feedback_fields + "\nFull syntax: treg feedback submit --help"
+    fb.set_defaults(fn=lambda args, cfg: fb.print_help())
+    feedback_commands = fb.add_subparsers(dest="sub", metavar="<subcommand>")
+    submit = mk(feedback_commands, "submit", "Submit a problem or suggestion.",
+                'treg feedback submit friction "The pagination example is unclear."',
+                'treg feedback submit quality "The returned data is outdated." --call-id CALL_ID',
+                'treg feedback submit other - < sanitized-feedback.txt')
+    submit.description = textwrap.fill(FEEDBACK_DESCRIPTION, width=88)
+    submit.add_argument("category", choices=FEEDBACK_CATEGORIES,
+                        help="quality: results; pricing: charges/prices; friction: using treg; other: requests/suggestions")
+    submit.add_argument("message",
+                        help="what you needed and observed, 1-2000 characters; state uncertainty; - reads stdin")
+    submit.add_argument("--call-id", action="append",
+                        help="returned treg call ID; repeat up to 100; sent as call_ids, not extracted from message")
+    submit.add_argument("--endpoint-id", help="public catalog endpoint ID, if known")
+    submit.epilog += feedback_fields + "\nMore: <your registry base URL>/feedback.md"
+    submit.set_defaults(fn=cmd_feedback)
+    get = mk(feedback_commands, "get", "Retrieve a feedback report from the active team.",
+             "treg feedback get 123")
+    get.add_argument("feedback_id", type=int, help="the feedback ID from the submission receipt")
+    get.set_defaults(fn=cmd_feedback_get)
+
     # ---- balance ----
     bal = mk(sub, "balance", "Your team's prepaid balance: credit left, calls in flight, recent spend.",
              "treg balance", "treg balance --limit 50", "treg balance --json    # micro-USD integers")
@@ -6119,6 +6224,9 @@ def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
     override = _pop_org_flag(argv)
     _JSON_OVERRIDE = _pop_json_flag(argv)
+    # Preserve the original submission shorthand; help teaches the explicit subcommands.
+    if len(argv) > 1 and argv[0] == "feedback" and argv[1] in FEEDBACK_CATEGORIES:
+        argv.insert(1, "submit")
     parser = build_parser()
     if _looks_like_a_program(argv, _subcommands(parser)):
         argv = ["with", *argv]

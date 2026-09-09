@@ -34,6 +34,12 @@ Tier 4 has explicit platform-key slots for MiniMax, OpenRouter and Replicate. Th
 receive them as environment secrets, and the worker constructs the same platform bindings as the call
 path. Key values are never copied into task records, logs or archive evidence.
 
+`MILLIONVERIFIER` is a pasted-key Enrichment provider. Both own keys and platform bindings inject
+`api` into the query at `https://api.millionverifier.com`. Its free `/api/v3/credits` probe returns
+HTTP 200 with `error: apikey_not_found` for a garbage key; `token_reject_field="error"` rejects
+that body while allowing valid zero-credit accounts. `platform_key_millionverifier` reads
+`TREG_PLATFORM_KEY_MILLIONVERIFIER`; platform access also requires the existing allow-list.
+
 ## Instagram grant methods (2026-09-01)
 
 Instagram is one provider with two explicit protocol profiles. The default `instagram-login`
@@ -367,3 +373,17 @@ someone else's key value. A tool's `base_url` is validated against the internal-
 metadata, incl. numeric IP encodings) at registration AND the proxy re-resolves the host at call time
 (`infra.upstream.ssrf.host_is_public`, also re-exported by `health`, gated by `proxy_ssrf_check`) — no
 SSRF, even via DNS rebinding.
+
+## Kitt AI key connection
+
+`TRYKITT` registers Kitt AI under `trykitt`, with `x-api-key` header injection at
+`https://api.trykitt.ai`. `/credit` returns 200 even with a valid zero balance and 401
+for a bogus key. `platform_key_trykitt` loads `TREG_PLATFORM_KEY_TRYKITT`; the normal
+platform-provider allow-list is also required. Own keys always take precedence.
+
+
+## ContactOut pasted API tokens
+
+`oauth_providers.CONTACTOUT` verifies against `/v1/stats` and requires `status_code: 200` as well
+as HTTP success. Its binding injects the raw `token` header. Both garbage rejection and valid
+connection creation were tested live; see [ContactOut](contactout.md).

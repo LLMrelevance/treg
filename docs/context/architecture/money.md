@@ -13,6 +13,7 @@ sources:
   - src/treg/application/call/service.py
   - src/treg/application/call/reserve.py
   - src/treg/application/call/settle.py
+  - src/treg/catalog/tomba.yaml
   - src/treg/application/asynctasks.py
   - src/treg/alembic/versions/0017_async_task_record.py
   - src/treg/alembic/versions/0018_async_resource_ownership.py
@@ -439,6 +440,7 @@ Provider-specific calculation stays outside the faithful relay.
 | Reported charge | DataForSEO `cost`, ScrapeCreators `credits_charged`, Akta `credits_consumed`, Lusha `billing.creditsCharged`, Exa `costDollars.total`; credit amounts use the catalog FX rate |
 | Crustdata | Read `X-Credits-Used` from response headers using the same FX rate |
 | Apollo | Known empty organization results are free |
+| Tomba domain search | Non-empty pages cost ceil(`meta.pageSize` / 10) credits, even when partially filled; empty `data.emails` is free. Reservation uses requested `limit`, default 10. Missing/malformed page evidence falls back to the estimate. Upstream duplicate discounts are not detected |
 | Hunter domain search | One whole search credit per ten returned emails, rounded up; an empty result is free |
 | Hunter email finder | One whole credit when an email is present; a known miss is free |
 | TikHub | Honor explicit no-charge prose; an embedded error that says it is charged still costs the estimate |
@@ -764,6 +766,20 @@ and `cost_source: "aggregator"` + `served_via` in the ledger `meta`, so `reconci
 `OverflowSpend` (per aggregator per UTC day) is updated inside that same settle transaction; it is
 accounting for the $20/day budget, not a balance. Shadow mode places no hold and charges nothing.
 
+## MillionVerifier credit returns
+
+`application.call.settle._observed_cost_micro` treats `unknown` and `catch_all` verification
+results as zero cost, independently of routing (both are useful verdicts). Definitive results
+use the documented $0.00178 estimate, including invalid results. Upstream deducts credits first
+and automatically returns risky credits for eligible accounts after verification. Treg uses its
+existing reserve/settle cycle to close the hold at zero for unknown/catch-all as soon as the
+response arrives; it does not wait for the upstream return, poll the balance, or create a later
+refund transaction. The zero-cost rule reflects treg's pricing policy, not confirmation of an
+individual upstream return. If the platform account loses eligibility due to upstream misuse rules, treg absorbs
+that exception rather than charging callers for these advertised free results. Own keys still
+bypass treg metering. The response's `free` flag describes the email service and `credits` is a
+delayed account balance, so neither field is interpreted as per-call cost.
+
 ## Per-success response rules
 
 HTTP 200 alone does not prove a billable success. `settle.py` checks the routing adapter first,
@@ -774,3 +790,27 @@ success convention. An undecidable rule does not imply a free call.
 Coverage remains a catalog concern: providers without an adapter or `expect` can still return
 embedded errors. In particular, verify TikHub's success convention before adding a file-level rule;
 its existing explicit charge/no-charge prose handling is a separate billing signal.
+
+## Kitt AI response billing
+
+`_observed_cost_micro` reads the catalog's `cost.reported_charge.path` in USD
+(`unit: usd`), converting with Decimal to integer micro-USD. Kitt's two realtime
+endpoints declare `credits.jobCredits`; there is no provider-specific billing branch. Finite nonnegative values,
+including zero, override the estimate; malformed, negative, boolean or null values
+fall through to the verified miss rule and documented base estimate. Find misses
+(`no-results-found`) settle at zero. Completed verification verdicts including invalid,
+unknown and catchall settle at the reported charge or $0.0015 fallback.
+
+The base find price is $0.005. The documented volume discount is not tracked locally;
+an upstream reported discount is honored. The internal `/credit` check and `remainingCredits`
+are account balances, never charge evidence. Paid live tests reconciled $0.008 after a delayed
+balance update. Free-plan null charge fields use the same documented fallback policy.
+
+
+## ContactOut contact hits
+
+`application.call.contactout` calculates request-sized holds and derives contact/search charges
+from returned profiles using the YAML Starter micro-USD rates. It reuses the existing money lifecycle.
+Profile-only LinkedIn enrichment reserves and settles 20,000 micro-USD when a profile is found;
+misses remain free. Platform reveal search requires an explicit page size to bound its hold.
+Own keys are unmetered; see [ContactOut](contactout.md) for prices, free verification and evidence limits.

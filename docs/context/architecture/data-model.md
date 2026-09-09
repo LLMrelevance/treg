@@ -21,7 +21,7 @@ sources:
   - src/treg/alembic/versions/0022_org_spent_today_counter.py
   - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
   - src/treg/alembic/versions/0024_membership_calls_today_counter.py
-  - src/treg/alembic/versions/0025_enrich_arena.py
+  - src/treg/alembic/versions/0026_enrich_arena.py
   - src/treg/alembic/versions/0011_callrecord_archive_link.py
   - src/treg/alembic/versions/0015_idempotentcall_membership_cascade.py
   - src/treg/maintenance.py
@@ -67,6 +67,11 @@ writers during rollout. Valid polls reset it; failures grow the retry delay to 1
 can finalize the original task independently; the terminal-state guard prevents duplicate charges.
 
 ## Registry tables
+
+- **`Feedback`** - durable team-scoped problem reports and suggestions. Contains the submitted
+  category/message/references, authenticated org and user attribution, and the references verified
+  against that team's call records or ledger. Revision `0025`; `domain.feedback` owns inserts;
+  `application.feedback` commits. Team deletion removes these rows. See [feedback](feedback.md).
 
 `src/treg/models.py` is authoritative for columns, indexes and defaults. This section records
 ownership and behavior that a field declaration alone does not explain.
