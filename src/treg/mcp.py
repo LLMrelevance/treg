@@ -52,10 +52,10 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
 from mcp.types import METHOD_NOT_FOUND, ToolAnnotations
 
-from . import analytics, audit, mcp_feedback
+from . import analytics, audit, hints
 from .domain.catalog import store as catalog_store
 from .config import PUBLIC_HOST_ALIASES, get_settings
-from .feedback_contract import FeedbackCategory, FEEDBACK_DESCRIPTION
+from .feedback_contract import FeedbackCategory, FEEDBACK_DESCRIPTION, ReviewUsefulness, REVIEW_DESCRIPTION
 from .domain.catalog.stats import EndpointObservationReader
 
 # Every tool must declare what it can DO, and the review process checks these against real behaviour.
@@ -160,6 +160,8 @@ mcp = MCPServer(
         "your team's own tools. Flow: catalog_search (say what you want to DO, not a vendor name) → "
         "catalog_get (params) → call. Multiple providers for one job? catalog_get ranks them by "
         "measured success, speed and price — you pick."
+        " When a call result carries a review invitation, use the result first, then call "
+        "review(call_id, usefulness, reason?) and keep going with the task."
     ),
     middleware=[_StaticSurfaceCapabilities()],
 )
@@ -215,6 +217,12 @@ class RequestOut(TypedDict, total=False):
     note: str | None
     error: str | None
     detail: str | None
+
+
+class ReviewOut(TypedDict, total=False):
+    review_id: int | None
+    status: str | None
+    detail: Any
 
 
 class FeedbackOut(TypedDict, total=False):
@@ -696,6 +704,32 @@ async def feedback(
     return await _feedback_impl(category, message, ctx, call_ids, endpoint_id, surface=_TEAM_SURFACE)
 
 
+@mcp.tool(
+    description=REVIEW_DESCRIPTION,
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False,
+                                idempotent_hint=False),
+    structured_output=True,
+)
+async def review(
+    call_id: str, usefulness: ReviewUsefulness, ctx: Context, reason: str | None = None,
+) -> ReviewOut:
+    return await _review_impl(call_id, usefulness, ctx, reason, surface=_TEAM_SURFACE)
+
+
+async def _review_impl(
+    call_id: str, usefulness: ReviewUsefulness, ctx: Context, reason: str | None,
+    *, surface: _SurfacePolicy,
+) -> ReviewOut:
+    token = _bearer(ctx)
+    api_context = (_api(token) if surface is _TEAM_SURFACE
+                   else _api(token, client_name=surface.client_name))
+    async with api_context as client:
+        response = await client.post("/reviews", json={
+            "call_id": call_id, "usefulness": usefulness, "reason": reason,
+        })
+    return _body(response)
+
+
 async def _feedback_impl(
     category: FeedbackCategory, message: str, ctx: Context,
     call_ids: list[str] | None, endpoint_id: str | None, *, surface: _SurfacePolicy,
@@ -981,11 +1015,16 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
         except ValueError:
             pass
     if 200 <= r.status_code < 300 and not out.get("hint") and not out.get("replayed"):
-        if mcp_feedback.sampled(out.get("call_id") or uuid4().hex):
-            out["hint"] = mcp_feedback.HINT
-            analytics.capture(analytics.SERVER_DISTINCT_ID, "mcp_feedback_hint_attached", {
-                "call_id": out.get("call_id"), "surface": surface.client_name,
-                f"$feature/{mcp_feedback.FLAG}": True,
+        kind = None
+        if r.headers.get("X-Treg-Review") == "requested" and out.get("call_id"):
+            out["hint"] = hints.review_hint(out["call_id"])
+            kind = "review"
+        elif hints.sampled("feedback", out.get("call_id") or uuid4().hex):
+            out["hint"] = hints.HINT
+            kind = "feedback"
+        if kind:
+            analytics.capture(analytics.SERVER_DISTINCT_ID, "mcp_hint_attached", {
+                "call_id": out.get("call_id"), "surface": surface.client_name, "kind": kind,
             })
     if r.status_code == 402:
         # States the fact and stops. No link, and `topup_url` is stripped from the relayed body, so
@@ -1000,7 +1039,8 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
         # Scoped to the MCP path deliberately. `/call/`'s 402 still carries `topup_url` for the CLI
         # and the dashboard, where no such policy applies and the shortcut is genuinely useful.
         out["body"] = _without_purchase_pointers(out.get("body"))
-        out["hint"] = "the team's prepaid balance is not enough for this call"
+        if not out.get("replayed"):
+            out["hint"] = "the team's prepaid balance is not enough for this call"
     elif r.status_code >= 400:
         # Whose fault it was matters to an agent deciding whether to retry elsewhere.
         out["whose_error"] = "treg" if r.headers.get("X-Treg-Error") else "provider"
@@ -1115,6 +1155,8 @@ directory_mcp = MCPServer(
         "This connector exposes Treg catalog endpoints only. catalog_search finds endpoint ids; "
         "catalog_get returns parameters, provider documentation, price and reliability; "
         "catalog_call_read and catalog_call_write execute the selected endpoint."
+        " When a call result carries a review invitation, use the result first, then call "
+        "review(call_id, usefulness, reason?) and keep going with the task."
     ),
     middleware=[_StaticSurfaceCapabilities()],
 )
@@ -1250,6 +1292,17 @@ async def directory_feedback(
     return await _feedback_impl(
         category, message, ctx, call_ids, endpoint_id, surface=_DIRECTORY_SURFACE,
     )
+
+
+@directory_mcp.tool(
+    name="review", title="Review a Catalog Call", description=REVIEW_DESCRIPTION,
+    annotations=_DIRECTORY_ADDITIVE.model_copy(update={"title": "Review a Catalog Call"}),
+    structured_output=True,
+)
+async def directory_review(
+    call_id: str, usefulness: ReviewUsefulness, ctx: Context, reason: str | None = None,
+) -> ReviewOut:
+    return await _review_impl(call_id, usefulness, ctx, reason, surface=_DIRECTORY_SURFACE)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1578,9 +1631,8 @@ async def mcp_lifespan(target=None):
     inner = target
     while not hasattr(inner, "router"):      # unwrap NoTransformResponses / RequireAuthForProtectedTools
         inner = inner.app
-    async with mcp_feedback.lifespan():
-        async with inner.router.lifespan_context(inner):
-            yield
+    async with inner.router.lifespan_context(inner):
+        yield
 
 
 @asynccontextmanager

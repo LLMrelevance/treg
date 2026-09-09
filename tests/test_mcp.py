@@ -118,7 +118,7 @@ async def test_the_server_lists_the_shared_tools(clients):
                                      "clientInfo": {"name": "t", "version": "1"}}, token)
         r = await _rpc(c, "tools/list", token=token)
         names = {t["name"] for t in r.json()["result"]["tools"]}
-    assert names == {"catalog_search", "catalog_get", "call", "balance", "my_tools", "catalog_request", "feedback"}
+    assert names == {"catalog_search", "catalog_get", "call", "balance", "my_tools", "catalog_request", "feedback", "review"}
 
 
 async def test_catalog_search_returns_priced_results(clients):
@@ -350,7 +350,7 @@ async def test_every_tool_declares_what_it_can_do(clients):
 
     ann = {t.name: t.annotations for t in await server.list_tools()}
     assert set(ann) == {"catalog_search", "catalog_get", "call", "balance", "my_tools",
-                        "catalog_request", "feedback"}
+                        "catalog_request", "feedback", "review"}
     assert all(a.title is None for a in ann.values())
     for name in ("catalog_search", "catalog_get", "balance", "my_tools"):
         a = ann[name]

@@ -24,6 +24,15 @@ rejected input. `cmd_feedback_get` implements `treg feedback get <feedback_id>`.
 failures report an unconfirmed outcome, not a definite failure. Bare `treg feedback` shows help;
 `main` still accepts the original category-first submission shorthand. See [feedback](../architecture/feedback.md).
 
+## Call review
+
+`cmd_review` implements `treg review <call_id> <usefulness> [--reason TEXT]`, sharing the light
+contract's enum and description with MCP. It validates the reference and trimmed reason locally,
+posts to `/reviews`, prints a receipt, and emits structured errors without echoing rejected input.
+A transport failure explicitly leaves the outcome unconfirmed. `_show_review_line`, beside the
+charge line, prints the sampled `X-Treg-Review: requested` invitation only on stderr. Call responses
+retain the existing `_show` formatting on stdout, including pretty-printed JSON.
+
 ## Instagram grants
 
 `TREG_OAUTH_REVIEW_PENDING` and provider-registry metadata control the CLI's effective default and

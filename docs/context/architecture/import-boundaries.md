@@ -33,7 +33,7 @@ sources:
   - src/treg/domain/connections/oauth_flow.py
   - src/treg/domain/connections/refresh.py
   - src/treg/domain/money/__init__.py
-  - src/treg/domain/feedback.py
+  - src/treg/domain/feedback/__init__.py
   - src/treg/domain/asynctasks/__init__.py
   - src/treg/domain/capacity/__init__.py
   - src/treg/infra/upstream/__init__.py

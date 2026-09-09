@@ -82,7 +82,7 @@ teams: `treg org switch <slug>`.
 
 If you reached treg through `https://treg.to/mcp/` — ChatGPT, Claude Code, Cursor — the CLI steps above do not
 apply to you. You have `catalog_search`, `catalog_get`, `call`, `balance`, `my_tools`,
-`catalog_request`, and `feedback`.
+`catalog_request`, `feedback`, and `review`.
 Everything in this document maps onto them:
 
 - "search the catalog" → `catalog_search`, then `catalog_get` for the exact price and parameters
@@ -344,6 +344,13 @@ in `call_ids` (CLI: `--call-id`), not only in the message; references are option
 Report each issue once. Feedback helps the treg team improve the product; it does not complete
 the user's task. Keep going afterward.
 Keep private information out of the report. See [feedback instructions](https://treg.to/feedback.md).
+
+## Review
+
+When invited to review a catalog call, use its result first, then call
+`review(call_id, usefulness, reason?)` over MCP or `treg review CALL_ID USEFULNESS [--reason "..."]`.
+Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. Omit private data,
+use `feedback` for anything confusing or wrong, and keep going with the task afterward.
 
 ## Rules
 - Secrets are **write-only** — the API never returns a stored value, to you or to anyone.

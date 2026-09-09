@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,6 +45,9 @@ def _blocked_email_domains(raw: str) -> frozenset[str]:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="TREG_", extra="ignore")
+
+    review_sample_rate: float = Field(default=0, ge=0, le=1)
+    feedback_hint_rate: float = Field(default=0, ge=0, le=1)
 
     # SQLite locally, Postgres on Render — same code path, just swap the URL.
     database_url: str = "sqlite+aiosqlite:///./treg.db"
