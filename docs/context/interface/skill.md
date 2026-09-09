@@ -28,7 +28,7 @@ Its frontmatter `name: treg` + `description` make it loadable by a coding agent.
 
 The feedback section encourages proactive reports of small annoyances and concrete friction and workarounds even when a task succeeds,
 asks for observations rather than a proven bug, and names MCP `call_ids` / CLI `--call-id`.
-The review paragraph asks agents to rate an invited catalog call after use, names the four
+The Review section, between Feedback and Rules, asks agents to rate an invited catalog call after use, names the four
 usefulness choices and CLI/MCP forms, and directs problems to feedback.
 
 One skill, three personas:

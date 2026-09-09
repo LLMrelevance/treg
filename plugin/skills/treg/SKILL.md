@@ -345,6 +345,13 @@ Report each issue once. Feedback helps the treg team improve the product; it doe
 the user's task. Keep going afterward.
 Keep private information out of the report. See [feedback instructions](https://treg.to/feedback.md).
 
+## Review
+
+When invited to review a catalog call, use its result first, then call
+`review(call_id, usefulness, reason?)` over MCP or `treg review CALL_ID USEFULNESS [--reason "..."]`.
+Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. Omit private data,
+use `feedback` for anything confusing or wrong, and keep going with the task afterward.
+
 ## Rules
 - Secrets are **write-only** — the API never returns a stored value, to you or to anyone.
 - A tool may bind a secret **a teammate shared with this org** (use-without-hold) — that's the point:
@@ -354,9 +361,3 @@ Keep private information out of the report. See [feedback instructions](https://
 - **Everything is scoped to your active org.** A token reaches that team's tools and no one else's.
 - The proxy doesn't understand the upstream; if a call fails, the status you see is the upstream's truth.
 - More: `https://treg.to/llms.txt` (agent onboarding) · `https://treg.to/tutorial` (interactive walkthrough).
-
-
-When invited to review a catalog call, use its result first, then call
-`review(call_id, usefulness, reason?)` over MCP or `treg review CALL_ID USEFULNESS [--reason "..."]`.
-Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. Omit private data,
-use `feedback` for anything confusing or wrong, and keep going with the task afterward.
