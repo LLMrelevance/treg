@@ -242,6 +242,10 @@ class CatalogGetOut(TypedDict, total=False):
                                            # response is a list of records (brightdata datasets)
     hints: list[str] | None
     did_you_mean: list[str] | None         # real ids close to one that missed
+    overflow_price_usd: float | None       # what a call bills when treg's own account is out and the
+                                           # overflow relay serves it instead (absent = never relayed)
+    overflow_price_unit: str | None        # "call" | "result": what one unit of that price buys
+    overflow_via: str | None               # the relay aggregator that price belongs to
     error: str | None
     detail: str | None
 
@@ -253,6 +257,8 @@ class CallOut(TypedDict, total=False):
     replayed: bool | None           # answered from an earlier call with the same idempotency_key
     body: Any                       # the provider's response, verbatim
     cost_usd: float | None
+    served_via: str | None          # "overflow:<aggregator>" when a treg-owned relay account served
+                                    # the call at ITS price (X-Treg-Served-Via); absent on a direct call
     whose_error: str | None         # "treg" or "provider" — who to blame, and whether to retry
     hint: str | None
     did_you_mean: list[str] | None  # real ids close to one that missed
@@ -798,7 +804,16 @@ async def _catalog_get_impl(
                 "hints": [catalog_store.unknown_id_hint(endpoint_id, cat),
                           "or use catalog_search to find the right id"],
                 "did_you_mean": catalog_store.near_ids(endpoint_id, cat)}
-    return _body(r)
+    out = _body(r)
+    # Lifted onto the result so the schema advertises it: the direct price is not the only price
+    # a "free" endpoint can bill (found 2026-09-08 - apollo.people.search, catalog cost free, billed
+    # $0.002 through the overflow relay 8,810 times in a day and nothing on this surface said so).
+    ep = (out.get("endpoint") or {}) if isinstance(out, dict) else {}
+    if isinstance(ep, dict) and ep.get("overflow_price_usd") is not None:
+        out["overflow_price_usd"] = ep["overflow_price_usd"]
+        out["overflow_price_unit"] = ep.get("overflow_price_unit")
+        out["overflow_via"] = ep.get("overflow_via")
+    return out
 
 
 # --------------------------------------------------------------------------------------------
@@ -1015,6 +1030,17 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
             out["cost_usd"] = round(int(spent) / 1_000_000, 6)
         except ValueError:
             pass
+    # The relay disclosure. `/call/` says it in a header; an MCP client never sees headers, so
+    # until this line an agent reading `cost_usd` on a "free" endpoint had no way to explain the
+    # charge to the human (the header exists precisely so the price can be attributed).
+    served_via = r.headers.get("X-Treg-Served-Via")
+    if served_via:
+        out["served_via"] = served_via
+        if served_via.startswith("overflow:") and not out.get("hint"):
+            provider = endpoint_id.split(".", 1)[0]
+            out["hint"] = (f"served through the overflow relay ({served_via.removeprefix('overflow:')}) "
+                           f"at its real price because treg's {provider} account is out; cost_usd is "
+                           f"what the relay billed, not the catalog's direct price")
     if 200 <= r.status_code < 300 and not out.get("hint") and not out.get("replayed"):
         kind = None
         if r.headers.get("X-Treg-Review") == "requested" and out.get("call_id"):
