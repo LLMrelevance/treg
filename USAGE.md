@@ -166,9 +166,10 @@ never billed to the balance.
 ## Review a catalog call
 
 `treg review <call_id> <useful|partly|not_useful|not_sure> [--reason "text"]` rates a catalog
-call after you have used the result. A sampled call prints an invitation on stderr; `not_sure`
-is fine when you cannot tell. The optional reason is 1-200 characters after trimming. Omit
-private data and raw payloads. Use `feedback` for anything confusing or wrong, then keep going
+call after you have used the result. Phase 1 invites only direct catalog calls served on treg's
+own platform key; sampled calls print an invitation on stderr. Routed and own-key catalog calls
+can still be reviewed uninvited. `not_sure` is fine when you cannot tell. The optional reason is
+1-200 characters after trimming. Omit private data and raw payloads. Use `feedback` for anything confusing or wrong, then keep going
 with the task. The receipt contains `review_id` and `status` (`received` or `already_reviewed`).
 If the call record is not written yet, retry shortly with the same call ID.
 

@@ -311,12 +311,9 @@ async def call_tool(
         _attach_async_descriptor(upstream, context, rest)
         response = _http_upstream_response(upstream)
         try:
-            # Resolution sets target only for an own tool; routed parents have no marketplace.
-            catalog_call = context.target is None and (
-                context.marketplace is not None
-                or rest.split("?", 1)[0] in catalog_store.load().by_id
-            )
-            if (catalog_call and 200 <= response.status_code < 300
+            # Phase 1 invites only direct catalog calls served on treg's platform key.
+            if (context.marketplace is not None and context.marketplace.tier == "platform"
+                    and 200 <= response.status_code < 300
                     and not response.headers.get("X-Treg-Idempotent-Replay")
                     and not context.cached
                     and hints.sampled("review", context.call_ref)):

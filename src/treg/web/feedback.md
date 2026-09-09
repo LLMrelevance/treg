@@ -60,6 +60,9 @@ Keep private information, credentials, full conversations and raw requests, resp
 out of the reason. Replace sensitive values with placeholders, not hashes. Use `feedback` for
 anything confusing or wrong. Keep going with your task after rating.
 
+Phase 1 invites only direct catalog calls served on treg's own platform key. Routed and own-key
+catalog calls can still be reviewed uninvited.
+
 CLI invitations appear on stderr; plain HTTP invitations use `X-Treg-Review: requested`.
 MCP invitations appear in the call result's hint. Use the call ID in the response:
 

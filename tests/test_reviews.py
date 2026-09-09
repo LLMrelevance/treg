@@ -72,7 +72,8 @@ async def test_own_tool_cannot_be_reviewed(clients):
 
 
 @pytest.mark.parametrize('child', [True, False])
-async def test_routed_attribution(clients, child):
+async def test_routed_attribution(clients, monkeypatch, child):
+    monkeypatch.setattr(get_settings(), 'review_sample_rate', 1)
     org = await seed(clients, endpoint_id='treg.search', provider='treg', credential_tier='routed')
     async with session_maker() as db:
         for ref, status, endpoint in [('review-call:r0', 503, 'failed.search'),
@@ -84,18 +85,21 @@ async def test_routed_attribution(clients, child):
         await db.commit()
     assert (await submit(clients, org)).status_code == 201
     row, = await rows()
+    assert row.invited is False
     assert row.routed_via == 'treg.search'
     assert row.endpoint_id == ('winner.search' if child else 'treg.search')
     assert row.provider == ('winner' if child else 'treg')
 
 
-@pytest.mark.parametrize('rate,status,cached,invited', [
-    (1, 200, False, True), (0, 200, False, False),
-    (1, 500, False, False), (1, 200, True, False),
+@pytest.mark.parametrize('tier,rate,status,cached,invited', [
+    ('platform', 1, 200, False, True), ('platform', 0, 200, False, False),
+    ('platform', 1, 500, False, False), ('platform', 1, 200, True, False),
+    ('credential', 1, 200, False, False), ('tool', 1, 200, False, False),
+    ('routed', 1, 200, False, False), (None, 1, 200, False, False),
 ])
-async def test_invited_recomputed(clients, monkeypatch, rate, status, cached, invited):
+async def test_invited_recomputed(clients, monkeypatch, tier, rate, status, cached, invited):
     monkeypatch.setattr(get_settings(), 'review_sample_rate', rate)
-    org = await seed(clients, status_code=status, cached=cached)
+    org = await seed(clients, credential_tier=tier, status_code=status, cached=cached)
     assert (await submit(clients, org)).status_code == 201
     row, = await rows()
     assert row.invited is invited

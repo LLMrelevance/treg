@@ -32,7 +32,8 @@ def test_invalid_rates(field, rate):
 
 
 @pytest.mark.parametrize('catalog,status,headers,sample,expected', [
-    ('direct', 200, {}, True, True), ('routed', 201, {}, True, True),
+    ('direct', 200, {}, True, True), ('routed', 201, {}, True, False),
+    ('credential', 200, {}, True, False), ('tool', 200, {}, True, False),
     ('own', 200, {}, True, False), ('direct', 200, {}, False, False),
     ('direct', 199, {}, True, False), ('direct', 300, {}, True, False),
     ('direct', 503, {}, True, False),
@@ -53,9 +54,12 @@ async def test_header_before_stream_without_changing_response(
     async def close():
         consumed.append('close')
     async def execute(context, client):
-        if catalog in ('direct', 'cached'):
+        if catalog in ('direct', 'cached', 'credential', 'tool'):
             context.cached = catalog == 'cached'
-            context.marketplace = SimpleNamespace(endpoint_id='example.search')
+            context.marketplace = SimpleNamespace(
+                endpoint_id='example.search',
+                tier=catalog if catalog in ('credential', 'tool') else 'platform',
+            )
         elif catalog == 'own':
             context.target = SimpleNamespace(tool=SimpleNamespace(name='example.search'))
         return UpstreamResponse(status, tuple((k.lower().encode(), v.encode()) for k, v in headers.items()),

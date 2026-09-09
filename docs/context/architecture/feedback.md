@@ -81,8 +81,9 @@ its caller's team audit records; a missing audit record receives a retryable 404
 ledger-only evidence, which lacks status/provider/cache attribution. Own-tool records receive
 400. A routed parent uses its successful child's endpoint/provider when present, retaining the
 parent endpoint as `routed_via`; otherwise it retains parent attribution. `invited` is recomputed
-from a 2xx, non-cached record and the current review sampling rate. Retries return the original
-ID and `already_reviewed`; a unique index also arbitrates concurrent submissions. Its savepoint
+from a 2xx, non-cached record with `credential_tier == "platform"` and the current review
+sampling rate. Routed and own-key catalog calls can still be reviewed uninvited. Retries return
+the original ID and `already_reviewed`; a unique index also arbitrates concurrent submissions. Its savepoint
 stays open until the application commit, avoiding SQLite deferred-BEGIN early commits. The sole writer
 is `domain.feedback.reviews`; the moved `reports` module preserves feedback behavior.
 
@@ -99,10 +100,12 @@ pagination with optional `endpoint_id`. It is excluded from OpenAPI; there is no
 ## Optional review and feedback invitations
 
 `routers.call.call_tool` sets `X-Treg-Review: requested` after constructing the streaming response,
-before streaming starts. Only resolved catalog calls (including routed parents) with a 2xx status,
-no idempotent-replay header, `context.cached == False`, and a sampled call reference qualify.
+before streaming starts. Phase 1 invites only direct catalog calls served on treg's own platform
+key (`context.marketplace` exists and its `tier` is `platform`). These calls qualify only with a
+2xx status, no idempotent-replay header, `context.cached == False`, and a sampled call reference.
 The service sets `context.cached` from `served_hit` when the archive answers; the hook does not
-depend on cache response headers. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
+depend on cache response headers. Routed parents and own-key catalog calls can still be reviewed
+uninvited. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
 is best-effort, has no database or body access, and does not change call service exits or writes.
 Plain HTTP gets only the header. Both MCP transports retain `call_id` and use their single hint
 slot with priority replay > 402 > review > feedback. Review invites rating after use; feedback
@@ -140,7 +143,8 @@ WITH calls AS (
   SELECT DISTINCT ON (org_id, call_ref) org_id, call_ref, client
   FROM callrecord
   WHERE created_at >= :window_start AND created_at < :window_end
-    AND endpoint_id IS NOT NULL AND status_code >= 200 AND status_code < 300
+    AND endpoint_id IS NOT NULL AND credential_tier = 'platform'
+    AND status_code >= 200 AND status_code < 300
     AND NOT cached AND call_ref ~ '^[A-Za-z0-9_-]+$'
   ORDER BY org_id, call_ref, id
 ), hashed AS (
