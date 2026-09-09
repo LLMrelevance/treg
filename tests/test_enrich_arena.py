@@ -17,6 +17,7 @@ from test_marketplace_call import _balance, platform_on  # noqa: F401
 from test_routing import enrichment_on, _relay_by_provider  # noqa: F401
 
 IDENTITY = {"full_name": "Test Person", "domain": "example.com"}
+SECOND_IDENTITY = {"full_name": "Second Person", "domain": "second.example"}
 HUNTER_HIT = {"data": {"email": "test@example.com", "score": 90, "verification": {"status": "valid"}}}
 TOMBA_HIT = {"data": {"email": "another@example.com", "score": 80, "verification": {"status": "accept_all"}}}
 
@@ -45,11 +46,161 @@ async def finish(c, quote):
     return r.json()
 
 
+async def batch_plan(c, mode="compare", **extra):
+    return await plan(c, mode=mode, identity=None, identities=[IDENTITY, SECOND_IDENTITY], **extra)
+
+
+async def test_batch_battle_preserves_each_request_and_bills_once(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "hunter": [(200, HUNTER_HIT)] * 2, "tomba": [(200, TOMBA_HIT)] * 2}, seen))
+    single = await plan(clients)
+    before = await _balance(clients)
+    q = await batch_plan(clients)
+    assert q["required_micro"] == single["required_micro"] * 2
+    assert q["entry_count"] == 2 and len(q["providers"]) == 2
+    assert q["estimate_micro"] == sum(p["estimate_micro"] for p in q["providers"])
+    assert await _balance(clients) == before and not seen
+    result = await finish(clients, q)
+    assert result["identities"] == [IDENTITY, SECOND_IDENTITY]
+    assert len(seen) == 4 and len(result["results"]) == 4
+    for provider in ("hunter", "tomba"):
+        queries = [s[2] for s in seen if s[0] == provider]
+        assert {q["domain"] for q in queries} == {"example.com", "second.example"}
+        assert len([r for r in result["results"] if r["provider"] == provider]) == 2
+    assert result["charged_micro"] == before - await _balance(clients)
+    await finish(clients, q)
+    assert len(seen) == 4
+    history = (await clients.get("/arena/runs")).json()
+    assert history[0]["entry_count"] == 2
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+        row = await db.get(ArenaRun, q["id"])
+        assert "second.example" not in row.payload
+
+
+async def test_batch_waterfall_stops_per_entry_and_manual_uses_correct_identity(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "tomba": [(200, TOMBA_HIT), (200, {"data": {"email": None}})],
+        "hunter": [(200, HUNTER_HIT), (200, HUNTER_HIT)]}, seen))
+    result = await finish(clients, await batch_plan(clients, "waterfall"))
+    first = [r for r in result["results"] if r["entry_index"] == 0]
+    second = [r for r in result["results"] if r["entry_index"] == 1]
+    assert [r["state"] for r in first] == ["hit", "not_attempted"]
+    assert [r["state"] for r in second] == ["miss", "hit"]
+    assert [s[0] for s in seen] == ["tomba", "tomba", "hunter"]
+    assert seen[-1][2]["domain"] == "second.example"
+    root = "/arena/runs/" + result["id"]
+    rating = root + "/attempts/" + second[1]["id"] + "/rating"
+    assert (await clients.post(rating, json={"value": "down"})).status_code == 200
+    saved = (await clients.get(root)).json()
+    assert sum(bool(r["rating"]) for r in saved["results"]) == 1
+    path = root + "/attempts/" + first[1]["id"]
+    q = (await clients.post(path + "/plan")).json()
+    assert (await clients.post(path + "/start", json={"quote_id": q["id"]})).status_code == 200
+    task = arena._owners.get(result["id"])
+    if task:
+        await task
+    assert seen[-1][2]["domain"] == "example.com"
+    assert len(seen) == 4
+    assert (await clients.post(path + "/plan")).status_code == 409
+
+
+async def test_batch_waterfall_admits_first_step_for_every_entry(clients, enrichment_on, monkeypatch):
+    single = await plan(clients, mode="waterfall")
+    q = await batch_plan(clients, "waterfall")
+    assert q["required_micro"] == single["required_micro"] * 2
+    async def one_entry_balance(*args):
+        return single["required_micro"]
+    monkeypatch.setattr(arena.money, "balance_of", one_entry_balance)
+    q = await batch_plan(clients, "waterfall")
+    assert not q["affordable"]
+    assert (await clients.post(f"/arena/runs/{q['id']}/start")).status_code == 402
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+@pytest.mark.parametrize("entries", [[], [IDENTITY] * 51, [IDENTITY, IDENTITY],
+    [IDENTITY, {"full_name": "Incomplete", "domain": "example.com"}],
+    [IDENTITY, {"linkedin_url": "https://www.linkedin.com/in/example"}]])
+async def test_batch_invalid_entries_never_create_a_quote(clients, entries):
+    response = await clients.post("/arena/plans", json={"capability": "people.email.find", "identities": entries})
+    assert response.status_code == 422
+    async with session_maker() as db:
+        assert not (await db.execute(select(ArenaRun))).scalars().all()
+
+
+async def test_batch_aggregate_budget_is_enforced(clients, enrichment_on):
+    single = await plan(clients)
+    response = await clients.post("/arena/plans", json={"capability": "people.email.find",
+        "identities": [IDENTITY, SECOND_IDENTITY], "providers": ["hunter", "tomba"],
+        "mode": "compare", "max_cost_micro": single["required_micro"]})
+    assert response.status_code == 422
+
+
+async def test_batch_raw_snapshot_limit_keeps_normalized_answers(clients, enrichment_on, monkeypatch):
+    monkeypatch.setattr(rules, "MAX_BATCH_RAW_BYTES", 50)
+    monkeypatch.setattr(service, "relay", _relay_by_provider({"hunter": [(200, HUNTER_HIT)] * 2}, []))
+    result = await finish(clients, await batch_plan(clients, providers=["hunter"]))
+    assert all(r["state"] == "hit" and r["output"]["email"] for r in result["results"])
+    assert all(r["raw"] is None and r["raw_omitted"] for r in result["results"])
+
+
+async def test_batch_cancel_bounds_concurrency_and_releases_every_hold(clients, enrichment_on, monkeypatch):
+    entered = asyncio.Event()
+    seen = []
+    async def blocked(*args, **kwargs):
+        seen.append(True)
+        if len(seen) == 4:
+            entered.set()
+        await asyncio.Event().wait()
+    monkeypatch.setattr(service, "relay", blocked)
+    before = await _balance(clients)
+    identities = [{"full_name": "Test Person", "domain": f"company{i}.example"} for i in range(8)]
+    q = await plan(clients, providers=["hunter"], identity=None, identities=identities)
+    path = f"/arena/runs/{q['id']}"
+    await asyncio.gather(clients.post(path + "/start"), clients.post(path + "/start"))
+    owner = arena._owners[q["id"]]
+    await asyncio.wait_for(entered.wait(), 5)
+    assert len(seen) == 4
+    await clients.post(path + "/cancel")
+    await asyncio.wait_for(asyncio.shield(owner), 5)
+    result = (await clients.get(path)).json()
+    assert result["state"] == "cancelled"
+    assert sum(r["state"] == "not_attempted" for r in result["results"]) == 4
+    assert len(seen) == 4 and await _balance(clients) == before
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+async def test_batch_own_keys_remain_free_at_maximum_list_size(clients, enrichment_on, monkeypatch):
+    await clients.post('/secrets', json={'name': 'hunter', 'value': 'OWN-KEY'})
+    identities = [{"full_name": "Test Person", "domain": f"company{i}.example"} for i in range(50)]
+    q = await plan(clients, providers=["hunter"], identity=None, identities=identities)
+    assert q["entry_count"] == 50 and q["required_micro"] == 0
+    seen = []
+    monkeypatch.setattr(service, "relay", _relay_by_provider({"hunter": [(200, HUNTER_HIT)] * 50}, seen))
+    before = await _balance(clients)
+    result = await finish(clients, q)
+    assert result["charged_micro"] == 0 and len(seen) == 50
+    assert {r["entry_index"] for r in result["results"] if r["state"] == "hit"} == set(range(50))
+    assert {request[2]["domain"] for request in seen} == {entry["domain"] for entry in identities}
+    assert await _balance(clients) == before
+
+
 async def test_public_page_and_tasks_but_no_anonymous_spending(clients):
     token = clients.headers.pop("X-Treg-Token")
     assert (await clients.get("/enrich-arena")).status_code == 200
+    leaderboard = await clients.get("/enrich-arena/leaderboard")
+    assert leaderboard.status_code == 200
+    assert 'aria-label="Arena pages"' in leaderboard.text
+    benchmark = await clients.get("/enrich-arena/people-search-bench")
+    assert benchmark.status_code == 200
+    assert 'href="/enrich-arena/people-search-bench"' in benchmark.text
+    assert (await clients.get("/enrich-arena/bench.js")).status_code == 200
     tasks = (await clients.get("/arena/tasks")).json()
-    assert len(tasks) == 6
+    assert len(tasks) == 10
     work = next(t for t in tasks if t["id"] == "people.email.find")
     names, linkedin = work["provider_previews"]
     assert "hunter" in {p["provider"] for p in names}
@@ -61,6 +212,13 @@ async def test_public_page_and_tasks_but_no_anonymous_spending(clients):
         assert not (await db.execute(select(ArenaRun))).scalars().all()
         assert not (await db.execute(select(Hold))).scalars().all()
     assert (await clients.get("/enrich-arena/arena.js")).status_code == 200
+    assert (await clients.get("/enrich-arena/insights.json")).status_code == 404
+    snapshot = await clients.get("/arena/insights")
+    assert snapshot.status_code == 200
+    assert snapshot.headers["cache-control"] == "no-store"
+    assert snapshot.json()["version"] == 2
+    assert snapshot.json()["rows"] == []
+    assert (await clients.get("/enrich-arena/original-records.private.jsonl.gz")).status_code == 404
     assert (await clients.get("/enrich-arena/../../models.py")).status_code == 404
     assert (await clients.post("/arena/plans", json={"capability":"people.email.find", "identity":IDENTITY})).status_code == 401
     for path in ("/arena/runs", "/arena/runs/anything"):
@@ -378,10 +536,13 @@ async def test_manual_plan_rechecks_own_key_and_credit_admission(clients, enrich
     assert len(seen) == 1
     monkeypatch.setattr(money, 'balance_of', original)
     await clients.post('/secrets',json={'name':'hunter','value':'OWN-KEY'})
-    q = (await clients.post(path+'/plan')).json()
-    assert q['estimate_micro'] == 0
     before = await _balance(clients)
+    async def negative(*args, **kwargs): return -100
+    monkeypatch.setattr(money, 'balance_of', negative)
+    q = (await clients.post(path+'/plan')).json()
+    assert q['estimate_micro'] == 0 and q['affordable'] is True
     assert (await clients.post(path+'/start',json={'quote_id':q['id']})).status_code == 200
+    monkeypatch.setattr(money, 'balance_of', original)
     task = arena._owners.get(result['id'])
     if task: await task
     extra = (await clients.get('/arena/runs/'+result['id'])).json()['results'][1]
@@ -542,3 +703,592 @@ async def test_hourly_limit_applies_at_start_but_pricing_remains_available(clien
     response = await clients.post('/arena/runs/'+fresh['id']+'/start')
     assert response.status_code == 429 and "price previews don't count" in response.text
     assert not seen
+
+
+@pytest.mark.parametrize('verdict', ['valid', 'invalid'])
+async def test_tomba_verification_sends_email_query_and_settles(clients, enrichment_on, monkeypatch, verdict):
+    from treg.application.call.types import UpstreamResponse
+    seen = []
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        seen.append(upstream_url)
+        assert upstream_url == 'https://api.tomba.io/v1/email-verifier'
+        assert dict(request.query_items) == {'email': 'person+tag@example.com'}
+        async def body():
+            yield json.dumps({'data': {'email': {'status': verdict, 'score': 99}}}).encode()
+        async def close():
+            pass
+        return UpstreamResponse(200, ((b'content-type', b'application/json'),), body(), close)
+    monkeypatch.setattr(service, 'relay', relay)
+    q = await plan(clients, providers=['tomba'], capability='people.email.verify', identity={'email':'person+tag@example.com'})
+    run = await finish(clients, q)
+    assert len(seen) == 1
+    assert run['results'][0]['output']['valid'] is (verdict == 'valid')
+    assert run['results'][0]['output']['status'] == verdict
+    assert run['results'][0]['state'] == 'hit'
+    assert run['results'][0]['upstream_status'] == 200
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+def test_arena_masked_required_fields_are_not_hits_and_negative_verdicts_survive():
+    from treg.domain.catalog import store
+    cat = store.load()
+    ep = cat.by_id['pdl.people.enrich']
+    outcome, out = rules.classify(cat.contracts['people.enrich'], cat.adapters[ep['id']], ep, 200,
+                                  {'data':{'full_name':True,'location_name':True}})
+    assert outcome == 'miss'
+    assert out['full_name'] is None and out['location'] is None
+    ep = cat.by_id['hunter.people.email.verify']
+    outcome, out = rules.classify(cat.contracts['people.email.verify'], cat.adapters[ep['id']], ep, 200,
+                                  {'data':{'status':'invalid','score':0}})
+    assert outcome == 'hit' and out['valid'] is False and out['score'] == 0
+
+
+def test_arena_normalizes_history_without_changing_raw_responses_or_charges():
+    raw = {'full_name':'Test Person','location':True,'linkedin_url':'person-example',
+           'company_domain':'https://EXAMPLE.com/capital','website':'example.com',
+           'verified':False,'employees':120,'founded':'2010'}
+    attempt = {'id':'one','entry_index':0,'order':0,'display_order':0,'state':'hit',
+               'output':raw.copy(),'raw':raw.copy(),'charged_micro':380000,'status':200}
+    payload = {'attempts':[attempt]}
+    row = rules.present(payload, mode='compare', state='completed', capability='people.enrich')['results'][0]
+    assert row['output']['location'] is None
+    assert row['output']['linkedin_url'] == 'https://www.linkedin.com/in/person-example'
+    assert row['output']['company_domain'] == 'example.com'
+    assert row['output']['website'] == 'https://example.com'
+    assert row['output']['verified'] is False and row['output']['employees'] == 120
+    assert row['output']['founded'] == '2010'
+    assert row['raw'] == raw and attempt['output'] == raw and row['charged_micro'] == 380000
+    assert rules.safe_output({'linkedin_url':'linkedin.com/company/example/'},capability='companies.enrich')['linkedin_url'] == 'https://www.linkedin.com/company/example'
+    for value in ['javascript:alert(1)', 'https://linkedin.com.evil.test/in/person', 'https://a@linkedin.com/in/person', 'https://[invalid']:
+        assert rules.safe_output({'linkedin_url':value})['linkedin_url'] is None
+
+
+def test_provider_402_is_distinct_from_team_balance_refusal():
+    attempt = {'id':'one','order':0,'display_order':0,'state':'error','status':402,'charged_micro':0}
+    assert rules.present({'attempts':[attempt]},mode='compare',state='completed')['results'][0]['upstream_status'] == 402
+    attempt['failure_kind'] = 'insufficient_balance'
+    assert rules.present({'attempts':[attempt]},mode='compare',state='completed')['results'][0]['upstream_status'] is None
+
+
+@pytest.mark.parametrize('capability,identity', [
+    *[('people.email.verify', {'email': email}) for email in
+      ['@', 'person@', '@example.com', 'person@@example.com', 'person@example',
+       'person@ex\tample.com', 'person@example..com', 'person@example.com/path']],
+    *[('companies.enrich', {'domain': domain}) for domain in
+      ['https://[invalid', 'https://example.com:bad', 'https://user@example.com', 'ftp://example.com']],
+    *[('people.enrich', {'linkedin_url': url}) for url in
+      ['https://[invalid', 'https://linkedin.com:bad/in/person',
+       'https://user@linkedin.com/in/person', 'https://linkedin.com/in/a b']],
+])
+async def test_malformed_identity_is_rejected_before_quote_or_charge(clients, enrichment_on, capability, identity):
+    before = await _balance(clients)
+    response = await clients.post('/arena/plans', json={'capability': capability, 'identity': identity})
+    assert response.status_code == 422, response.text
+    async with session_maker() as db:
+        assert not (await db.execute(select(ArenaRun))).scalars().all()
+        assert not (await db.execute(select(Hold))).scalars().all()
+    assert await _balance(clients) == before
+
+
+@pytest.mark.parametrize('email', ['person+tag@example.co.uk', "o\u0027connor@example.com", '名@example.com'])
+def test_valid_email_forms_remain_accepted(email):
+    assert rules.validate_identity('people.email.verify', {'email': email}) == {'email': email}
+
+
+@pytest.mark.parametrize('mode', ['compare', 'waterfall'])
+async def test_aviato_company_not_found_is_a_free_miss(clients, enrichment_on, monkeypatch, mode):
+    from treg.application.call.types import UpstreamResponse
+    async def relay(*args, **kwargs):
+        async def body():
+            yield b'Not Found'
+        async def close():
+            pass
+        return UpstreamResponse(404, ((b'content-type', b'text/plain'),), body(), close)
+    monkeypatch.setattr(service, 'relay', relay)
+    before = await _balance(clients)
+    run = await finish(clients, await plan(clients, mode=mode, providers=['aviato'],
+        capability='companies.enrich', identity={'domain': 'microsoft.com'}))
+    assert run['state'] == 'completed'
+    assert run['results'][0]['state'] == 'miss'
+    assert run['results'][0]['upstream_status'] == 404
+    assert run['charged_micro'] == 0 and await _balance(clients) == before
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'invalid_json', 'oversized'])
+async def test_bad_vendor_response_finishes_and_finalizes_hold_once(clients, enrichment_on, monkeypatch, failure):
+    from treg.application.call.types import UpstreamResponse
+    closed = []
+    async def relay(*args, **kwargs):
+        if failure == 'timeout':
+            raise TimeoutError('controlled upstream timeout')
+        async def body():
+            yield b'not-json' if failure == 'invalid_json' else b'x' * (rules.MAX_RESULT_BYTES + 1)
+        async def close():
+            closed.append(True)
+        return UpstreamResponse(200, ((b'content-type', b'application/json'),), body(), close)
+    monkeypatch.setattr(service, 'relay', relay)
+    before = await _balance(clients)
+    q = await plan(clients, providers=['hunter'])
+    run = await finish(clients, q)
+    attempt = run['results'][0]
+    assert run['state'] == 'completed'
+    assert attempt['state'] == ('timeout' if failure == 'timeout' else 'error')
+    assert not run.get('charge_pending')
+    assert run['charged_micro'] == before - await _balance(clients)
+    assert closed == ([] if failure == 'timeout' else [True])
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+        ledger = (await db.execute(select(LedgerEntry).where(LedgerEntry.call_id == attempt['call_ref']))).scalars().all()
+        assert sum(entry.kind in {'settle', 'release'} for entry in ledger) == 1
+
+
+async def test_history_pages_keep_tied_rows_stable_and_never_dispatch(clients, enrichment_on, monkeypatch):
+    import uuid
+    q = await plan(clients)
+    before_balance = await _balance(clients)
+    async def no_relay(*args, **kwargs):
+        pytest.fail('Reading history must never call a vendor')
+    monkeypatch.setattr(service, 'relay', no_relay)
+    ids = [f'{i:032x}' for i in range(65)]
+    async with session_maker() as db:
+        template = (await db.get(ArenaRun, q['id'])).model_dump()
+        # Identical timestamps force the ID tie-breaker across page boundaries.
+        for run_id in ids:
+            db.add(ArenaRun(**{**template, 'id': run_id, 'request_key': uuid.uuid4().hex, 'state': 'completed'}))
+        await db.commit()
+    default = (await clients.get('/arena/runs')).json()
+    assert len(default) == 30 and [r['id'] for r in default] == list(reversed(ids))[:30]
+    page = (await clients.get('/arena/runs?limit=31')).json()
+    collected = page[:30]
+    async with session_maker() as db:
+        db.add(ArenaRun(**{**template, 'id': uuid.uuid4().hex, 'request_key': uuid.uuid4().hex,
+            'state': 'completed', 'created_at': utcnow_naive() + timedelta(seconds=1)}))
+        await db.commit()
+    while len(page) > 30:
+        response = await clients.get('/arena/runs', params={'limit': 31, 'before': collected[-1]['id']})
+        assert response.status_code == 200
+        page = response.json()
+        collected.extend(page[:30])
+    assert [r['id'] for r in collected] == list(reversed(ids))
+    assert (await clients.get('/arena/runs', params={'before': ids[0]})).json() == []
+    assert (await clients.get('/arena/runs', params={'before': q['id']})).status_code == 404
+    for limit in [0, -1, 101]:
+        assert (await clients.get('/arena/runs', params={'limit': limit})).status_code == 422
+    other = (await clients.post('/users', json={'email': 'history-other@superdesign.dev'})).json()['token']
+    assert (await clients.get('/arena/runs', params={'before': ids[-1]}, headers={'X-Treg-Token': other})).status_code == 404
+    assert await _balance(clients) == before_balance
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+async def test_arena_and_dashboard_share_setup_components(clients):
+    asset = await clients.get('/agent-setup.js')
+    assert asset.status_code == 200 and 'no-cache' in asset.headers['cache-control']
+    assert 'javascript' in asset.headers['content-type']
+    assert 'SetupInstructions' in asset.text and 'AgentPicker' in asset.text
+    page = (await clients.get('/enrich-arena')).text
+    dashboard = (await clients.get('/app')).text
+    assert '/agent-setup.js' in page and '/agent-setup.js' in dashboard
+    assert 'treg-setup-instructions' in page and 'treg-setup-instructions' in dashboard
+    assert 'Setup treg in' in page and 'ref="setupDialog"' in page
+
+
+def test_discovery_public_cohorts_keep_all_requested_constraints():
+    tasks = {t['id']: t for t in arena.public_tasks()}
+    assert tasks['people.search']['discovery']
+    role_country = tasks['people.search']['provider_previews'][1]
+    assert role_country and 'lusha' not in {p['provider'] for p in role_country}
+    company_role = tasks['people.company.search']['provider_previews'][1]
+    assert company_role and not {'hunter','lusha','leadsforge'} & {p['provider'] for p in company_role}
+    similar = tasks['companies.similar']['provider_previews'][0]
+    assert {'tomba','companyenrich'} <= {p['provider'] for p in similar}
+    assert tasks['companies.similar']['max_entries'] == 10
+    assert next(p for p in similar if p['provider']=='companyenrich')['estimate_micro'] > next(p for p in similar if p['provider']=='tomba')['estimate_micro']
+
+
+def test_search_outputs_are_bounded_sanitized_and_survive_presentation():
+    output = rules.safe_output({'people':[{'name':'Example Person','linkedin_url':'javascript:bad','email':True,'title':False}]*30,'count':99999}, capability='people.search')
+    assert output['count']==10 and len(output['people'])==10
+    assert output['people'][0]=={'name':'Example Person'}
+    assert rules.safe_output(output, capability='people.company.search') == output
+    assert rules.safe_output({'companies':[{'name':False,'domain':'javascript:bad'}]},capability='companies.similar') == {'companies':[],'count':0}
+    with pytest.raises(rules.ArenaError, match='10 entries'):
+        rules.validate_entries('people.company.search',None,[{'company_domain':f'example{i}.test'} for i in range(11)])
+    assert rules.validate_identity('people.company.search',{'company_domain':'https://Example.test/path'}) == {'company_domain':'example.test'}
+
+
+async def test_people_search_executes_a_bounded_direct_query(clients, enrichment_on, monkeypatch):
+    seen=[]
+    monkeypatch.setattr(service,'relay',_relay_by_provider({'aviato':[(200,{'items':[{'fullName':'Example Person','headline':'Engineer','linkedinUrl':'https://www.linkedin.com/in/example'}]})]},seen))
+    response=await clients.post('/arena/plans',json={'capability':'people.search','identity':{'q':'software engineer'},'providers':['aviato'],'mode':'compare','max_cost_micro':1_000_000})
+    assert response.status_code==200,response.text
+    result=await finish(clients,response.json())
+    assert seen[0][3]['dsl']['limit']==10
+    row=result['results'][0]
+    assert row['state']=='hit' and row['output']['count']==1
+    assert row['output']['people'][0]['name']=='Example Person'
+    assert row['output']['people'][0]['linkedin_url']=='https://www.linkedin.com/in/example'
+
+
+async def test_company_people_batch_preserves_each_list_and_settles_once(clients, enrichment_on, monkeypatch):
+    seen=[]
+    answer={'data':{'emails':[{'first_name':'Example','last_name':'Person','value':'example@example.test','position':'Engineer'}]}}
+    monkeypatch.setattr(service,'relay',_relay_by_provider({'hunter':[(200,answer),(200,answer)]},seen))
+    response=await clients.post('/arena/plans',json={'capability':'people.company.search','identities':[{'company_domain':'one.test'},{'company_domain':'two.test'}],'providers':['hunter'],'mode':'compare','max_cost_micro':1_000_000})
+    assert response.status_code==200,response.text
+    before=await _balance(clients)
+    result=await finish(clients,response.json())
+    assert len(seen)==2 and {r[2]['domain'] for r in seen}=={'one.test','two.test'}
+    assert all(str(r[2]['limit'])=='10' for r in seen)
+    assert all(r['state']=='hit' and r['output']['count']==1 for r in result['results'])
+    assert {r['entry_index'] for r in result['results']}=={0,1}
+    assert result['charged_micro']==before-await _balance(clients)
+    await finish(clients,response.json())
+    assert len(seen)==2
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+async def test_similar_companies_uses_saved_adapter_and_renders_company_rows(clients, enrichment_on, monkeypatch):
+    seen=[]
+    monkeypatch.setattr(service,'relay',_relay_by_provider({'tomba':[(200,{'data':[{'name':'Example Peer','website_url':'https://peer.test'}]})]},seen))
+    response=await clients.post('/arena/plans',json={'capability':'companies.similar','identity':{'domain':'seed.test'},'providers':['tomba'],'mode':'compare','max_cost_micro':1_000_000})
+    assert response.status_code==200,response.text
+    result=await finish(clients,response.json())
+    assert seen[0][2]['domain']=='seed.test'
+    row=result['results'][0]
+    assert row['state']=='hit' and row['output']['companies']==[{'name':'Example Peer','domain':'peer.test'}]
+
+
+async def test_discovery_rejects_unknown_country_before_planning(clients, enrichment_on, monkeypatch):
+    async def no_plan(*args, **kwargs):
+        pytest.fail('Invalid countries must not be silently dropped during planning')
+    monkeypatch.setattr(arena, '_plan_entry', no_plan)
+    response = await clients.post('/arena/plans', json={
+        'capability': 'people.search', 'identity': {'title': 'Engineer', 'country': 'ZZ'},
+        'providers': ['icypeas'], 'mode': 'compare', 'max_cost_micro': 1_000_000})
+    assert response.status_code == 422
+    assert 'recognized two-letter country' in response.text
+
+
+@pytest.mark.parametrize('source', [
+    {'firstname': 'Example', 'lastname': 'Person', 'profileUrl': 'https://www.linkedin.com/in/example', 'lastJobTitle': 'Engineer'},
+    {'name': 'Example Person', 'socials': {'linkedin_url': 'https://www.linkedin.com/in/example'}, 'position': 'Engineer'},
+    {'fullName': 'Example Person', 'URLs': {'linkedin': 'https://www.linkedin.com/in/example'}, 'headline': 'Engineer'},
+])
+def test_discovery_normalizes_saved_vendor_response_shapes(source):
+    output = rules.safe_output({'people': [source]}, capability='people.search')
+    assert output == {'people': [{'name': 'Example Person', 'title': 'Engineer', 'linkedin_url': 'https://www.linkedin.com/in/example'}], 'count': 1}
+
+
+async def test_companyenrich_similar_quotes_and_dispatches_the_explicit_page_limit(clients, enrichment_on, monkeypatch):
+    from treg.config import get_settings
+    monkeypatch.setenv('TREG_PLATFORM_KEY_COMPANYENRICH', 'PLATFORM-COMPANYENRICH-KEY')
+    monkeypatch.setenv('TREG_PLATFORM_PROVIDERS', 'companyenrich')
+    get_settings.cache_clear()
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'companyenrich': [(200, {'items': [{'name': 'Example Peer', 'domain': 'peer.test'}], 'totalItems': 500})]}, seen))
+    response = await clients.post('/arena/plans', json={
+        'capability': 'companies.similar', 'identity': {'domain': 'seed.test'},
+        'providers': ['companyenrich'], 'mode': 'compare', 'max_cost_micro': 1_000_000})
+    assert response.status_code == 200, response.text
+    result = await finish(clients, response.json())
+    assert seen[0][3] == {'domains': ['seed.test'], 'page': 1, 'pageSize': 10}
+    assert result['results'][0]['state'] == 'hit'
+    assert result['results'][0]['output']['count'] == 1, 'Upstream total is not the number of displayed matches'
+    assert result['results'][0]['output']['companies'][0]['domain'] == 'peer.test'
+    task = next(t for t in arena.public_tasks() if t['id'] == 'companies.similar')
+    assert response.json()['required_micro'] == next(p for p in task['provider_previews'][0] if p['provider'] == 'companyenrich')['estimate_micro']
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_parallel_manual_providers_preserve_results_and_settle_once(clients, enrichment_on, monkeypatch, cancel):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba': [(200, TOMBA_HIT)]}, seen))
+    result = await finish(clients, await plan(clients, mode='waterfall', providers=['tomba', 'findymail', 'hunter']))
+    root = '/arena/runs/' + result['id']
+    remaining = [r for r in result['results'] if r['can_try']]
+    assert len(remaining) == 2
+    gate = {r['provider']: asyncio.Event() for r in remaining}
+    entered = {r['provider']: asyncio.Event() for r in remaining}
+    relay = _relay_by_provider({'hunter': [(200, HUNTER_HIT)], 'findymail': [(200, {'contact': {'name':'Test Person','email':'test@example.com'}})]}, seen)
+    async def blocked(request, upstream_url, *args, **kwargs):
+        provider = 'hunter' if 'hunter' in upstream_url else 'findymail'
+        entered[provider].set()
+        await gate[provider].wait()
+        return await relay(request, upstream_url, *args, **kwargs)
+    monkeypatch.setattr(service, 'relay', blocked)
+    before = await _balance(clients)
+    for target in remaining:
+        path = root + '/attempts/' + target['id']
+        q = await clients.post(path + '/plan')
+        assert q.status_code == 200, q.text
+        starts = await asyncio.gather(*(clients.post(path + '/start', json={'quote_id': q.json()['id']}) for _ in range(2)))
+        assert sorted(r.status_code for r in starts) == [200, 409]
+        await asyncio.wait_for(entered[target['provider']].wait(), 5)
+    owners = list(arena._owners.values())
+    assert len(owners) == 2
+    running = (await clients.get(root)).json()
+    assert sum(r['state'] == 'running' for r in running['results']) == 2
+    assert running['results'][0]['raw'] == result['results'][0]['raw']
+    if cancel:
+        await clients.post(root + '/cancel')
+        await asyncio.wait_for(asyncio.gather(*owners), 5)
+    else:
+        gate[remaining[0]['provider']].set()
+        await asyncio.wait(owners, timeout=5, return_when=asyncio.FIRST_COMPLETED)
+        middle = (await clients.get(root)).json()
+        assert middle['state'] == 'running'
+        assert sum(r['state'] == 'running' for r in middle['results']) == 1
+        gate[remaining[1]['provider']].set()
+        await asyncio.wait_for(asyncio.gather(*owners), 5)
+    final = (await clients.get(root)).json()
+    assert final['state'] == ('cancelled' if cancel else 'completed')
+    assert final['results'][0]['raw'] == result['results'][0]['raw']
+    extras = [r for r in final['results'] if r.get('manual')]
+    assert len(extras) == 2 and all(not r['can_try'] for r in extras)
+    assert all(r['state'] == ('cancelled' if cancel else 'hit') for r in extras)
+    assert before - await _balance(clients) == sum(r['charged_micro'] for r in extras)
+    async with session_maker() as db:
+        for r in extras:
+            settled = (await db.execute(select(LedgerEntry).where(LedgerEntry.call_id == r['call_ref'], LedgerEntry.kind.in_(['settle','release'])))).scalars().all()
+            assert len(settled) == 1
+
+
+async def test_try_uncalled_batch_cell_while_original_waterfall_runs(clients, enrichment_on, monkeypatch):
+    seen = []
+    gate, entered = asyncio.Event(), asyncio.Event()
+    relay = _relay_by_provider({'tomba': [(200, TOMBA_HIT), (200, {'data': {}})], 'hunter': [(200, HUNTER_HIT)] * 2}, seen)
+    async def blocked(request, upstream_url, *args, **kwargs):
+        if 'hunter' in upstream_url and dict(request.query_items).get('domain') == SECOND_IDENTITY['domain']:
+            entered.set()
+            await gate.wait()
+        return await relay(request, upstream_url, *args, **kwargs)
+    monkeypatch.setattr(service, 'relay', blocked)
+    q = await batch_plan(clients, mode='waterfall')
+    root = '/arena/runs/' + q['id']
+    assert (await clients.post(root + '/start')).status_code == 200
+    original = arena._owners[q['id']]
+    await asyncio.wait_for(entered.wait(), 5)
+    current = (await clients.get(root)).json()
+    target = next(r for r in current['results'] if r['entry_index'] == 0 and r['provider'] == 'hunter')
+    assert target['can_try']
+    path = root + '/attempts/' + target['id']
+    quote = (await clients.post(path + '/plan')).json()
+    assert (await clients.post(path + '/start', json={'quote_id':quote['id']})).status_code == 200
+    manual = next(t for t in arena._owners.values() if t is not original)
+    await asyncio.wait_for(asyncio.shield(manual), 5)
+    assert (await clients.get(root)).json()['state'] == 'running'
+    gate.set()
+    await asyncio.wait_for(asyncio.shield(original), 5)
+    final = (await clients.get(root)).json()
+    assert final['state'] == 'completed'
+    extra = next(r for r in final['results'] if r['id'] == target['id'])
+    assert extra['state'] == 'hit' and extra['manual'] and extra['call_ref']
+    assert len(seen) == 4
+
+
+async def test_auto_email_verification_is_priced_and_invalid_verdict_preserves_email(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)], 'leadmagic':[(200,{'email_status':'invalid'})]}, seen))
+    base = await plan(clients, mode='waterfall')
+    q = await plan(clients, mode='waterfall', auto_verify=True)
+    assert q['auto_verify']['provider'] == 'leadmagic'
+    assert q['required_micro'] == base['required_micro'] + q['verification_estimate_micro']
+    before = await _balance(clients)
+    final = await finish(clients, q)
+    hit = next(r for r in final['results'] if r['state'] == 'hit')
+    assert hit['output']['email'] == 'another@example.com'
+    v = hit['verification']
+    assert v['state'] == 'hit' and v['output']['valid'] is False and v['output']['status'] == 'invalid'
+    assert not hit['can_verify'] and final['state'] == 'completed'
+    assert seen[1][3]['email'] == hit['output']['email']
+    assert before - await _balance(clients) == final['charged_micro'] == hit['charged_micro']
+    assert hit['charged_micro'] == hit['lookup_charged_micro'] + v['charged_micro']
+    assert hit['report']['reason'] == 'incorrect_data'
+    assert hit['report']['feedback_context'] == 'automated_verification'
+    assert hit['report']['verification_id'] == v['id']
+    reread = (await clients.get('/arena/runs/'+final['id'])).json()
+    assert reread['results'][0]['report'] == hit['report']
+
+
+async def test_auto_verification_skips_misses_and_enforces_budget(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,{'data':{}})]}, seen))
+    final = await finish(clients, await plan(clients, mode='waterfall', providers=['tomba'], auto_verify=True))
+    assert len(seen) == 1 and 'verification' not in final['results'][0]
+    q = await plan(clients, mode='waterfall', providers=['tomba'], auto_verify=True)
+    rejected = await clients.post('/arena/plans', json={'capability':'people.email.find','identity':IDENTITY,'mode':'waterfall','providers':['tomba'],'auto_verify':True,'max_cost_micro':q['required_micro']-1})
+    assert rejected.status_code == 422
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+async def test_one_click_verification_claims_once_and_retains_lookup_on_cancel(clients, enrichment_on, monkeypatch, cancel):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)]}, seen))
+    final = await finish(clients, await plan(clients, mode='waterfall'))
+    hit = final['results'][0]
+    assert hit['can_verify']
+    root = '/arena/runs/'+final['id']
+    path = root+'/attempts/'+hit['id']+'/verification'
+    before = await _balance(clients)
+    q = (await clients.post(path+'/plan')).json()
+    assert await _balance(clients) == before
+    entered, gate = asyncio.Event(), asyncio.Event()
+    relay = _relay_by_provider({'leadmagic':[(200,{'email_status':'catch_all'})]}, seen)
+    async def blocked(*args, **kwargs):
+        entered.set()
+        await gate.wait()
+        return await relay(*args, **kwargs)
+    monkeypatch.setattr(service, 'relay', blocked)
+    starts = await asyncio.gather(*(clients.post(path+'/start',json={'quote_id':q['id']}) for _ in range(2)))
+    assert sorted(r.status_code for r in starts) == [200,409]
+    owner = arena._owners[final['id']]
+    await asyncio.wait_for(entered.wait(),5)
+    running = (await clients.get(root)).json()
+    assert running['results'][0]['verification']['state'] == 'running'
+    assert not running['results'][0]['can_verify']
+    if cancel:
+        await clients.post(root+'/cancel')
+    else:
+        gate.set()
+    await asyncio.wait_for(asyncio.shield(owner),5)
+    checked = (await clients.get(root)).json()['results'][0]
+    assert checked['output'] == hit['output']
+    assert checked['verification']['state'] == ('cancelled' if cancel else 'hit')
+    if not cancel: assert checked['verification']['output']['status'] == 'catch_all'
+    assert checked['charged_micro'] - hit['charged_micro'] == before - await _balance(clients)
+    assert (await clients.post(path+'/plan')).status_code == 409
+
+
+async def test_phone_verification_task_and_auto_phone_lookup(clients, enrichment_on, monkeypatch):
+    seen = []
+    response = {'data':{'valid':False,'e164_format':'+14155550100','country_code':'US','line_type':'FIXED_LINE_OR_MOBILE','carrier':''}}
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,response)]}, seen))
+    q = await clients.post('/arena/plans', json={'capability':'people.phone.verify','identity':{'phone':'+1 (415) 555-0100'},'providers':['tomba'],'mode':'waterfall'})
+    assert q.status_code == 200, q.text
+    final = await finish(clients,q.json())
+    assert final['results'][0]['state'] == 'hit' and final['results'][0]['output']['valid'] is False
+    assert seen[0][2]['phone'] == '+14155550100'
+    seen.clear()
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,{'data':{'e164_format':'+14155550100'}}),(200,response)]}, seen))
+    q = await clients.post('/arena/plans', json={'capability':'people.phone.find','identity':{'linkedin_url':'https://www.linkedin.com/in/example'},'providers':['tomba'],'mode':'waterfall','auto_verify':True})
+    assert q.status_code == 200, q.text
+    final = await finish(clients,q.json())
+    assert final['results'][0]['verification']['output']['valid'] is False
+    assert len(seen) == 2
+
+
+async def test_verification_credit_admission_and_ownership(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)]}, seen))
+    final = await finish(clients,await plan(clients,mode='waterfall'))
+    path = '/arena/runs/'+final['id']+'/attempts/'+final['results'][0]['id']+'/verification'
+    q = (await clients.post(path+'/plan')).json()
+    from treg.domain import money
+    async def empty(*args,**kwargs): return 0
+    monkeypatch.setattr(money,'balance_of',empty)
+    assert (await clients.post(path+'/start',json={'quote_id':q['id']})).status_code == 402
+    assert (await clients.post(path+'/plan')).json()['affordable'] is False
+    assert len(seen) == 1
+    assert (await clients.post(path+'/plan',headers={'Origin':'https://evil.example'})).status_code == 403
+    other = (await clients.post('/users',json={'email':'verify-other@superdesign.dev'})).json()['token']
+    assert (await clients.post(path+'/start',json={'quote_id':q['id']},headers={'X-Treg-Token':other})).status_code == 404
+
+
+def test_phone_identity_requires_country_calling_code():
+    assert rules.validate_identity('people.phone.verify',{'phone':'+44 20 7946 0958'}) == {'phone':'+442079460958'}
+    with pytest.raises(rules.ArenaError): rules.validate_identity('people.phone.verify',{'phone':'4155550100'})
+
+async def test_batch_auto_verifies_each_found_entry(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)]*2, 'leadmagic':[(200,{'email_status':'valid'})]*2}, seen))
+    q = await batch_plan(clients, mode='compare', providers=['tomba'], auto_verify=True)
+    final = await finish(clients, q)
+    assert len(seen) == 4
+    assert len(final['results']) == 2
+    assert all(r['verification']['output']['valid'] is True for r in final['results'])
+    assert final['charged_micro'] == sum(r['charged_micro'] for r in final['results'])
+
+
+async def test_extra_lookup_admits_auto_verification_price(clients, enrichment_on, monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)], 'hunter':[(200,HUNTER_HIT)], 'leadmagic':[(200,{'email_status':'valid'})]*2}, seen))
+    final = await finish(clients, await plan(clients, mode='waterfall', auto_verify=True))
+    target = next(r for r in final['results'] if r['can_try'])
+    root = '/arena/runs/'+final['id']
+    path = root+'/attempts/'+target['id']
+    q = (await clients.post(path+'/plan')).json()
+    assert q['required_micro'] == q['estimate_micro'] + final['auto_verify']['estimate_micro']
+    assert (await clients.post(path+'/start',json={'quote_id':q['id']})).status_code == 200
+    await asyncio.wait_for(asyncio.shield(arena._owners[final['id']]),5)
+    result = (await clients.get(root)).json()
+    assert all(r['verification']['state'] == 'hit' for r in result['results'])
+    assert len(seen) == 4
+
+@pytest.mark.parametrize('status,prior_report', [('invalid',False),('invalid',True),('catch_all',False),('unknown',False),('valid',False)])
+async def test_table_verification_reports_only_invalid_email_and_preserves_feedback(clients, enrichment_on, monkeypatch, status, prior_report):
+    seen = []
+    monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)], 'leadmagic':[(200,{'email_status':status})]}, seen))
+    final = await finish(clients, await plan(clients, mode='waterfall', providers=['tomba']))
+    lookup = final['results'][0]
+    root = '/arena/runs/'+final['id']
+    path = root+'/attempts/'+lookup['id']
+    existing = None
+    if prior_report:
+        response = await clients.post(path+'/report',json={'reason':'wrong_person','comment':'Existing user feedback'})
+        assert response.status_code == 200
+        existing = response.json()['report']
+        assert (await clients.post(path+'/rating',json={'value':'up'})).status_code == 200
+    q = (await clients.post(path+'/verification/plan')).json()
+    assert (await clients.post(path+'/verification/start',json={'quote_id':q['id']})).status_code == 200
+    await asyncio.wait_for(asyncio.shield(arena._owners[final['id']]),5)
+    checked = (await clients.get(root)).json()['results'][0]
+    assert checked['output'] == lookup['output'] and checked['state'] == 'hit'
+    if prior_report:
+        assert checked['report'] == existing and checked['rating']['value'] == 'up'
+    elif status == 'invalid':
+        assert checked['report']['feedback_context'] == 'automated_verification'
+        assert checked['report']['verification_id'] == checked['verification']['id']
+        # A later human decision takes precedence and survives subsequent reads.
+        assert (await clients.post(path+'/rating',json={'value':'up'})).status_code == 200
+        assert (await clients.get(root)).json()['results'][0]['rating']['value'] == 'up'
+    else:
+        assert not checked.get('report')
+
+
+@pytest.mark.parametrize('task,state,status,valid,expected', [
+    ('people.email.verify','hit','undeliverable',False,True),
+    ('people.email.verify','hit','risky',False,False),
+    ('people.email.verify','hit','',False,False),
+    ('people.email.verify','error','invalid',False,False),
+    ('people.email.verify','cancelled','invalid',False,False),
+    ('people.phone.verify','hit','invalid',False,False),
+    ('people.email.verify','hit','invalid',True,False),
+])
+def test_issue_requires_completed_explicit_negative_email_verdict(task,state,status,valid,expected):
+    attempt = {'state':'hit','verification':{'capability':task,'state':state,'output':{'valid':valid,'status':status}}}
+    assert rules.verification_rejected_email(attempt,'people.email.find') is expected
+    assert not rules.verification_rejected_email(attempt,'people.phone.find')
+
+async def test_new_free_verifier_is_selected_for_auto_verification(clients, enrichment_on, monkeypatch):
+    from treg.config import get_settings
+    monkeypatch.setenv('TREG_PLATFORM_PROVIDERS','tomba,contactout,trykitt,millionverifier')
+    for name in ['CONTACTOUT','TRYKITT','MILLIONVERIFIER']:
+        monkeypatch.setenv('TREG_PLATFORM_KEY_'+name,'SYNTHETIC-VERIFICATION-KEY')
+    get_settings.cache_clear()
+    seen=[]
+    monkeypatch.setattr(service,'relay',_relay_by_provider({'tomba':[(200,TOMBA_HIT)],'contactout':[(200,{'status_code':200,'data':{'status':'valid'}})]},seen))
+    q=await plan(clients,mode='waterfall',providers=['tomba'],auto_verify=True)
+    assert q['auto_verify']['provider']=='contactout'
+    assert q['auto_verify']['estimate_micro']==0
+    final=await finish(clients,q)
+    result=final['results'][0]
+    assert result['verification']['provider']=='contactout'
+    assert result['verification']['output']['valid'] is True
+    assert result['verification']['charged_micro']==0
+    assert result['charged_micro']==result['lookup_charged_micro']
+    assert [c[0] for c in seen]==['tomba','contactout']

@@ -1443,3 +1443,35 @@ class ArchiveEndpointStat(SQLModel, table=True):
     bodies_kept: int = Field(default=0)            # versions whose bytes were kept
     kept_bytes: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, server_default="0"))  # already past int32 on prod
     newest_fetch: datetime | None = Field(default=None)
+
+
+class ArenaObservation(SQLModel, table=True):
+    """Derived, non-content call evidence; written only by application.arena_insights."""
+    __table_args__ = (Index("ix_arenaobservation_window", "version", "created_at"),
+                      Index("ix_arenaobservation_request", "version", "endpoint", "input", "request_hash", "created_at"),)
+    id: int = Field(primary_key=True)  # audit ID, deliberately no FK into lossy audit retention
+    version: str
+    endpoint: str
+    task: str
+    input: str
+    request_hash: str
+    category: str
+    duration_ms: int | None = None
+    created_at: datetime
+
+
+class ArenaInsightState(SQLModel, table=True):
+    """Persistent collection cursor and public aggregate, never raw request/response content."""
+    id: str = Field(primary_key=True)
+    cursor: int = 0
+    scan_until: datetime
+    updated_at: datetime | None = None
+    payload: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+
+
+class ArenaVerificationSnapshot(SQLModel, table=True):
+    """Published aggregate only; private contact evidence never enters this table."""
+    id: str = Field(primary_key=True)
+    source_digest: str
+    published_at: datetime = Field(index=True)
+    payload: dict = Field(default_factory=dict, sa_column=Column(JSON))

@@ -238,6 +238,11 @@ pays the aggregator's real price, 0% markup, disclosed in-band when it ships (st
 
 ## Protect, part one (step D) — refuse before reserve
 
+PDL's HTTP 402 `hit your account maximum for …` response is an operation quota signature,
+so the existing strike ladder locks only the affected endpoint (for example `pdl.x.person-identify`).
+Person/company enrichment can remain usable on the same key. Other PDL 402 responses retain the
+balance classification. An Arena team top-up cannot replenish this vendor-side allowance.
+
 The call path reads the view and runs the breaker (`marks.py`); the mechanics and the typed
 `provider_capacity` 503 are documented in `architecture/proxy-model.md` § Platform capacity and
 `interface/api.md`. In one line: locked provider or endpoint → 503 before any hold, with

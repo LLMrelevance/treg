@@ -36,6 +36,8 @@ EXPECTED_MAKERS: dict[str, set[str]] = {
     "application/asynctasks.py": {API},
     # Interactive paid runs: short transactions between legs, never across upstream waits.
     "application/arena.py": {API},
+    "application/arena_insights.py": {API, BACKGROUND},  # snapshot read vs incremental worker
+    "application/arena_verification_insights.py": {API},  # explicit aggregate publication, no worker
 
     "application/feedback.py": {API},  # synchronous intake; admin reads use get_admin_session
 

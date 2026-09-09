@@ -22,6 +22,9 @@ sources:
   - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
   - src/treg/alembic/versions/0024_membership_calls_today_counter.py
   - src/treg/alembic/versions/0026_enrich_arena.py
+  - src/treg/alembic/versions/0027_arena_insights.py
+  - src/treg/alembic/versions/0028_arena_verification_snapshot.py
+
   - src/treg/alembic/versions/0011_callrecord_archive_link.py
   - src/treg/alembic/versions/0015_idempotentcall_membership_cascade.py
   - src/treg/maintenance.py
@@ -501,3 +504,18 @@ minted lazily on first visit to the Referrals page - NULL is the normal state.
 `Referral.card_fingerprint` holds Stripe's stable per-card id. It is **not card data** (opaque
 outside our own Stripe account) and lives here alone, never on `Org`, which keeps
 `Org.stripe_default_pm`'s no-card-data posture intact.
+
+## Arena statistics
+
+Revision `0027` adds `ArenaObservation` (anonymous classified audit facts, 30-day window) and
+`ArenaInsightState` (collection cursor and aggregate JSON). Only `application.arena_insights` writes
+them. They have no audit foreign key because audit retention is independent; neither stores raw
+requests, responses or credentials. The public table reads these database aggregates, not bundled
+production metrics. See [Enrich Arena](../interface/enrich-arena.md) for classification and refresh semantics.
+
+Revision `0028` adds `ArenaVerificationSnapshot`, written only by
+`application.arena_verification_insights.publish_snapshot`. Its immutable run ID, content digest,
+publication time and aggregate JSON keep verification pilots independent of rolling observations.
+It holds no contacts or raw evidence. The public insights API selects the latest publication through
+the publication-time index; see [Enrich Arena](../interface/enrich-arena.md) for estimate semantics
+and the aggregate-only import workflow.

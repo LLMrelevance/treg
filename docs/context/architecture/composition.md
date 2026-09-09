@@ -30,9 +30,11 @@ related:
 
 # Application composition
 
-The standalone [Enrich Arena](../interface/enrich-arena.md) page and `/arena/*` routes are control-role
+The standalone [Enrich Arena](../interface/enrich-arena.md) pages (`/enrich-arena` and
+`/enrich-arena/leaderboard`) and `/arena/*` routes are control-role
 surfaces. Paid interactive runs use the ordinary call application internally. Shutdown drains their
 in-process owners before closing the shared upstream client.
+The shared `/agent-setup.js` browser asset also belongs to the control role.
 
 `bootstrap.create_app(role)` is the FastAPI composition root. `api.py` hosts the ordered route table,
 attaches concern routers at compatibility-sensitive registration points, and calls the factory once at
@@ -140,3 +142,6 @@ otherwise change route inspection and the committed surface snapshot.
 
 Public routes added since: `/{INDEXNOW_KEY}.txt` (`indexnow_key`, `routers/web.py`) — the IndexNow
 key file; listed in the ownership table beside `/sitemap.xml`. See `interface/seo.md` § IndexNow.
+
+The control/all lifespan starts and drains `application.arena_insights.worker` for database-backed
+Arena statistics. Dataplane processes do not run this collector; `/arena/insights` is a control route.

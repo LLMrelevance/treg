@@ -260,6 +260,12 @@ adapters:
     out: {phone: "results[0].phones[0].number", line_type: "results[0].phones[0].type", country_code: "results[0].phones[0].countryIso2"}
     miss: "results[0].phones[0].number == null"
 
+  tomba.people.phone.verify:
+    accepts: [[phone]]
+    in: {phone: queryParams.phone}
+    out: {valid: data.valid, phone: data.e164_format, country_code: data.country_code, line_type: data.line_type, carrier: data.carrier}
+    miss: "data.valid == null"
+
   # ---- people.email.verify ------------------------------------------------------------------
   trykitt.people.email.verify:
     accepts: [[email]]
@@ -469,6 +475,20 @@ adapters:
     in_expr: {queryParams.region: "upper(country)"}
     out: {results: results, count: "len(results)"}
     miss: "results == []"
+
+  # Similar-company adapters checked against existing saved upstream fixtures.
+  tomba.companies.similar:
+    accepts: [[domain]]
+    in: {domain: queryParams.domain}
+    out: {companies: data, count: "len(data)"}
+    miss: "data == []"
+  companyenrich.companies.similar:
+    accepts: [[domain]]
+    in: {domain: body.domains}
+    in_expr: {body.domains: "list(domain)"}
+    const: {body.page: 1, body.pageSize: 10}
+    out: {companies: items, count: totalItems}
+    miss: "items == []"
 
   # ---- people.search ------------------------------------------------------------------------
   exa.people.search:

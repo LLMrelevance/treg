@@ -143,6 +143,13 @@ Historical failure-only samples do not establish coverage for the corrected requ
 
 ## Authorization metadata
 
+Tomba email verification uses `GET /v1/email-verifier?email=…`; its catalog input and routing
+adapter both send `email` in query parameters. A September 8, 2026 live comparison with the same
+address and credentials returned a valid verification response on this documented query route
+and HTTP 422 `params_invalid` on the former `/v1/email-verifier/{email}` path. The response
+mapping remains `data.email.status` / `data.email.score`. Historical failure-only samples do not
+establish coverage for the corrected request shape.
+
 An endpoint can declare `authorization_method`, ordered `authorization_methods`, method-specific
 `authorization_paths`, `required_scopes`, `required_resource`, and `token_type`. `_normalize`
 keeps these fields on the internal row and exposes them on endpoint detail only when present.
@@ -1267,6 +1274,9 @@ Five rules worth keeping:
   failure but an aviato 404 (voice-ai-outbound's GT report). Only a 4xx is honoured — a
   `status: 200` block (tikhub) is agent documentation; the adapter's own `miss` predicate decides
   a 2xx. Note a `per_call` provider (companyenrich) still bills the request on its declared miss.
+  Aviato company enrichment also declares 404 as a miss after the 2026-09-08 Arena sweep
+  returned `Not Found` for microsoft.com; its company-enrich documentation identifies the
+  response as `Company Not Found Error`. Arena and routed calls use the same metadata.
 - **Below `MIN_SAMPLES` we publish the count and nothing else.** "100% from two calls" is noise
   dressed as evidence, and on a quiet endpoint a rate could expose one org's activity. The floor
   applies to **decided calls** (2xx + provider-fault failures), not total traffic: four caller 422s
@@ -1710,3 +1720,22 @@ People lookup/search entries are `untestable:` without test requests or stored e
 PII rule. Their routing adapters are omitted; company search/enrichment and email verification
 retain verified adapters. Profile-only LinkedIn enrichment costs $0.02 when found.
 See [ContactOut](contactout.md) for request limitations, derived settlement and live evidence.
+
+
+### Similar-company routing
+
+The `companies.similar` contract accepts a seed `domain` and returns a nonempty `companies` list.
+Tomba and CompanyEnrich adapters are checked against their existing saved catalog fixtures.
+Tomba maps the domain to its query parameter and returns `data`; CompanyEnrich maps it to a
+one-item `body.domains` list, fixes page to one and pageSize to ten, and returns `items`.
+CompanyEnrich pricing therefore uses the explicit ten-row request. The contract has no common
+limit filter because Tomba's endpoint does not accept one. The ordinary verified-adapter gate
+controls synthesized routing availability; Arena additionally bounds its displayed rows.
+
+### Phone validation adapter
+
+The `people.phone.verify` contract maps Tomba's existing GET `/v1/phone-validator` endpoint
+through `queryParams.phone`. The adapter reads `data.valid`, `data.e164_format`, country code,
+line type and carrier. A boolean false is a returned invalid verdict; a missing verdict is a
+miss. This validates numbering-plan/format details, not line activity or subscriber ownership.
+The single verified adapter is usable by Arena; the two-provider public routing gate stays intact.

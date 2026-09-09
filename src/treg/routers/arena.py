@@ -1,11 +1,11 @@
 """Standalone Arena page and authenticated application adapters."""
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..application import arena
+from ..application import arena, arena_insights
 from ..domain.arena import ArenaError
 from ..domain.identity.access import Caller, require_member
 from .auth import _client_ip
@@ -15,6 +15,8 @@ router = APIRouter()
 _WEB = Path(__file__).parent.parent / "web"
 
 
+@router.get("/enrich-arena/people-search-bench", include_in_schema=False)
+@router.get("/enrich-arena/leaderboard", include_in_schema=False)
 @router.get("/enrich-arena", include_in_schema=False)
 async def enrich_arena_page():
     return FileResponse(_WEB / "enrich-arena.html", headers={"Cache-Control": "no-cache"})
@@ -22,7 +24,7 @@ async def enrich_arena_page():
 
 @router.get("/enrich-arena/{asset}", include_in_schema=False)
 async def enrich_arena_asset(asset: str):
-    if asset not in {"arena.css", "arena.js"}:
+    if asset not in {"arena.css", "arena.js", "bench.js"}:
         raise HTTPException(404)
     return FileResponse(_WEB / "enrich-arena" / asset, headers={"Cache-Control": "no-cache"})
 
@@ -32,10 +34,17 @@ async def arena_tasks():
     return arena.public_tasks()
 
 
+@router.get("/arena/insights", include_in_schema=False)
+async def arena_insights_data():
+    return JSONResponse(await arena_insights.public_snapshot(), headers={"Cache-Control": "no-store"})
+
+
 class PlanIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     capability: str = Field(max_length=80)
-    identity: dict[str, str] = Field(max_length=8)
+    identity: dict[str, str] | None = Field(default=None, max_length=8)
+    identities: list[dict[str, str]] | None = Field(default=None, min_length=1, max_length=50)
+    auto_verify: bool = False
     mode: str = Field(default="compare", max_length=20)
     providers: list[str] | None = Field(default=None, max_length=20)
     max_cost_micro: int = Field(default=1_000_000, ge=0, le=10_000_000, strict=True)
@@ -76,8 +85,10 @@ async def arena_start(run_id: str, request: Request, caller: Caller = Depends(re
 
 
 @router.get("/arena/runs", include_in_schema=False)
-async def arena_history(caller: Caller = Depends(require_member)):
-    return await _answer(arena.history(caller))
+async def arena_history(caller: Caller = Depends(require_member),
+                        before: str | None = Query(default=None, max_length=32),
+                        limit: int = Query(default=30, ge=1, le=100)):
+    return await _answer(arena.history(caller, before=before, limit=limit))
 
 
 @router.get("/arena/runs/{run_id}", include_in_schema=False)
@@ -146,3 +157,15 @@ async def arena_manual_start(run_id: str, attempt_id: str, request: Request, bod
     _guard(request)
     return await _answer(arena.start_manual(caller, run_id, attempt_id, body.quote_id,
                                           request.app.state.http, _client_ip(request)))
+
+
+@router.post("/arena/runs/{run_id}/attempts/{attempt_id}/verification/plan", include_in_schema=False)
+async def arena_verification_plan(run_id: str, attempt_id: str, request: Request, caller: Caller = Depends(require_member)):
+    _guard(request)
+    return await _answer(arena.verification_plan(caller, run_id, attempt_id))
+
+
+@router.post("/arena/runs/{run_id}/attempts/{attempt_id}/verification/start", include_in_schema=False)
+async def arena_verification_start(run_id: str, attempt_id: str, request: Request, body: ManualStartIn, caller: Caller = Depends(require_member)):
+    _guard(request)
+    return await _answer(arena.start_verification(caller, run_id, attempt_id, body.quote_id, request.app.state.http, _client_ip(request)))

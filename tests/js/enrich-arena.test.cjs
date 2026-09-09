@@ -4,21 +4,126 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../../src/treg/web/enrich-arena/arena.js'),'utf8');
-function setup(){
+function setup(location={}){
   let options;const stored=new Map(),destinations=[];
   const storage={getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)};
   const Vue={createApp:o=>{options=o;return {mount(){}};}};
-  vm.runInNewContext(source,{Vue,window:{Vue},sessionStorage:storage,localStorage:storage,location:{assign:x=>destinations.push(x)},setTimeout:()=>1,clearTimeout(){},document:{querySelector:()=>null},URLSearchParams,Intl,Date});
+  const runtime={Vue,window:{Vue},sessionStorage:storage,localStorage:storage,location:{assign:x=>destinations.push(x),...location},setTimeout:()=>1,clearTimeout(){},document:{querySelector:()=>null},URLSearchParams,Intl,Date};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../src/treg/web/agent-setup.js'),'utf8'),runtime);
+  vm.runInNewContext(source,runtime);
   const app=options.data();for(const [k,f]of Object.entries(options.methods))app[k]=f.bind(app);
   for(const [k,f]of Object.entries(options.computed))Object.defineProperty(app,k,{get:f.bind(app)});
   app.tasks=[{id:'people.email.find',variants:[['full_name','domain']],fields:[]}];
   app.inputs={full_name:'Test Person',domain:'example.com'};app.user={id:1};app.team='test-team';app.booted=true;app.$nextTick=async()=>{};
   const quote=(extra={})=>({id:'q1',required_micro:25000,balance_micro:1000000,affordable:true,expires_at:new Date(Date.now()+60000).toISOString(),...extra});
   const price=(extra={})=>{app.quote=quote(extra);app.pricedKey=app.quoteKey;};
-  return {app,quote,price,stored,destinations,components:options.components};
+  return {app,quote,price,stored,destinations,components:options.components,directives:options.directives,runtime,mounted:options.mounted};
 }
+test('Page-scrolling headers stop at table bounds, offset nested headers, and clean up listeners',()=>{
+ const {directives,runtime}=setup(),listeners=new Map();let pending,offset,disconnected=false;
+ runtime.requestAnimationFrame=fn=>{pending=fn;return 1;};runtime.cancelAnimationFrame=()=>{pending=null;};
+ runtime.ResizeObserver=class{observe(){}disconnect(){disconnected=true;}};
+ runtime.window.addEventListener=(name,fn)=>listeners.set(name,fn);
+ runtime.window.removeEventListener=name=>listeners.delete(name);
+ const bounds={top:100,height:1000},head={getBoundingClientRect:()=>({height:40}),style:{setProperty:(key,value)=>{offset=value;}}};
+ const table={tHead:head,getBoundingClientRect:()=>bounds,closest:()=>null,querySelector:()=>null};
+ directives.stickyHeader.mounted(table);pending();assert.equal(offset,'0px');
+ bounds.top=-250;listeners.get('scroll')();pending();assert.equal(offset,'250px');
+ let entryOffset=0,end=600;
+ const row={getBoundingClientRect:()=>({top:-200+entryOffset,height:80}),nextElementSibling:{getBoundingClientRect:()=>({bottom:end})},style:{setProperty:(key,value)=>{entryOffset=parseFloat(value);},removeProperty:()=>{entryOffset=0;}}};
+ table.querySelector=()=>row;directives.stickyHeader.updated(table);pending();assert.equal(entryOffset,240);
+ listeners.get('scroll')();pending();assert.equal(entryOffset,240,'Repeated scroll updates must not drift');
+ end=20;listeners.get('scroll')();pending();assert.equal(entryOffset,140,'Entry stops at the end of its details');
+ table.querySelector=()=>null;directives.stickyHeader.updated(table);pending();assert.equal(entryOffset,0);
+ table.closest=()=>({closest:()=>({tHead:head,querySelector:()=>row})});listeners.get('scroll')();pending();assert.equal(offset,'370px');
+ bounds.top=-2000;listeners.get('scroll')();pending();assert.equal(offset,'960px');
+ directives.stickyHeader.unmounted(table);assert.equal(listeners.size,0);assert.equal(disconnected,true);
+});
 test('Waterfall is the default and the priced button includes its estimate',()=>{
  const {app,price}=setup();assert.equal(app.mode,'waterfall');price();assert.equal(app.runButtonLabel,'Run from $0.025');
+});
+test('Vendor drilldown includes only attempts and keeps feedback in the selected view',()=>{
+ const {app}=setup();app.run={identities:[{domain:'one.example'},{domain:'two.example'}],results:['hit','miss','error','timeout','running','queued','skipped','not_attempted'].map((state,i)=>({id:'r'+i,provider:'hunter',state,entry_index:i%2}))};
+ app.selectedEntry=0;app.selectVendor({provider:'hunter',attempted:5});
+ assert.equal(app.selectedEntry,null);assert.equal(app.vendorResults.length,5);
+ assert.deepEqual(Array.from(app.vendorResults,r=>r.state),['hit','miss','error','timeout','running']);
+ app.openReport(app.run.results[0]);assert.equal(app.selectedEntry,null);assert.equal(app.reporting,'r0');
+ app.selectVendor({provider:'tomba',attempted:0});assert.equal(app.selectedVendor,'hunter');
+ app.selectVendor({provider:'hunter',attempted:5});assert.equal(app.selectedVendor,'');assert.equal(app.reporting,'');
+ app.selectVendor({provider:'hunter',attempted:5});app.selectEntry(1);assert.equal(app.selectedVendor,'');assert.equal(app.selectedEntry,1);
+});
+test('Adding and removing entries invalidates pricing and preserves neighboring inputs',()=>{
+ const {app,price}=setup();price();app.addEntry();assert.equal(app.inputRows.length,2);assert.equal(app.readyQuote,null);
+ app.extraInputs[0]={full_name:'Second Person',domain:'second.example'};price();assert.match(app.runButtonLabel,/Run 2 entries from/);
+ app.removeEntry(0);assert.equal(app.inputs.full_name,'Second Person');assert.equal(app.inputRows.length,1);assert.equal(app.readyQuote,null);
+ app.removeEntry(0);assert.equal(app.inputRows.length,1);
+});
+function paste(app,text,index=0){let prevented=false;app.pasteEntries({clipboardData:{getData:()=>text},preventDefault(){prevented=true;}},index);return prevented;}
+test('Spreadsheet paste maps headers and quoted CSV, preserving other rows',()=>{
+ const {app}=setup();app.addEntry();app.extraInputs[0]={full_name:'Keep Person',domain:'keep.example'};
+ assert.equal(paste(app,'Domain\tFull name\nfirst.example\tFirst Person\nsecond.example\tSecond Person'),true);
+ assert.equal(app.inputRows.length,3);assert.equal(app.inputs.full_name,'First Person');assert.equal(app.extraInputs[1].full_name,'Keep Person');
+ assert.equal(paste(app,'"Comma, Person",third.example\nOther Person,fourth.example',1),true);
+ assert.equal(app.extraInputs[0].full_name,'Comma, Person');assert.equal(app.inputRows.length,4);
+});
+test('Paste rejects overflow and malformed columns without altering the list; duplicates block spending',async()=>{
+ const {app}=setup();const original=JSON.stringify(app.inputRows);
+ paste(app,'One\tTwo\tThree\nFour\tFive\tSix');assert.equal(JSON.stringify(app.inputRows),original);assert.match(app.error,/Paste 2 columns/);
+ paste(app,Array.from({length:51},(_,i)=>`Person ${i}\tcompany${i}.com`).join('\n'));assert.equal(JSON.stringify(app.inputRows),original);assert.match(app.error,/50 entries/);
+ paste(app,'Same Person\tone.example\nSame Person\tone.example');assert.match(app.inputError(),/Duplicate/);
+ app.api=()=>assert.fail('Invalid input must not price or spend');await app.submit();
+});
+test('Batch pricing sends all identities once and a later-row edit discards an in-flight price',async()=>{
+ const {app,quote}=setup();app.addEntry();app.extraInputs[0]={full_name:'Second Person',domain:'second.example'};
+ let body,release;app.api=async(path,options)=>{body=JSON.parse(options.body);return new Promise(r=>release=r);};
+ const pending=app.prepare();assert.equal(body.identities.length,2);assert.equal(body.identity,undefined);
+ app.extraInputs[0].domain='changed.example';release(quote());await pending;assert.equal(app.readyQuote,null);
+});
+test('Batch entries survive login draft and history, with one vendor selection per provider',async()=>{
+ const {app}=setup();app.addEntry();app.extraInputs[0]={full_name:'Second Person',domain:'second.example'};app.saveDraft(true);
+ app.extraInputs=[];assert.equal(app.restoreDraft(),true);assert.equal(app.extraInputs.length,1);
+ app.api=async()=>({id:'batch',capability:app.taskId,mode:'compare',state:'completed',identity:app.inputs,identities:app.identities(),results:[{provider:'hunter',entry_index:0},{provider:'hunter',entry_index:1}]});
+ await app.loadHistory('batch');assert.equal(app.extraInputs.length,1);assert.equal(app.services.length,1);assert.equal(app.showProviderPreview,false);
+ app.extraInputs[0].domain='changed.example';assert.equal(app.showProviderPreview,true);
+});
+function batchResults(app){
+ app.run={id:'batch',capability:app.taskId,identity:app.identity(),identities:[app.identity(),{full_name:'Second Person',domain:'second.example'}],mode:'compare',state:'completed',fields:['email'],results:[
+  {id:'a0',provider:'tomba',entry_index:0,state:'hit',output:{email:'a@first.example'},charged_micro:10,duration_ms:10},
+  {id:'a1',provider:'tomba',entry_index:1,state:'hit',output:{email:'a@second.example'},charged_micro:10,duration_ms:30},
+  {id:'b0',provider:'hunter',entry_index:0,state:'hit',output:{email:'b@first.example'},charged_micro:5,duration_ms:5},
+  {id:'b1',provider:'hunter',entry_index:1,state:'miss',output:{},charged_micro:5,duration_ms:5}]};
+}
+test('Batch awards compare coverage, cost including misses, and median; a single thumb approves only its cell',()=>{
+ const {app}=setup();batchResults(app);
+ assert.equal(app.winnerIds.join(),'tomba');assert.equal(app.batchVendors[0].median,20);
+ assert.equal(app.batchVendors[1].costPerKept,10);assert.equal(app.batchAwards.hunter.includes('Cheapest'),true);
+ app.run.results[2].rating={value:'up'};assert.equal(app.winnerIds.join(),'tomba');
+ app.run.results[0].rating={value:'down'};assert.equal(app.batchVendors[0].kept,1);assert.equal(app.batchVendors[0].found,2);
+ assert.equal(app.winnerIds.length,2);assert.equal(app.batchAwards.tomba.includes('Cheapest'),false);
+ app.run.results[1].rating={value:'down'};assert.equal(app.winnerIds.join(),'hunter');
+ app.run.mode='waterfall';assert.equal(Object.keys(app.batchAwards).length,0);assert.equal(app.winnerIds.length,0);
+});
+test('Unknown charges, partial runs and running batches do not receive misleading awards',()=>{
+ const {app}=setup();batchResults(app);app.run.results[1].charged_micro=null;
+ assert.equal(Object.values(app.batchAwards).flat().includes('Cheapest'),false);
+ app.run.results[1].state='not_attempted';assert.equal(Object.keys(app.batchAwards).length,0);
+ app.run.state='running';assert.equal(app.winnerIds.length,0);
+});
+test('Batch matrix filters and feedback keep the correct entry selected',()=>{
+ const {app}=setup();batchResults(app);app.resultFilter='disagreement';assert.equal(app.matrixEntries.length,1);
+ app.run.results[1].rating={value:'down'};app.resultFilter='unresolved';assert.equal(app.matrixEntries[0].index,1);
+ app.openReport(app.run.results[1]);assert.equal(app.selectedEntry,1);assert.equal(app.visibleResults.length,2);assert.equal(app.reporting,'a1');
+ assert.match(app.domainMismatch(app.run.results[0]),/example.com/);assert.equal(app.domainMismatch(app.run.results[1]),'');
+});
+test('Entry details toggle in place and row actions do not toggle their parent',()=>{
+ const {app}=setup();batchResults(app);
+ app.selectEntry(0);assert.equal(app.selectedEntry,0);
+ app.selectEntry(0);assert.equal(app.selectedEntry,null);
+ app.selectEntry(1,app.run.results[1]);assert.equal(app.selectedEntry,1);assert.equal(app.expandedResults.join(),'a1');
+ app.toggleEntryRow({target:{closest:()=>true}},1);assert.equal(app.selectedEntry,1);
+ app.toggleEntryRow({target:{closest:()=>null}},1);assert.equal(app.selectedEntry,null);
+ for(const state of ['queued','skipped','not_attempted'])assert.equal(app.hasAttempt({state}),false);
+ for(const state of ['running','hit','miss','error','timeout','cancelled'])assert.equal(app.hasAttempt({state}),true);
 });
 test('Submitting a priced query starts directly, once, and consumes the quote',async()=>{
  const {app,price}=setup();price();let calls=0,release;app.api=()=>{calls++;return new Promise(r=>release=r);};app.pollRun=async()=>{app.run={state:'completed'};};
@@ -95,13 +200,13 @@ test('Battle mode selection invalidates pricing without dispatch and is locked d
 test('Session history is loaded without spending and stale team responses are discarded',async()=>{
  const {app}=setup();let release;app.api=()=>new Promise(r=>release=r);const pending=app.refreshHistory();
  app.team='different-team';release([{id:'old-team-session'}]);await pending;assert.equal(app.history.length,0);
- app.api=async path=>{assert.equal(path,'/arena/runs');return [];};await app.refreshHistory();assert.equal(app.history.length,0);
+ app.api=async path=>{assert.equal(path,'/arena/runs?limit=31');return [];};await app.refreshHistory();assert.equal(app.history.length,0);
  app.user=null;app.api=()=>assert.fail('Anonymous visitors must not fetch private history');await app.refreshHistory();
 });
 test('Selecting a session restores its inputs and mode using only a read',async()=>{
  const {app,stored}=setup();const calls=[];app.quote={id:'old-quote'};
  app.api=async(path,options)=>{calls.push(path);assert.equal(options.method,undefined);return {id:'saved',state:'completed',capability:app.taskId,mode:'compare',identity:{full_name:'Saved Person',domain:'saved.com'},results:[]};};
- await app.loadHistory('saved');assert.deepEqual(calls,['/arena/runs/saved']);assert.equal(app.inputs.full_name,'Saved Person');assert.equal(app.mode,'compare');assert.equal(app.quote,null);assert.equal(app.run.id,'saved');assert.equal(JSON.parse(stored.get('treg.arena.active.v1')).id,'saved');
+ await app.loadHistory('saved');assert.deepEqual(calls,['/arena/runs/saved']);assert.equal(app.inputs.full_name,'Saved Person');assert.equal(app.mode,'compare');assert.equal(app.quote,null);assert.equal(app.run.id,'saved');assert.equal(stored.has('treg.arena.active.v1'),false);
 });
 test('Failed session selection keeps the existing session and does not persist a failed id',async()=>{
  const {app,stored}=setup();app.run={id:'existing',state:'completed'};app.api=async()=>{throw new Error('Unavailable');};
@@ -227,4 +332,479 @@ test('Multiple thumbs-up compare metrics only inside that set, updating when a v
  app.run.results[2].rating.value='down';assert.deepEqual(JSON.parse(JSON.stringify(app.battleAwards)),{quick:['Fastest','Cheapest']});
  app.run.results[3].rating.value='down';assert.deepEqual(JSON.parse(JSON.stringify(app.battleAwards)),{unrated:['Fastest','Cheapest']});
  app.run.state='running';assert.equal(app.winnerIds.length,0);
+});
+
+test('Identity conflicts are visible without electing a correct vendor or mixing batch entries',()=>{
+ const {app}=setup();
+ const a={id:'a',state:'hit',entry_index:0,output:{full_name:'Test Person',linkedin_url:'https://www.linkedin.com/in/test-person'}};
+ const b={id:'b',state:'hit',entry_index:0,output:{full_name:'Different Person',linkedin_url:'https://www.linkedin.com/in/different-person'}};
+ app.run={capability:'people.enrich',identities:[{email:'person@example.com'},{email:'second@example.com'}],results:[a,b]};
+ assert.match(app.identityWarning(a),/different identities/);assert.match(app.identityWarning(b),/different identities/);
+ b.entry_index=1;assert.equal(app.identityWarning(a),'');
+ b.entry_index=0;b.state='miss';assert.equal(app.identityWarning(a),'');
+ app.run.identities[0]={full_name:'Different Person',domain:'example.com'};
+ assert.match(app.identityWarning(a),/name differs/);
+ app.run.identities[0]={linkedin_url:'https://www.linkedin.com/in/someone-else'};
+ assert.match(app.identityWarning(a),/profile differs/);
+ app.run.identities[0]={full_name:'Tést Person'};assert.equal(app.identityWarning(a),'');
+ assert.equal(a.output.full_name,'Test Person','Warnings preserve the provider answer');
+});
+test('Vendor quota errors recommend another vendor, not a team top-up',()=>{
+ const {app}=setup();
+ assert.match(app.emptyLabel({state:'error',upstream_status:402}),/vendor.*exhausted.*another vendor/);
+ assert.doesNotMatch(app.emptyLabel({state:'error',upstream_status:null}),/exhausted/);
+});
+
+test('History loads older pages once, preserves existing rows and stops at the end',async()=>{
+ const {app}=setup();const rows=Array.from({length:31},(_,i)=>({id:'run-'+i}));
+ app.api=async(path,options)=>{assert.equal(path,'/arena/runs?limit=31');assert.equal(options.method,undefined);return rows;};
+ await app.refreshHistory();assert.equal(app.history.length,30);assert.equal(app.historyHasMore,true);
+ let release,calls=0;app.api=(path,options)=>{calls++;assert.equal(path,'/arena/runs?limit=31&before=run-29');assert.equal(options.method,undefined);return new Promise(resolve=>release=resolve);};
+ const pending=app.loadMoreHistory();await app.loadMoreHistory();assert.equal(calls,1);assert.equal(app.historyLoading,true);
+ release([rows[30],{id:'run-31'}]);await pending;
+ assert.equal(app.history.length,32);assert.equal(app.history[0].id,'run-0');assert.equal(app.history.at(-1).id,'run-31');
+ assert.equal(app.historyHasMore,false);assert.equal(app.historyLoading,false);await app.loadMoreHistory();assert.equal(calls,1);
+});
+test('Failed or stale older-history requests preserve the list and allow retry',async()=>{
+ const {app}=setup();app.history=[{id:'current'}];app.historyHasMore=true;
+ app.api=async()=>{throw new Error('Network error');};await app.loadMoreHistory();
+ assert.equal(app.history.length,1);assert.equal(app.historyHasMore,true);assert.equal(app.historyLoading,false);assert.equal(app.error,'Network error');
+ let release;app.api=()=>new Promise(resolve=>release=resolve);const pending=app.loadMoreHistory();
+ app.team='another-team';app.history=[];release([{id:'private-old-team'}]);await pending;assert.equal(app.history.length,0);
+});
+test('Refreshing history invalidates a pending older page and exact page sizes need no extra click',async()=>{
+ const {app}=setup();app.history=[{id:'old'}];app.historyHasMore=true;
+ let release;app.api=()=>new Promise(resolve=>release=resolve);const pending=app.loadMoreHistory();
+ app.api=async()=>Array.from({length:30},(_,i)=>({id:'fresh-'+i}));await app.refreshHistory();
+ release([{id:'stale'}]);await pending;
+ assert.equal(app.history.length,30);assert.equal(app.history[0].id,'fresh-0');assert.equal(app.historyHasMore,false);assert.equal(app.historyLoading,false);
+});
+
+test('Historical insights match task, input and endpoint without following paid vendor selection',()=>{
+ const {app}=setup();
+ const rows=[
+  {task:app.taskId,input:'name_domain',endpoint:'hunter.people.email.find',provider:'hunter',hits:30,misses:70,unique_requests:80,unique_rate:37.5},
+  {task:app.taskId,input:'linkedin_url',endpoint:'hunter.people.email.find',provider:'hunter',hits:99,misses:1},
+  {task:'people.phone.find',input:'name_domain',endpoint:'hunter.people.email.find',provider:'hunter',hits:100,misses:0},
+  {task:app.taskId,input:'name_domain',endpoint:'removed.endpoint',provider:'removed',hits:200,misses:0}
+ ];
+ app.insights={rows};app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.people.email.find'},{provider:'new-vendor',endpoint_id:'new.endpoint'}],[]];
+ app.customServices=true;app.services=[];
+ assert.equal(app.insightRows.length,2);assert.equal(app.insightRows[0].sample.hits,30);
+ assert.equal(app.insightRate(app.insightRows[0]),'37.5%');
+ assert.equal(app.insightRate(app.insightRows[1]),'—');
+ app.tasks[0].variants.push(['linkedin_url']);app.chooseVariant(1);assert.equal(app.insightRows.length,0);
+ app.tasks.push({id:'people.phone.find',variants:[['full_name','domain']],provider_previews:[[{provider:'hunter',endpoint_id:'hunter.people.email.find'}]]});
+ app.chooseTask('people.phone.find');assert.equal(app.insightRows[0].sample.hits,100);
+});
+test('Small samples, zero coverage and verification verdicts have distinct presentations',()=>{
+ const {app}=setup();const row={sample:{hits:0,misses:19,unique_requests:19,unique_rate:0}};
+ assert.equal(app.insightRate(row),'—');row.sample.misses=20;
+ assert.equal(app.insightRate(row),'—');row.sample.unique_requests=20;assert.equal(app.insightRate(row),'0.0%');
+ app.taskId='people.email.verify';row.sample={hits:45,misses:0,unique_requests:40,unique_rate:100};
+ assert.equal(app.insightRate(row),'100.0%');assert.equal(app.insightVerification,true);
+});
+test('Unavailable historical stats can be retried without blocking a query or spending',async()=>{
+ const {app}=setup();app.api=async(path,options,team)=>{assert.equal(path,'/arena/insights');assert.equal(options.method,undefined);assert.equal(team,'');throw new Error('Offline');};
+ await app.loadInsights();assert.equal(app.insightsState,'error');assert.equal(app.error,'');assert.equal(app.busy,false);
+ const snapshot={version:2,status:'ready',updated_at:'2026-02-01T00:01:00Z',since:'2026-01-01T00:00:00Z',until:'2026-02-01T00:00:00Z',rows:[]};
+ app.api=async()=>snapshot;await app.loadInsights();assert.equal(app.insightsState,'ready');assert.equal(app.insights,snapshot);
+});
+test('Historical stats load from the database API and retain last values on refresh failure',async()=>{
+ const {app}=setup();let called;
+ const data={version:2,status:'ready',since:'2026-01-01T00:00:00Z',until:'2026-02-01T00:00:00Z',updated_at:'2026-02-01T00:01:00Z',rows:[]};
+ app.api=async path=>{called=path;return data;};await app.loadInsights();
+ assert.equal(called,'/arena/insights');assert.equal(app.insightsState,'ready');assert.equal(app.insights,data);
+ app.api=async()=>{throw Error('unavailable');};await app.loadInsights();
+ assert.equal(app.insightsState,'error');assert.equal(app.insights,data);
+ assert.equal(fs.existsSync(path.join(__dirname,'../../src/treg/web/enrich-arena/insights.json')),false);
+});
+
+test('Arena setup uses the shared dashboard agents, restores the choice and makes no vendor calls',async()=>{
+ const {app,stored,runtime}=setup();let opened=0;
+ app.$refs={setupDialog:{showModal(){opened++;},close(){}}};stored.set('treg-agent','codex');
+ app.api=()=>assert.fail('Opening the picker must not request tokens or dispatch calls');
+ await app.openSetup();assert.equal(opened,1);assert.equal(app.setupAgentId,'codex');assert.equal(app.setupOtherCount,7);
+ assert.deepEqual(Array.from(app.setupFeatured,a=>a.id),['claude-code','codex','openclaw','hermes']);
+ app.api=async(path,options,team)=>{assert.equal(path,'/auth/cli-token');assert.equal(options.method,undefined);assert.equal(team,'test-team');return {token:'test-token-for-selected-team'};};
+ await app.prepareSetup();assert.equal(app.setupStep,2);assert.equal(app.setupToken,'test-token-for-selected-team');
+ assert.equal(app.setupShowToken,false);assert.equal(stored.get('treg-agent'),'codex');
+ const shared=runtime.TregAgentSetup;assert.equal(shared.command('https://treg.example/'),'set up treg — https://treg.example/llms.txt');
+ const text=shared.setupText('command','test-team',app.setupToken,true);assert.ok(!text.includes(app.setupToken));assert.match(text,/••/);
+ app.closeSetup();assert.equal(app.setupToken,null);assert.equal(app.setupShowToken,false);
+});
+test('Anonymous setup is usable without placeholders or requesting a private token',async()=>{
+ const {app,runtime}=setup();app.user=null;app.team='';runtime.location.origin='https://arena.example';
+ app.api=()=>assert.fail('Anonymous setup must not request a token');await app.prepareSetup();
+ assert.equal(app.setupStep,2);assert.equal(app.setupToken,null);
+ assert.equal(runtime.TregAgentSetup.setupText(app.setupCommand,'',null),'set up treg — https://arena.example/llms.txt');
+});
+test('Closing setup or changing teams discards a late token; failed loads can retry',async()=>{
+ const {app}=setup();app.$refs={setupDialog:{close(){}}};let release;
+ app.api=()=>new Promise(resolve=>release=resolve);const pending=app.prepareSetup();app.closeSetup();release({token:'late-token'});await pending;
+ assert.equal(app.setupToken,null);assert.equal(app.setupStep,1);
+ const another=app.prepareSetup();app.team='other-team';release({token:'old-team-token'});await another;assert.equal(app.setupToken,null);
+ app.api=async()=>{throw new Error('Try again');};await app.prepareSetup();assert.equal(app.setupLoading,false);assert.equal(app.setupError,'Try again');
+ app.api=async()=>({token:'fresh-token'});await app.prepareSetup();assert.equal(app.setupToken,'fresh-token');assert.equal(app.setupStep,2);
+});
+test('Setup copy writes the complete chosen text only on click and reports clipboard failures',async()=>{
+ const {app,runtime}=setup();let copied;
+ runtime.navigator={clipboard:{async writeText(text){copied=text;}}};await app.copySetup('setup text with test token');
+ assert.equal(copied,'setup text with test token');assert.equal(app.setupCopied,true);
+ runtime.navigator.clipboard.writeText=async()=>{throw new Error('denied');};await app.copySetup('test');assert.match(app.setupError,/Could not copy/);
+});
+
+test('The final setup step shares dashboard examples and copies prompts without running tools',async()=>{
+ const {app,runtime,components}=setup();app.setupStep=2;app.setupShowToken=true;app.setupToken='test-token';
+ const inputs=JSON.stringify(app.inputs);app.api=()=>assert.fail('The Try it out step must not call tools or start OAuth');
+ app.showSetupExamples();assert.equal(app.setupStep,3);assert.equal(app.setupShowToken,false);
+ assert.equal(components.TregTryItOut,runtime.TregAgentSetup.TryItOut);
+ const examples=runtime.TregAgentSetup.examples;assert.equal(examples.length,4);
+ let copied;runtime.navigator={clipboard:{async writeText(text){copied=text;}}};
+ await app.copySetup(examples[0].prompt,examples[0].k);
+ assert.equal(copied,examples[0].prompt);assert.equal(app.setupExampleCopied,examples[0].k);assert.equal(app.setupCopied,false);
+ assert.equal(JSON.stringify(app.inputs),inputs);assert.ok(!copied.includes(app.setupToken));
+});
+test('Final setup links open the catalog or provider page and clear the setup key',()=>{
+ const {app,destinations}=setup();let closed=0;app.$refs={setupDialog:{close(){closed++;}}};
+ app.api=()=>assert.fail('Navigation must not authorize or connect an account');app.setupToken='test-token';
+ app.openSetupCatalog();assert.equal(destinations[0],'/app#connections');assert.equal(app.setupToken,null);
+ app.openSetupCatalog('google-ads');assert.equal(destinations[1],'/app/marketplace/google-ads');assert.equal(closed,2);
+});
+
+test('Vendor table attaches unique hit rate and successful response time without changing quoted prices or order',()=>{
+ const {app,price}=setup();
+ app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.people.email.find',estimate_micro:100}]];
+ app.insightsState='ready';app.insights={rows:[{task:app.taskId,input:'name_domain',endpoint:'hunter.people.email.find',hits:30,misses:70,unique_requests:80,unique_rate:37.5,timed_hits:30,median_hit_ms:837.5}]};
+ price({providers:[{provider:'hunter',endpoint_id:'hunter.people.email.find',estimate_micro:0,tier:'credential'}]});
+ const row=app.previewProviders[0];assert.equal(row.estimate_micro,0);assert.equal(app.insightRate(row),'37.5%');
+ assert.equal(app.insightResponseTime(row),'838 ms');assert.equal(app.insightSampleLabel(row),'');
+ row.sample={...row.sample,median_hit_ms:null};assert.equal(app.insightResponseTime(row),'—');
+ row.sample={...row.sample,median_hit_ms:50,hits:2,timed_hits:2};assert.equal(app.insightResponseTime(row),'—');
+ app.customServices=true;app.services=[];assert.equal(app.previewProviders.length,0);
+ app.customServices=false;price({providers:[{provider:'hunter',endpoint_id:'hunter.different.endpoint',estimate_micro:50}]});
+ assert.equal(app.insightRate(app.previewProviders[0]),'—','Do not attach data from a different endpoint of the same vendor');
+});
+
+test('Charts preserve zero results, omit insufficient evidence and sort without changing dispatch order',()=>{
+ const {app}=setup();
+ app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.people.email.find',estimate_micro:10000},{provider:'tomba',endpoint_id:'tomba.people.email.find',estimate_micro:0},{provider:'findymail',endpoint_id:'findymail.people.email.find',estimate_micro:null}]];
+ app.insights={rows:[{task:app.taskId,input:'name_domain',endpoint:'hunter.people.email.find',unique_requests:100,unique_rate:0,timed_hits:20,median_hit_ms:500},{task:app.taskId,input:'name_domain',endpoint:'tomba.people.email.find',unique_requests:100,unique_rate:60,timed_hits:19,median_hit_ms:50},{task:app.taskId,input:'name_domain',endpoint:'findymail.people.email.find',unique_requests:19,unique_rate:100,timed_hits:20,median_hit_ms:200}]};
+ assert.deepEqual(Array.from(app.chartBars,p=>p.provider),['tomba','hunter']);
+ assert.equal(app.chartBars[1].value,0);assert.equal(app.chartRows.length,3,'Table retains all vendors');
+ assert.deepEqual(Array.from(app.previewProviders,p=>p.provider),['hunter','tomba','findymail']);
+ assert.equal(app.chartPoints.length,2);assert.equal(app.chartPoints[1].estimate_micro,0);
+ assert.ok(app.chartPriceMax>=10000);
+ app.statsView='speed';assert.deepEqual(Array.from(app.chartBars,p=>p.provider),['findymail','hunter']);
+ assert.equal(app.chartBars.length,2);assert.ok(app.chartMax>=500);
+ app.customServices=true;app.services=['tomba'];assert.equal(app.chartPoints.length,1);assert.ok(app.chartPriceMax>0);
+ assert.equal(app.chartMax,1,'No timed evidence retains a safe nonzero axis');
+});
+
+test('Charts follow task and input selection and use current batch prices without fabricating evidence',()=>{
+ const {app}=setup();
+ app.tasks[0].variants.push(['linkedin_url']);
+ app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.people.email.find',estimate_micro:10000}],[{provider:'tomba',endpoint_id:'tomba.linkedin.email',estimate_micro:20000}]];
+ app.insights={rows:[{task:app.taskId,input:'name_domain',endpoint:'hunter.people.email.find',unique_requests:100,unique_rate:50}]};
+ app.chartFocus='hunter.people.email.find';assert.equal(app.chartDetail.provider,'hunter');
+ app.addEntry();assert.equal(app.chartPoints[0].estimate_micro,20000);
+ app.chooseVariant(1);assert.equal(app.chartPoints.length,0);assert.equal(app.chartDetail,null);assert.equal(app.chartBars.length,0);
+ app.taskId='people.email.verify';assert.equal(app.chartViews[0].label,'Verdict rate');assert.equal(app.chartViews[3].label,'Price vs verdict rate');
+ assert.equal(app.chartRows.length,0);
+});
+
+test('Discovery jobs have their own group and preserve labelled batch fields',()=>{
+ const {app}=setup();
+ app.tasks.push({id:'people.search',label:'Find people',discovery:true,max_entries:10,result_limit:10,variants:[['q'],['title','country']],fields:['people','count']},{id:'people.company.search',label:'People at a company',discovery:true,max_entries:10,variants:[['company_domain'],['title','company_domain']],fields:['people','count']},{id:'companies.similar',label:'Find similar companies',discovery:true,max_entries:10,variants:[['domain']],fields:['companies','count']},{id:'people.email.verify',variants:[['email']]});
+ assert.deepEqual(Array.from(app.jobGroups,g=>g.label),['Discover','Enrich','Verify']);
+ app.chooseTask(app.tasks[1].id);assert.equal(app.taskId,'people.search');assert.equal(app.discovery,true);assert.equal(app.maxEntries,10);
+ app.variant=1;app.inputs={};
+ assert.equal(paste(app,'Country code\tJob title\nUS\tEngineer\nGB\tRecruiter'),true);
+ assert.equal(app.inputs.title,'Engineer');assert.equal(app.extraInputs[0].country,'GB');assert.equal(app.inputError(),'');
+ app.extraInputs[0].country='United Kingdom';assert.match(app.inputError(),/Entry 2: Use a two-letter country code/);
+});
+
+test('Discovery batch limits reject overflow without losing existing queries',()=>{
+ const {app}=setup();app.tasks=[{id:'people.search',discovery:true,max_entries:10,variants:[['q']]}];app.taskId='people.search';app.inputs={q:'Keep this query'};
+ const before=JSON.stringify(app.inputRows);
+ paste(app,Array.from({length:11},(_,i)=>'Engineer role '+i).join('\n'));
+ assert.match(app.error,/at most 10 entries/);assert.equal(JSON.stringify(app.inputRows),before);
+ for(let i=0;i<12;i++)app.addEntry();assert.equal(app.inputRows.length,10);
+ app.extraInputs.push({q:'Restored overflow'});assert.match(app.inputError(),/at most 10 entries/);
+});
+
+test('Discovery compares actual match lists and keeps batch metrics at query level',()=>{
+ const {app}=setup();app.run={capability:'people.search',mode:'compare',fields:['people','count'],state:'completed',identities:[{q:'First'},{q:'Second'}],results:[
+  {id:'a',provider:'aviato',entry_index:0,state:'hit',output:{count:1,people:[{name:'First Person'}]},charged_micro:10,duration_ms:100},
+  {id:'b',provider:'exa',entry_index:0,state:'hit',output:{count:1,people:[{name:'Different Person'}]},charged_micro:10,duration_ms:100},
+  {id:'c',provider:'aviato',entry_index:1,state:'hit',output:{count:2,people:[{name:'Person Three'},{name:'Person Four'}]},charged_micro:10,duration_ms:100}
+ ]};
+ app.resultFilter='disagreement';assert.equal(app.matrixEntries.length,1);
+ assert.equal(app.batchVendors.find(v=>v.provider==='aviato').batchLabel,'2/2 queries matched');
+ assert.equal(app.displayValue(app.searchMatches(app.run.results[2])),'2 matches');
+ app.run.results[1].output.people=[{name:'First Person'}];assert.equal(app.matrixEntries.length,0);
+ app.run.results[1].output.people=[{name:'Person Four'},{name:'Person Three'}];app.run.results[0].output.people=[{name:'Person Three'},{name:'Person Four'}];assert.equal(app.matrixEntries.length,0,'Result ordering alone is not a different answer');
+});
+
+
+test('Use-case tabs keep action labels, skip reselection, and support keyboard switching',()=>{
+ const {components}=setup(),definition=components.ArenaTaskTabs,events=[];
+ const tabs={value:'people.search',disabled:false,$emit:(...args)=>events.push(args)};
+ for(const [name,method] of Object.entries(definition.methods))tabs[name]=method.bind(tabs);
+ assert.equal(tabs.label({id:'people.email.find'}),'Find work email');
+ assert.equal(tabs.label({id:'people.company.search'}),'Find people at company');
+ tabs.select('people.search');assert.equal(events.length,0);
+ let focused=-1,prevented=0;
+ const buttons=['people.search','companies.similar','people.email.find'].map((id,i)=>({dataset:{task:id},focus(){focused=i;}}));
+ const press=(key,index)=>tabs.keydown({key,currentTarget:{querySelectorAll:()=>buttons},target:{closest:()=>buttons[index]},preventDefault(){prevented++;}});
+ press('ArrowRight',0);assert.equal(focused,1);assert.deepEqual(events.pop(),['change','companies.similar']);
+ press('End',0);assert.equal(focused,2);press('ArrowLeft',0);assert.equal(focused,2);
+ tabs.disabled=true;press('Home',2);assert.equal(focused,2);assert.equal(prevented,3);
+});
+
+test('Horizontal use-case tabs reveal the selected option without moving visible selections',async()=>{
+ const {components}=setup(),definition=components.ArenaTaskTabs;
+ let bounds={left:480,right:650};
+ const host={clientWidth:300,scrollWidth:1200,scrollLeft:0,getBoundingClientRect:()=>({left:0,right:300}),querySelector:()=>({getBoundingClientRect:()=>bounds})};
+ const tabs={$refs:{scroller:host},$nextTick:async()=>{}};
+ tabs.updateOverflow=definition.methods.updateOverflow.bind(tabs);
+ const reveal=definition.methods.reveal.bind(tabs);
+ await reveal();assert.equal(host.scrollLeft,386);
+ bounds={left:50,right:200};await reveal();assert.equal(host.scrollLeft,386);
+ bounds={left:-60,right:100};await reveal();assert.equal(host.scrollLeft,290);
+});
+
+
+test('Leaderboard uses all public vendors and per-entry prices, independent of Arena quotes and selections',()=>{
+ const {app,price}=setup({pathname:'/enrich-arena/leaderboard'});assert.equal(app.leaderboard,true);
+ app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.people.email.find',estimate_micro:10000},{provider:'tomba',endpoint_id:'tomba.people.email.find',estimate_micro:20000}]];
+ app.insights={rows:[{task:app.taskId,input:'name_domain',endpoint:'hunter.people.email.find',unique_requests:100,unique_rate:50}]};
+ app.extraInputs=[{full_name:'Second Person',domain:'second.example'}];app.customServices=true;app.services=['tomba'];
+ price({providers:[{provider:'tomba',endpoint_id:'tomba.people.email.find',estimate_micro:0}]});
+ assert.equal(app.previewProviders.length,2);assert.equal(app.chartPoints.length,1);assert.equal(app.chartPoints[0].estimate_micro,10000);
+ assert.deepEqual(Array.from(app.chartViews,v=>v.id),['rate','verified','speed','price','value']);
+});
+test('Leaderboard preserves Arena draft and skips pricing, pending dispatch, and run restoration',async()=>{
+ const {app,stored,runtime,mounted}=setup({pathname:'/enrich-arena/leaderboard',search:'?capability=people.email.find&variant=1'});
+ app.leaderboard=false;app.saveDraft(true);const before=JSON.stringify([...stored]);app.leaderboard=true;
+ app.saveDraft(false);assert.equal(JSON.stringify([...stored]),before);
+ let planned=0;app.api=async path=>{if(path==='/arena/tasks')return [{...app.tasks[0],variants:[['full_name','domain'],['linkedin_url']]},{id:'people.search',discovery:true}];if(path==='/meta')return {};planned++;throw Error('Unexpected request: '+path);};
+ app.loadInsights=()=>{};app.loadIdentity=async()=>{};app.restoreDraft=()=>{throw Error('Restored Arena draft');};app.loadHistory=()=>{throw Error('Restored active run');};runtime.setInterval=()=>1;
+ await app.prepare();app.scheduleQuote();await mounted.call(app);
+ assert.equal(app.error,'');assert.equal(planned,0);assert.equal(app.tasks.length,1);assert.equal(app.variant,1);
+ assert.equal(runtime.document.title,'Enrichment Leaderboard — treg');assert.equal(JSON.stringify([...stored]),before);
+ assert.equal(app.sectionUrl(false),'/enrich-arena?capability=people.email.find&variant=1');
+ assert.equal(app.sectionUrl(true),'/enrich-arena/leaderboard?capability=people.email.find&variant=1');
+});
+
+test('Use-case overflow arrows follow scroll boundaries and disappear when all tabs fit',()=>{
+ const {components}=setup(),definition=components.ArenaTaskTabs;
+ let position=0;const host={clientWidth:300,scrollWidth:900,get scrollLeft(){return position;},set scrollLeft(v){position=Math.max(0,Math.min(v,this.scrollWidth-this.clientWidth));}};
+ const tabs={$refs:{scroller:host}};for(const [key,fn]of Object.entries(definition.methods))tabs[key]=fn.bind(tabs);
+ tabs.updateOverflow();assert.equal(tabs.overflowLeft,false);assert.equal(tabs.overflowRight,true);
+ tabs.scrollTabs(1);assert.equal(position,195);assert.equal(tabs.overflowLeft,true);assert.equal(tabs.overflowRight,true);
+ host.scrollLeft=600;tabs.updateOverflow();assert.equal(tabs.overflowRight,false);
+ tabs.scrollTabs(-1);assert.equal(position,405);assert.equal(tabs.overflowRight,true);
+ host.scrollWidth=300;host.scrollLeft=0;tabs.updateOverflow();assert.equal(tabs.overflowLeft,false);assert.equal(tabs.overflowRight,false);
+});
+
+test('Price charts include priced vendors without historical samples, keep free prices and omit invalid prices',()=>{
+ const {app}=setup({pathname:'/enrich-arena/leaderboard'});
+ app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.email',estimate_micro:10000},{provider:'tomba',endpoint_id:'tomba.email',estimate_micro:0},{provider:'findymail',endpoint_id:'findymail.email',estimate_micro:null},{provider:'aviato',endpoint_id:'aviato.email',estimate_micro:-1}]];
+ app.statsView='price';assert.deepEqual(Array.from(app.chartBars,p=>p.provider),['tomba','hunter']);
+ assert.equal(app.chartBars[0].value,0);assert.ok(app.chartMax>=10000);assert.equal(app.chartTick(10000),'$0.01');
+ app.chartFocus='hunter.email';assert.equal(app.chartDetail.provider,'hunter');
+ app.tasks[0].provider_previews[0]=[{provider:'tomba',endpoint_id:'tomba.email',estimate_micro:0}];assert.ok(app.chartMax>0);
+ app.statsView='rate';assert.equal(app.chartBars.length,0);
+});
+
+test('Try actions are independent per provider during a running waterfall',async()=>{
+ const {app}=setup();app.run={id:'session',state:'running'};app.runTeam=app.team;let release;
+ const waiting=new Promise(resolve=>{release=resolve;}),calls=[];
+ app.api=async path=>{calls.push(path);if(path.includes('/first/plan'))await waiting;return {id:'q',estimate_micro:100,affordable:true,expires_at:new Date(Date.now()+60000).toISOString()};};
+ app.pollRun=async()=>{};app.refreshHistory=async()=>{};
+ const a={id:'first',can_try:true,estimate_micro:100},b={id:'second',can_try:true,estimate_micro:100};
+ const first=app.tryVendor(a);assert.equal(app.manualPending.first,true);await app.tryVendor(a);await app.tryVendor(b);
+ assert.ok(calls.includes('/arena/runs/session/attempts/second/start'));assert.equal(app.manualPending.first,true);
+ release();await first;assert.equal(calls.filter(p=>p.includes('/first/plan')).length,1);assert.equal(Object.keys(app.manualPending).length,0);
+ assert.equal(a.can_try,false);assert.equal(b.can_try,false);
+});
+test('Known insufficient balances offer top up without dispatch, while zero-cost calls remain available',async()=>{
+ const {app,destinations}=setup();app.run={id:'session',state:'running'};app.runTeam=app.team;app.balance=-1;
+ const paid={id:'paid',can_try:true,estimate_micro:100};assert.match(app.manualLabel(paid),/^Top up/);
+ app.api=()=>assert.fail('Known insufficient funds must not dispatch');await app.tryVendor(paid);assert.equal(destinations.length,1);
+ assert.equal(app.manualUnaffordable({estimate_micro:0}),false);app.balance=100;assert.equal(app.manualUnaffordable(paid),false);
+ app.balance=0;assert.equal(app.manualUnaffordable(paid),true);
+});
+
+test('Auto verification invalidates the lookup quote and survives a saved draft',()=>{
+ const {app}=setup();app.autoVerify=false;const key=app.quoteKey;app.autoVerify=true;
+ assert.notEqual(app.quoteKey,key);app.saveDraft(false);app.autoVerify=false;app.restoreDraft();assert.equal(app.autoVerify,true);
+});
+test('Verification verdicts preserve catch-all and distinguish invalid phone format',()=>{
+ const {app}=setup();
+ assert.equal(app.verificationVerdict({verification:{state:'hit',output:{valid:false,status:'catch_all'}}}),'Risky');
+ assert.equal(app.verificationVerdict({verification:{capability:'people.phone.verify',state:'hit',output:{valid:false}}}),'Invalid phone number');
+ assert.equal(app.verificationVerdict({verification:{state:'error'}}),'Verification unavailable');
+});
+test('Verification is priced, claims once per row, and can run alongside other requests',async()=>{
+ const {app}=setup();app.tasks.push({id:'people.email.verify',provider_previews:[[{estimate_micro:6250}]]});
+ app.run={id:'r',capability:'people.email.find',state:'running'};app.runTeam=app.team;
+ const r={id:'a',can_verify:true},calls=[];let release;
+ app.api=async(path)=>{calls.push(path);if(path.endsWith('/plan'))return await new Promise(resolve=>{release=()=>resolve({id:'q',estimate_micro:6250,affordable:true,balance_micro:100000,expires_at:new Date(Date.now()+60000).toISOString()});});return {};};
+ app.pollRun=async()=>{};
+ const pending=app.verifyResult(r);await app.verifyResult(r);assert.equal(calls.length,1);release();await pending;
+ assert.equal(calls.length,2);assert.match(calls[1],/verification\/start$/);assert.equal(r.can_verify,false);
+});
+test('Verification does not dispatch when credit is insufficient or a price increases',async()=>{
+ for(const expensive of [false,true]){
+  const {app}=setup();app.tasks.push({id:'people.email.verify',provider_previews:[[{estimate_micro:6250}]]});app.run={id:'r',capability:'people.email.find'};app.runTeam=app.team;
+  const calls=[];let topped=false;app.topUp=()=>{topped=true;};app.api=async(path)=>{calls.push(path);return {id:'q',estimate_micro:expensive?7000:6250,affordable:expensive,balance_micro:expensive?100000:0,expires_at:new Date(Date.now()+60000).toISOString()};};
+  await app.verifyResult({id:'a',can_verify:true});assert.equal(calls.length,1);assert.equal(topped,!expensive);
+ }
+});
+test('Additional lookup pricing includes its automatic verification cap',()=>{
+ const {app}=setup();app.run={auto_verify:{estimate_micro:6250}};app.balance=10000;
+ const r={id:'a',estimate_micro:8900};assert.equal(app.manualPrice(r),15150);assert.equal(app.manualUnaffordable(r),true);
+ app.manualQuotes.a={estimate_micro:8900,required_micro:15150,affordable:true};assert.equal(app.manualPrice(r),15150);
+});
+
+test('MillionVerifier success uses a readable verification verdict',()=>{
+ const {app}=setup();assert.equal(app.verificationVerdict({verification:{state:'hit',output:{valid:true,status:'ok'}}}),'Valid');
+ assert.equal(app.providerName('millionverifier'),'MillionVerifier');assert.equal(app.providerName('contactout'),'ContactOut');assert.equal(app.providerName('trykitt'),'Kitt');
+});
+
+test('Email verdict badges distinguish uncertain statuses from invalid boolean projections',()=>{
+ const {app}=setup();app.run={capability:'people.email.verify',fields:['valid','status']};
+ for(const [status,valid,label,tone] of [['valid',true,'Valid','valid'],['ok',true,'Valid','valid'],['invalid',false,'Invalid','invalid'],['accept_all',false,'Risky','risky'],['catch_all',false,'Risky','risky'],['catchall',false,'Risky','risky'],['risky',false,'Risky','risky'],['unknown',false,'Unknown','unknown'],['unverified',false,'Unknown','unknown'],['new_status',false,'Unknown','unknown']]){
+  const r={state:'hit',output:{status,valid}};
+  assert.equal(app.outcomeLabel(r),'Verdict: '+label);assert.equal(app.outcomeClass(r),'verdict-'+tone);
+  assert.equal(app.verificationVerdict({verification:r}),label);assert.equal(app.verificationClass({verification:r}),'verdict-'+tone);
+  assert.deepEqual(Array.from(app.summaryFields(r)),['status']);
+ }
+ assert.equal(app.outcomeLabel({state:'error',output:{status:'invalid'}}),'Error');
+ assert.equal(app.outcomeClass({state:'error',output:{status:'invalid'}}),'error');
+ app.run.capability='people.email.find';assert.equal(app.outcomeLabel({state:'hit'}),'Found');assert.equal(app.outcomeClass({state:'hit'}),'hit');
+});
+
+test('New email lookups enable verification by default and preserve an explicit draft opt-out',()=>{
+ const {app}=setup();app.tasks.push({id:'people.phone.find',variants:[['linkedin_url']]},{id:'people.search',variants:[['q']]});assert.equal(app.autoVerify,true);assert.equal(JSON.parse(app.quoteKey).auto_verify,true);
+ app.autoVerify=false;app.saveDraft(false);app.autoVerify=true;app.restoreDraft();assert.equal(app.autoVerify,false);
+ app.chooseTask('people.phone.find');assert.equal(app.autoVerify,false);
+ app.chooseTask('people.email.find');assert.equal(app.autoVerify,true);
+ app.chooseTask('people.search');assert.equal(JSON.parse(app.quoteKey).auto_verify,false);
+});
+
+test('Benchmark page loads only public benchmark and account metadata, without restoring or spending',async()=>{
+ const {app,mounted,stored}=setup({pathname:'/enrich-arena/people-search-bench'});
+ const calls=[];app.loadBenchmark=async()=>calls.push('benchmark');app.api=async p=>{calls.push(p);return {};};app.loadIdentity=async()=>calls.push('identity');
+ app.loadInsights=()=>assert.fail('Benchmark should not load observed call stats');app.restoreDraft=()=>assert.fail('Must not restore pending run');app.scheduleQuote=()=>assert.fail('Must not price a run');
+ await mounted.call(app);assert.deepEqual(calls,['benchmark','/meta','identity']);assert.equal(app.booted,true);
+ app.saveDraft();assert.equal(stored.size,0);
+ await app.prepare();assert.deepEqual(calls,['benchmark','/meta','identity']);
+ app.benchCategories=[{id:'one',rows:[{score:0},{score:50}]},{id:'two',rows:[{score:90}]}];app.benchCategory='two';assert.equal(app.benchRows[0].score,90);app.benchCategory='one';assert.deepEqual(Array.from(app.benchRows,r=>r.score),[50,0]);assert.equal(app.benchCategories[0].rows[0].score,0);
+});
+test('Benchmark loading errors clear stale charts and support a retry',async()=>{
+ const {app,runtime}=setup();app.benchCategories=[{id:'old'}];runtime.fetch=async()=>({ok:false});await app.loadBenchmark();assert.equal(app.benchCategories.length,0);assert.ok(app.benchError);assert.equal(app.benchLoading,false);
+ runtime.fetch=async(url,options)=>{assert.equal(url,'/people-search');assert.equal(options.credentials,'omit');return {ok:true,text:async()=>'<html>source</html>'};};
+ runtime.DOMParser=class{parseFromString(text,type){assert.equal(type,'text/html');return text;}};
+ runtime.window.ArenaBench={parseDocument:()=>[{id:'b2b-prospecting',rows:[]}]};await app.loadBenchmark();assert.equal(app.benchError,'');assert.equal(app.benchCategory,'b2b-prospecting');
+});
+
+test('Email validity matches exact endpoint and input and is independent of lookup coverage',()=>{
+ const {app}=setup();
+ app.tasks[0].provider_previews=[[{provider:'hunter',endpoint_id:'hunter.people.email.find'},{provider:'tomba',endpoint_id:'tomba.people.email.find'}]];
+ const audit={task:'people.email.find',input:'name_domain',endpoint:'hunter.people.email.find',method:'email_verifier_consensus',sample_n:40,baseline_n:200,baseline_rate:40,rate:30,checked_n:40,validity_rate:75,estimate:true,small_sample:true,verifiers:['leadmagic','millionverifier']};
+ app.insights={rows:[],verification:{rows:[audit],baseline_since:'2026-01-01T00:00:00Z',baseline_until:'2026-01-03T00:00:00Z',checked_at:'2026-01-05T00:00:00Z'}};
+ app.statsView='verified';assert.equal(app.chartBars.length,1);assert.equal(app.chartBars[0].value,75);assert.equal(app.verifiedRate(app.chartBars[0]),'75.0%');assert.equal(app.chartMax,100);
+ assert.match(app.verifiedRateNote(app.chartBars[0]),/sampled returned emails/);
+ audit.baseline_n=0;audit.baseline_rate=null;assert.equal(app.chartBars[0].value,75);
+ assert.equal(app.chartRows[0].rate,null,'A frozen audit does not overwrite current returned rate');
+ audit.validity_rate=0;assert.equal(app.chartBars[0].value,0,'Genuine zero remains visible');
+ audit.input='linkedin_url';assert.equal(app.chartBars.length,0);
+ audit.input='name_domain';audit.checked_n=19;assert.equal(app.chartBars.length,0);
+ audit.checked_n=40;audit.validity_rate=NaN;assert.equal(app.chartBars.length,0);
+});
+
+test('Phone format-only evidence never becomes verified hit rate',()=>{
+ const {app}=setup();app.taskId='people.phone.find';
+ const row={audit:{method:'phone_format',sample_n:100,checked_n:100,validity_rate:100,baseline_n:200,rate:100,estimate:true}};
+ assert.equal(app.verifiedRate(row),'—');assert.match(app.verifiedRateNote(row),/ownership/);assert.ok(app.chartViews.some(v=>v.id==='verified'));
+ app.taskId='people.email.verify';assert.ok(!app.chartViews.some(v=>v.id==='verified'));
+});
+
+test('Switching to a task without verified hit rate resets the selected chart',()=>{
+ const {app}=setup();app.tasks.push({id:'people.phone.find',variants:[['linkedin_url']]},{id:'people.enrich',variants:[['linkedin_url']]});app.statsView='verified';app.chooseTask('people.phone.find');assert.equal(app.statsView,'verified');
+ app.chooseTask('people.enrich');assert.equal(app.statsView,'rate');
+});
+
+test('Vendor request opens without login or credits and submits the existing request payload',async()=>{
+ const {app}=setup();let opened=0;app.user=null;app.balance=0;
+ app.$refs={vendorRequestDialog:{showModal(){opened++;},close(){}}};
+ app.prepare=()=>assert.fail('Requesting a vendor must not start a paid run');
+ app.openVendorRequest();assert.equal(opened,1);
+ let sent;app.api=async(path,options,team)=>{sent={path,body:JSON.parse(options.body),team};};
+ app.requestForm={capability:'  Example vendor  ',note:'Docs: https://example.test',contact:'requester@example.test'};
+ await app.submitVendorRequest();
+ assert.equal(sent.path,'/tool-requests');assert.equal(sent.team,null);
+ assert.deepEqual(sent.body,{capability:'Example vendor',query:'Enrich Arena: people.email.find',note:'Docs: https://example.test',contact:'requester@example.test',source:'web'});
+ assert.equal(app.requestDone,true);assert.equal(app.requestBusy,false);assert.equal(app.requestForm.capability,'');
+ assert.ok(!JSON.stringify(sent).includes('Test Person'),'Do not attach enrichment inputs');
+});
+test('Vendor requests validate, prevent duplicate submits and preserve fields for retry',async()=>{
+ const {app}=setup();let calls=0,finish;
+ app.api=()=>{calls++;return new Promise((resolve,reject)=>{finish=reject;});};
+ await app.submitVendorRequest();assert.equal(calls,0);assert.match(app.requestError,/Say what/);
+ app.requestForm.capability='Example vendor';const pending=app.submitVendorRequest();
+ await app.submitVendorRequest();assert.equal(calls,1);
+ finish(Object.assign(new Error('limit'),{status:429}));await pending;
+ assert.equal(app.requestBusy,false);assert.equal(app.requestDone,false);assert.equal(app.requestForm.capability,'Example vendor');assert.match(app.requestError,/Too many requests/);
+ app.api=async()=>{};await app.submitVendorRequest();assert.equal(app.requestDone,true);
+});
+
+function captureUrls(runtime){
+ const urls=[];runtime.location.pathname||='/enrich-arena';runtime.location.search||='';
+ runtime.window.history=Object.fromEntries(['pushState','replaceState'].map(method=>[method,(_s,_t,url)=>{urls.push({method,url});const [path,query]=url.split('?');runtime.location.pathname=path;runtime.location.search=query?'?'+query:'';}]));return urls;
+}
+test('Changing tasks and input types updates URL and clears stale history restoration',()=>{
+ const {app,runtime,stored}=setup({pathname:'/enrich-arena',search:'?run=old&team=test-team'}),urls=captureUrls(runtime);
+ app.tasks.push({id:'people.phone.find',variants:[['linkedin_url'],['email']]});app.run={id:'old',state:'completed'};stored.set('treg.arena.active.v1',JSON.stringify({id:'old'}));
+ app.chooseTask('people.phone.find');assert.equal(urls.at(-1).url,'/enrich-arena?capability=people.phone.find&variant=0');assert.equal(app.run,null);assert.ok(!stored.has('treg.arena.active.v1'));
+ app.chooseVariant(1);assert.equal(urls.at(-1).url,'/enrich-arena?capability=people.phone.find&variant=1');assert.equal(app.sectionUrl(true),'/enrich-arena/leaderboard?capability=people.phone.find&variant=1');
+});
+test('Selecting history writes a bookmarkable run URL and new query removes it',async()=>{
+ const {app,runtime}=setup(),urls=captureUrls(runtime);
+ app.api=async()=>({id:'saved',state:'completed',capability:app.taskId,mode:'compare',identity:app.inputs,results:[]});
+ await app.loadHistory('saved');assert.equal(urls.at(-1).url,'/enrich-arena?run=saved&team=test-team');
+ await app.newQuery();assert.equal(urls.at(-1).url,'/enrich-arena?capability=people.email.find&variant=0');
+});
+test('Explicit task URL wins over an automatically restored history run',async()=>{
+ const {app,runtime,stored,mounted}=setup({pathname:'/enrich-arena',search:'?capability=people.phone.find&variant=1'});captureUrls(runtime);runtime.setInterval=()=>1;
+ const tasks=[...app.tasks,{id:'people.phone.find',variants:[['linkedin_url'],['email']]}];
+ stored.set('treg.arena.active.v1',JSON.stringify({id:'old',team:app.team,at:Date.now()}));
+ app.loadInsights=()=>{};app.loadIdentity=async()=>{};app.api=async path=>path==='/arena/tasks'?tasks:{};app.loadHistory=()=>assert.fail('Explicit selection must not restore old history');
+ await mounted.call(app);assert.equal(app.taskId,'people.phone.find');assert.equal(app.variant,1);assert.equal(app.run,null);
+});
+test('A direct run URL loads only that saved result in its authorized team',async()=>{
+ const {app,runtime,mounted}=setup({pathname:'/enrich-arena',search:'?run=saved&team=other-team'});captureUrls(runtime);runtime.setInterval=()=>1;
+ app.teams=[{slug:'test-team'},{slug:'other-team'}];let read=0;
+ app.loadInsights=()=>{};app.loadIdentity=async()=>{};app.loadBalance=async()=>{};app.refreshHistory=async()=>{};app.prepare=()=>assert.fail('No quote or dispatch from saved URL');
+ app.api=async(path,options,team)=>{if(path==='/arena/tasks')return app.tasks;if(path==='/meta')return {};assert.equal(path,'/arena/runs/saved');assert.equal(team,'other-team');assert.equal(options.method,undefined);read++;return {id:'saved',state:'completed',capability:app.taskId,mode:'compare',identity:app.inputs,results:[]};};
+ await mounted.call(app);assert.equal(read,1);assert.equal(app.run.id,'saved');assert.equal(app.team,'other-team');
+});
+test('Run links require login and reject inaccessible teams without fetching results',async()=>{
+ const {app}=setup({pathname:'/enrich-arena',search:'?run=saved&team=private-team'});app.user=null;let login=0;app.openLogin=async pending=>{assert.equal(pending,false);login++;};app.api=()=>assert.fail('No private result fetched');
+ assert.equal(await app.restoreLinkedRun(),true);assert.equal(login,1);assert.equal(app.linkedRunPending,true);
+ app.user={id:1};app.teams=[{slug:'test-team'}];await app.restoreLinkedRun();assert.match(app.error,/not available/);
+});
+test('Bare Arena does not reopen a cached result or rewrite itself to that result',async()=>{
+ const {app,runtime,stored,mounted}=setup({pathname:'/enrich-arena',search:''}),urls=captureUrls(runtime);runtime.setInterval=()=>1;
+ stored.set('treg.arena.active.v1',JSON.stringify({id:'old',team:app.team,at:Date.now()}));
+ app.loadInsights=()=>{};app.loadIdentity=async()=>{};app.api=async path=>path==='/arena/tasks'?app.tasks:{};app.loadHistory=()=>assert.fail('Bare Arena is not a saved-result URL');
+ await mounted.call(app);assert.equal(app.run,null);assert.equal(urls.length,0);
+});
+test('Vendor self-serve copy uses the published listing prompt and reports clipboard failure',async()=>{
+ const {app,runtime}=setup();let copied='';runtime.navigator={clipboard:{writeText:async text=>{copied=text;}}};
+ await app.copyVendorListingPrompt();assert.equal(copied,'Read https://treg.to/vendor-listing.md and add our API to the treg catalog, then open a PR.');assert.equal(app.vendorPromptCopied,true);
+ runtime.navigator.clipboard.writeText=async()=>{throw Error('Denied');};await app.copyVendorListingPrompt();assert.equal(app.vendorPromptCopied,false);assert.match(app.vendorPromptError,/Select and copy/);
 });

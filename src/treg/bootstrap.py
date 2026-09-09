@@ -20,7 +20,7 @@ from starlette.routing import BaseRoute, Mount
 
 from . import adsconv, analytics, archive, audit
 from .application.call import route as routed_call
-from .application import arena
+from .application import arena, arena_insights
 from . import bootstrap_handlers
 from .bootstrap_http import (
     _BodyDecodeMiddleware,
@@ -43,8 +43,11 @@ RouteKey = tuple[str, tuple[str, ...], str]
 # key is placed here, so the dataplane cannot silently acquire a management or runner endpoint.
 _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
     ('/enrich-arena', ('GET',), 'enrich_arena_page'),
+    ('/enrich-arena/people-search-bench', ('GET',), 'enrich_arena_page'),
+    ('/enrich-arena/leaderboard', ('GET',), 'enrich_arena_page'),
     ('/enrich-arena/{asset}', ('GET',), 'enrich_arena_asset'),
     ('/arena/tasks', ('GET',), 'arena_tasks'),
+    ('/arena/insights', ('GET',), 'arena_insights_data'),
     ('/arena/plans', ('POST',), 'arena_plan'),
     ('/arena/runs/{run_id}/start', ('POST',), 'arena_start'),
     ('/arena/runs', ('GET',), 'arena_history'),
@@ -54,6 +57,8 @@ _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
     ('/arena/runs/{run_id}/reveal', ('POST',), 'arena_reveal'),
     ('/arena/runs/{run_id}/attempts/{attempt_id}/report', ('POST',), 'arena_report'),
     ('/arena/runs/{run_id}/attempts/{attempt_id}/rating', ('POST',), 'arena_rate'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/verification/plan', ('POST',), 'arena_verification_plan'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/verification/start', ('POST',), 'arena_verification_start'),
     ('/arena/runs/{run_id}/attempts/{attempt_id}/plan', ('POST',), 'arena_manual_plan'),
     ('/arena/runs/{run_id}/attempts/{attempt_id}/start', ('POST',), 'arena_manual_start'),
     ('/meta', ('GET',), 'meta'),
@@ -129,6 +134,7 @@ _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
     ('/privacy', ('GET',), 'privacy_page'),
     ('/connectors/claude', ('GET',), 'claude_connector_page'),
     ('/adtrack.js', ('GET',), 'adtrack_js'),
+    ('/agent-setup.js', ('GET',), 'agent_setup_js'),
     ('/gtag.js', ('GET',), 'gtag_js'),
     ('/resources', ('GET',), 'resources_page'),
     ('/grokbot', ('GET',), 'grokbot_page'),
@@ -505,6 +511,7 @@ def _lifespan(role: AppRole):
             if ROLE_BACKGROUND_TASKS[role] and archive.prune_enabled()
             else None
         )
+        insights_task = asyncio.create_task(arena_insights.worker()) if role != "dataplane" else None
         endpoint_observations = app.state.endpoint_observation_reader
         routed_call.configure_endpoint_observation_reader(endpoint_observations)
         mcp_reader_bound = role != "control" and _mcp is not None
@@ -533,6 +540,9 @@ def _lifespan(role: AppRole):
                 if mcp_reader_bound:
                     _mcp.clear_endpoint_observation_reader(endpoint_observations)
                 routed_call.clear_endpoint_observation_reader(endpoint_observations)
+                if insights_task is not None:
+                    insights_task.cancel()
+                    await asyncio.gather(insights_task, return_exceptions=True)
                 await arena.shutdown()
                 await endpoint_observations.aclose()
                 # analytics LAST: it is the sink the other two report their losses into, and a
