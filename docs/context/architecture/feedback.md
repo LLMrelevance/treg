@@ -77,7 +77,7 @@ to rate after using the result and continue their task.
 
 
 `application.feedback.submit_review` owns one transaction. It looks up call references only in
-its caller's team (audit and ledger); a missing audit record receives a retryable 404, including
+its caller's team audit records; a missing audit record receives a retryable 404, including
 ledger-only evidence, which lacks status/provider/cache attribution. Own-tool records receive
 400. A routed parent uses its successful child's endpoint/provider when present, retaining the
 parent endpoint as `routed_via`; otherwise it retains parent attribution. `invited` is recomputed

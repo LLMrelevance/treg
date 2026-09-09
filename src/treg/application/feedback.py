@@ -71,9 +71,6 @@ async def submit_review(
         if record is None:
             # The ledger can verify provenance while audit is delayed, but cannot establish
             # status/provider/cache state. Wait for that evidence rather than inventing it.
-            await db.execute(select(LedgerEntry.id).where(
-                LedgerEntry.org_id == org_id, LedgerEntry.call_id == call_id,
-            ).limit(1))
             raise ReviewCallNotFound
         if not record.endpoint_id:
             raise ReviewOwnTool
