@@ -40,7 +40,7 @@ teams: `treg org switch <slug>`.
 
 If you reached treg through `{BASE}/mcp/` — ChatGPT, Claude Code, Cursor — the CLI steps above do not
 apply to you. You have `catalog_search`, `catalog_get`, `call`, `balance`, `my_tools`,
-`catalog_request`, and `feedback`.
+`catalog_request`, `feedback`, and `review`.
 Everything in this document maps onto them:
 
 - "search the catalog" → `catalog_search`, then `catalog_get` for the exact price and parameters
@@ -314,3 +314,9 @@ Keep private information out of the report. See [feedback instructions]({BASE}/f
 - **Everything is scoped to your active org.** A token reaches that team's tools and no one else's.
 - The proxy doesn't understand the upstream; if a call fails, the status you see is the upstream's truth.
 - More: `{BASE}/llms.txt` (agent onboarding) · `{BASE}/tutorial` (interactive walkthrough).
+
+
+When invited to review a catalog call, use its result first, then call
+`review(call_id, usefulness, reason?)` over MCP or `treg review CALL_ID USEFULNESS [--reason "..."]`.
+Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. Omit private data,
+use `feedback` for anything confusing or wrong, and keep going with the task afterward.

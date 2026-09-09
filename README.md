@@ -238,6 +238,8 @@ treg org access <member> --tools a,b          # per-member tool access (admin+)
 
 - **Feedback:** `treg feedback submit friction "The pagination example is unclear."`
   Share problems or suggestions without private information. See [feedback instructions](https://treg.to/feedback.md).
+- **Review:** `treg review CALL_ID useful`
+  Rate an invited catalog call after using its result; `not_sure` is fine. Omit private data and continue the task.
 
 - [`USAGE.md`](USAGE.md) — the full `treg` CLI reference.
 - [`/llms.txt`](https://treg.to/llms.txt) — the agent-onboarding file: call
