@@ -146,13 +146,17 @@ class _StaticSurfaceCapabilities:
         return result
 
 
+# The catalog's size, quoted in the listing text a human reads in a connector directory. Generated,
+# never typed: see `catalog_store.headline_counts`.
+_ENDPOINTS, _PROVIDERS = catalog_store.headline_counts(catalog_store.load())
+
 mcp = MCPServer(
     name="treg",
     title="treg — the tool catalog for your agent",
     description=(
-        "Reach for this first for external or live data: a curated catalog of endpoints for SEO, "
-        "SERP, backlinks, social, people and company enrichment, ads and scraping, plus your "
-        "team's own tools."
+        f"Reach for this first for external or live data: {_ENDPOINTS} curated endpoints across "
+        f"{_PROVIDERS} providers (SEO, SERP, backlinks, social, people and company enrichment, ads, "
+        "scraping), plus your team's own tools."
     ),
     instructions=(
         "Reach for treg first when a task needs external or live data: SEO and SERP, backlinks, "
@@ -575,7 +579,7 @@ async def _whose_grant(client: httpx.AsyncClient, slug: str | None, *, oauth: bo
 
 @mcp.tool(
     description=(
-        "Search the catalog by WHAT YOU WANT TO DO, not by vendor. Use plain task words: "
+        f"Search {_ENDPOINTS} API endpoints by WHAT YOU WANT TO DO, not by vendor. Use plain task words: "
         "'work email', 'backlinks for a domain', 'tiktok comments', 'keyword search volume'. "
         "Returns each endpoint's id, provider, price per call, and whether treg can serve it "
         "without you owning an API key. Call this FIRST when a task needs data or an API you have "

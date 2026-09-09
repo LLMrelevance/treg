@@ -2683,7 +2683,7 @@ async def llms_txt():
     if not f.exists():
         raise HTTPException(status_code=404, detail="llms.txt not bundled")
     base = get_settings().public_url.rstrip("/")
-    return PlainTextResponse(_strip_routed(f.read_text(encoding="utf-8")).replace("{BASE}", base),
+    return PlainTextResponse(_fill_headline(_strip_routed(f.read_text(encoding="utf-8"))).replace("{BASE}", base),
                              media_type="text/plain; charset=utf-8")
 
 
@@ -2864,6 +2864,14 @@ def _strip_routed(text: str) -> str:
     return re.sub(r"<!--routed-->.*?<!--/routed-->\n?", "", text, flags=re.S)
 
 
+def _fill_headline(text: str) -> str:
+    """`{ENDPOINTS}` and `{PROVIDERS}` in a served document come from the loaded catalog, like
+    `{BASE}` comes from settings: the front-door files quote the catalog's size and a typed number
+    was always stale (see `catalog_store.headline_counts`)."""
+    endpoints, providers = catalog_store.headline_counts(catalog_store.load())
+    return text.replace("{ENDPOINTS}", endpoints).replace("{PROVIDERS}", str(providers))
+
+
 def _serve_md(name: str) -> PlainTextResponse:
     """Serve a bundled markdown file as inline text (so "open in new tab" shows it, not a download),
     with the serving domain templated in. Backs the 'copy markdown' buttons on the docs pages."""
@@ -2871,7 +2879,7 @@ def _serve_md(name: str) -> PlainTextResponse:
     if not f.exists():
         raise HTTPException(status_code=404, detail=f"{name} not bundled")
     base = get_settings().public_url.rstrip("/")
-    return PlainTextResponse(_strip_routed(f.read_text(encoding="utf-8")).replace("{BASE}", base),
+    return PlainTextResponse(_fill_headline(_strip_routed(f.read_text(encoding="utf-8"))).replace("{BASE}", base),
                              media_type="text/plain; charset=utf-8")
 
 
@@ -3140,7 +3148,7 @@ def _skill_frontmatter() -> dict[str, str]:
     f = _WEB_DIR / "skill.md"
     if not f.exists():
         raise HTTPException(status_code=404, detail="skill.md not bundled")
-    text = f.read_text(encoding="utf-8")
+    text = _fill_headline(f.read_text(encoding="utf-8"))
     if not text.startswith("---"):
         raise HTTPException(status_code=404, detail="skill.md has no frontmatter")
     out: dict[str, str] = {}
