@@ -133,3 +133,34 @@ async def test_admin_review_pagination(clients, monkeypatch):
     assert first['items'][0]['id'] > second['items'][0]['id']
     assert second['items'][0]['endpoint_id'] == 'example.search'
     assert (await clients.get('/admin/reviews', headers=headers, params={'limit': 101})).status_code == 422
+
+
+@pytest.mark.parametrize('surface', ['team', 'directory'])
+async def test_mcp_review_relay(clients, surface):
+    from test_mcp import _call_tool as team_call, mcp_session
+    from test_mcp_directory import _call_tool as directory_call, directory_session
+
+    org = await seed(clients)
+    context = mcp_session(clients) if surface == 'team' else directory_session()
+    call = team_call if surface == 'team' else directory_call
+    async with context as client:
+        result = await call(client, 'review', {'call_id': 'review-call', 'usefulness': 'partly',
+                                             'reason': 'Some results helped.'}, token=org['token'])
+    row, = await rows()
+    assert result == {'review_id': row.id, 'status': 'received'}
+    assert row.usefulness == 'partly'
+
+
+async def test_mcp_review_schema():
+    from treg.mcp import mcp, directory_mcp
+    from treg.feedback_contract import REVIEW_DESCRIPTION, REVIEW_USEFULNESS
+
+    for server in [mcp, directory_mcp]:
+        tool = next(tool for tool in await server.list_tools() if tool.name == 'review')
+        assert tool.description == REVIEW_DESCRIPTION
+        assert tool.input_schema['properties']['usefulness']['enum'] == list(REVIEW_USEFULNESS)
+        assert tool.input_schema['required'] == ['call_id', 'usefulness']
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.open_world_hint is False
+        assert tool.annotations.idempotent_hint is False

@@ -12,7 +12,7 @@ from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from starlette.background import BackgroundTask
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .. import analytics
+from .. import analytics, hints
 from .. import audit
 from .. import sandbox as demo_sandbox
 from ..application.call.access import catalog_endpoint_access as get_catalog_endpoint_access
@@ -309,7 +309,21 @@ async def call_tool(
     try:
         upstream = await execute_call(context, request.app.state.http)
         _attach_async_descriptor(upstream, context, rest)
-        return _http_upstream_response(upstream)
+        response = _http_upstream_response(upstream)
+        try:
+            # Resolution sets target only for an own tool; routed parents have no marketplace.
+            catalog_call = context.target is None and (
+                context.marketplace is not None
+                or rest.split("?", 1)[0] in catalog_store.load().by_id
+            )
+            if (catalog_call and 200 <= response.status_code < 300
+                    and not response.headers.get("X-Treg-Idempotent-Replay")
+                    and response.headers.get("X-Treg-Cache") != "hit"
+                    and hints.sampled("review", context.call_ref)):
+                response.headers["X-Treg-Review"] = "requested"
+        except Exception:
+            pass  # Optional invitation: a fault can only lose the header.
+        return response
     except CallFailure as exc:
         raise _translate_call_failure(exc) from exc
     except PoolTimeoutError:

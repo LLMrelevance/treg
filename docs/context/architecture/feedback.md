@@ -13,6 +13,8 @@ sources:
   - src/treg/alembic/versions/0026_callreview.py
   - src/treg/web/feedback.md
   - tests/test_feedback.py
+  - tests/test_reviews.py
+  - tests/test_hints.py
 related:
   - architecture/data-model.md
   - architecture/mcp-oauth.md
@@ -90,3 +92,21 @@ insertion or 200 on retry. `ReviewIn` rejects extra fields, requires a bounded `
 and usefulness enum, and trims an optional 1-200 character reason with feedback's privacy rules.
 `GET /admin/reviews` is superadmin-only, uses the admin pool, and provides bounded descending-ID
 pagination with optional `endpoint_id`. It is excluded from OpenAPI; there is no team read route.
+
+## Optional review and feedback invitations
+
+`routers.call.call_tool` sets `X-Treg-Review: requested` after constructing the streaming response,
+before streaming starts. Only resolved catalog calls (including routed parents) with a 2xx status,
+no idempotent-replay header, no `X-Treg-Cache: hit` archive signal, and a sampled call reference
+qualify. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
+is best-effort, has no database or body access, and does not change call service exits or writes.
+Plain HTTP gets only the header. Both MCP transports retain `call_id` and use their single hint
+slot with priority replay > 402 > review > feedback. Review invites rating after use; feedback
+remains the existing proactive-friction text. The upstream body is unchanged.
+
+The config-driven sampler replaces the PostHog flag poller completely; both MCP lifespans only
+own their transport lifecycle. Feedback hints remain limited to successful calls without a higher
+priority hint; missing call references use a fresh sampling ID without inventing a public call ID.
+`mcp_hint_attached` is a best-effort analytics event with `kind`, `surface` and available `call_id`,
+never upstream contents or credentials. Attachment does not prove display or reading. No session
+reminder cap or adaptive sampling is implemented.
