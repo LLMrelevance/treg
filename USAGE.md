@@ -163,6 +163,15 @@ Rung 3 only applies where treg has both a key and a published price for that end
 unpriced is refused rather than served, and you are told to connect your own key. Your own key is
 never billed to the balance.
 
+## Review a catalog call
+
+`treg review <call_id> <useful|partly|not_useful|not_sure> [--reason "text"]` rates a catalog
+call after you have used the result. A sampled call prints an invitation on stderr; `not_sure`
+is fine when you cannot tell. The optional reason is 1-200 characters after trimming. Omit
+private data and raw payloads. Use `feedback` for anything confusing or wrong, then keep going
+with the task. The receipt contains `review_id` and `status` (`received` or `already_reviewed`).
+If the call record is not written yet, retry shortly with the same call ID.
+
 ## Feedback
 
 `treg feedback submit <quality|pricing|friction|other> "message"` submits a problem or suggestion to the
