@@ -100,6 +100,9 @@ jobs:
           tests/test_ledger_claim_review.py
           tests/test_asynctasks.py
           tests/test_alembic_baseline.py
+          tests/test_enrich_arena.py
+          tests/test_arena_insights.py
+          tests/test_arena_verification_insights.py
           tests/test_feedback.py
           tests/test_archive.py
           tests/test_call_cancellation.py

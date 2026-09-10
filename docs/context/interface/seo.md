@@ -43,10 +43,14 @@ FastAPI's stock Swagger shell — a kilobyte of JavaScript to anything that does
 
 ## The pieces
 
+The landing footer links to the public standalone [Enrich Arena](enrich-arena.md) page. Its query
+form is visible before login; submission is authenticated and metered against team credits.
+
 `/gpt6` is the launch-film destination, served by `gpt6_page` as bundled,
 no-cache HTML and included in the sitemap and route ownership manifest. `/astra` redirects
 permanently to `/gpt6`, preserving query parameters for campaign attribution. It leads with
 “Give GPT6 Astra any data & tools” and a native-styled, self-playing Codex workflow:
+
 prompt, provider comparison, scan and selection, email/phone enrichment, then the cost receipt.
 The preview pauses off screen, respects reduced motion, and opens the `warm-paper` launch film
 on click. After the enrichment gallery, a subscription comparison pairs pricing with the

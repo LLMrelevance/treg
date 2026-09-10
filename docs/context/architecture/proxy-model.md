@@ -186,9 +186,12 @@ near-id matching remains provider-local and takes precedence for genuine misspel
 
 If both shapes miss with 404, a dotted target gets one final lookup in the endpoint catalog. A live
 row enters `_resolve_marketplace_call` and its credential ladder. `_marketplace_upstream` fills catalog
-path placeholders by percent-encoding raw values, but preserves a value containing a valid `%HH` escape;
-this prevents an already encoded Search Console property id such as `sc-domain%3Aexample.com` becoming
-double-encoded as `%253A`. Literal/invalid percent signs remain encoded. A `retired`/`broken` tombstone is
+path placeholders by percent-encoding raw values, but preserves a value containing a valid `%HH`
+escape. This prevents an already encoded Search Console property id such as
+`sc-domain%3Aexample.com` becoming double-encoded as `%253A`. Raw `@` remains literal because it is
+a legal path-segment character. This also supports email-path APIs such as Tomba's verifier, which
+rejects `%40` before decoding. Slashes, query/fragment delimiters and invalid percent signs remain
+escaped; URL-passthrough bytes are unchanged. A `retired`/`broken` tombstone is
 instead refused with 410, its `status_note`, and its optional `superseded_by`, before credentials are
 selected or the relay can run; the refusal is audited as `refused_by=retired`. This ordering is
 deliberate: an org's own tool named exactly like the old catalog id already resolved above and is not

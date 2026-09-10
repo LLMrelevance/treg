@@ -843,3 +843,12 @@ make a team. A failed grant recovers by rolling the session back, which expires 
 tracks - so both doors read their response fields *before* granting, and the redemption revives an
 expired `user`/`org` with `db.refresh` before touching them. The recovery path costs the team its
 credit, never the signup response or the referral attribution.
+
+## Optional checkout attribution
+
+`POST /billing/topup` also accepts `checkout_source` alongside `amount_usd`. The dashboard sends
+`arena` for an Arena credit-link arrival and `app` otherwise. The server separately reads the
+first-observed `treg_entry_surface` cookie; both values are normalized to the fixed product-surface
+allowlist (missing or invalid is `unknown`). They travel through Stripe metadata to payment
+analytics and ledger provenance only, never affecting the charged amount or authorization.
+Email OTP and OAuth callbacks read the same cookie for new-account signup analytics after commit.

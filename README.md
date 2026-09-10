@@ -127,6 +127,11 @@ treg topup            # add funds, or set up automatic top-ups
 Out of balance is an HTTP **402** carrying `balance_micro`, `estimated_cost_micro` and a `topup_url`,
 so an agent can act on it without reading prose.
 
+**Enrich Arena** lives at `/enrich-arena`, outside the dashboard. Compare enrichment answers with each vendor’s cost and speed,
+vote for the best answer in one click, or watch a sequential waterfall. Browsing is
+public; submitting requires login, and billable attempts use your team's credits. See the
+[Arena guide](docs/context/interface/enrich-arena.md).
+
 ## Share & use your own tools
 
 The zero-thought path — point treg at a project and it figures out what's shareable:
