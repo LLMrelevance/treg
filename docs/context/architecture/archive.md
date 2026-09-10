@@ -141,17 +141,14 @@ Read timeout and fallback observability must precede `r2-first`, so the entire d
 has visible fallback rates. Observing those rates is a prerequisite for closing the double-write
 window and switching new writes to `r2`.
 
-`archive_bodies.Observation` completes the existing `tool_called` event after the background write,
-without delaying the response or inserting another call row/event. Fields are
-`archive_body_write`, `archive_body_storage`, `archive_body_upload_status`,
-`archive_body_upload_ms` (transfer time only; queue wait is `archive_body_queue_wait_ms`),
-`archive_body_dropped` and `archive_body_drop_reason`; queue rejection also records
-`archive_body_upload_drop_reason`. Bounded reason codes distinguish upload queue/byte limits,
-upload failure/timeout, DB queue/byte limits, cancellation, record failure and policy/size gates.
-An upload loss can coexist with a successfully retained DB copy. Process counters in
-`archive_bodies.outcomes` have bounded labels. `archive.drain` drains both queues before analytics;
-shutdown/crash loss retains the existing best-effort limitations. Refresh and worker-only terminal
-writes have counters/logs rather than inventing a second `tool_called` event.
+`tool_called` is emitted at call completion and includes `archive_body_write`; archive queue
+latency cannot delay it. The separate `archive_body_stored` completion event carries `call_ref`,
+`storage`, `upload_status`, `upload_ms`, `queue_wait_ms`, `dropped` and `drop_reason`. Join by
+`call_ref`. A failed R2 upload followed by a committed DB copy is not dropped. R2-only upload
+failure still records a hash-only snapshot and statistics. These remain best-effort background
+writes: a killed process can lose completion events, but cannot withhold the calling event.
+Stats count snapshots with recoverable bodies in DB or R2, including deduplicated versions;
+`kept_bytes` is logical retained response bytes, not PostgreSQL physical table size.
 
 When archive mode is enabled, any R2 switch requires `ARCHIVE_OBJECT_STORE_ENDPOINT`, `ARCHIVE_OBJECT_STORE_BUCKET`,
 `ARCHIVE_OBJECT_STORE_ACCESS_KEY_ID` and `ARCHIVE_OBJECT_STORE_SECRET_ACCESS_KEY`; bootstrap refuses incomplete config

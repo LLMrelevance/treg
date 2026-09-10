@@ -352,7 +352,7 @@ async def test_admin_archive_report(clients: AsyncClient, shadow, monkeypatch):
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["mode"] == "shadow" and d["keys"] == 2 and d["snapshots"] == 3
-        assert d["bodies_kept"] == 2 and d["kept_bytes"] > 0   # v2 deduplicated, never re-stored
+        assert d["bodies_kept"] == 3 and d["kept_bytes"] > 0   # counts readable versions, including dedup
         row = next(x for x in d["endpoints"] if x["endpoint_id"] == EP)
         assert row == {"endpoint_id": EP, "provider": "tikhub", "policy": "transient",
                        "keys": 2, "refetches": 1, "stable": 1, "changed": 0,
@@ -889,8 +889,8 @@ async def test_endpoint_stats_match_direct_aggregation(clients: AsyncClient, sha
         assert st.snapshots == len(snaps) == 4
         assert st.stable == sum(k.stable_seen for k in keys) == 1
         assert st.changed == sum(k.change_seen for k in keys) == 1
-        assert st.bodies_kept == sum(1 for x in snaps if x.body is not None)
-        assert st.kept_bytes == sum(x.size_bytes for x in snaps if x.body is not None)
+        assert st.bodies_kept == sum(1 for x in snaps if x.body_storage is not None)
+        assert st.kept_bytes == sum(x.size_bytes for x in snaps if x.body_storage is not None)
         assert st.newest_fetch is not None
 
 
@@ -984,7 +984,7 @@ async def test_pruner_never_cache_keeps_only_newest(clients: AsyncClient, shadow
         s.add(k); await s.commit()
     assert await archive.prune_once() == 2               # young age is no defense for never-cache
     _, snaps = await _rows()
-    assert sum(1 for x in snaps if x.body is not None) == 1
+    assert sum(1 for x in snaps if x.body_storage is not None) == 1
     assert next(x.version for x in snaps if x.body is not None) == 3
 
 
@@ -1238,7 +1238,6 @@ async def test_rollout_bypass_never_queries_cache(clients, serve, monkeypatch,
                         lambda who, event, props, **kw: events.append((event, props)))
     r = await clients.get(f"/call/{EP}?aweme_id=7")
     assert r.status_code == 200 and "x-treg-cache" not in r.headers
-    await archive.drain()  # storage outcomes complete the existing event asynchronously
     props = [p for e, p in events if e == "tool_called"][-1]
     assert props["cache_outcome"] == reason
     assert not archive.worker_enabled()
@@ -1270,7 +1269,6 @@ async def test_cache_reports_miss_hit_bypass_and_lookup_failure(clients, serve, 
     monkeypatch.setattr(archive, "lookup", broken)
     response = await clients.get(f"/call/{EP}?aweme_id=7")
     assert response.status_code == 200
-    await archive.drain()  # storage outcomes complete the existing event asynchronously
     props = [p for e, p in events if e == "tool_called"]
     assert [p["cache_outcome"] for p in props] == [
         "key_missing", "hit", "caller_bypass", "lookup_error"]
@@ -1304,7 +1302,6 @@ async def test_strict_comparison_preserves_existing_ttl(clients, serve, monkeypa
     r = await clients.get(f"/call/{EP}?aweme_id=7")
     assert r.status_code == 200
     assert (r.headers.get("x-treg-cache") == "hit") == (outcome == "hit")
-    await archive.drain()  # storage outcomes complete the existing event asynchronously
     props = [p for e, p in events if e == "tool_called"][-1]
     assert props["cache_outcome"] == outcome
     if timer > 0:

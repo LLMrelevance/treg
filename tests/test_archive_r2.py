@@ -73,20 +73,21 @@ async def test_upload_precedes_pointer_and_call_does_not_wait(clients, r2, monke
     assert response.status_code == 200 and response.content == RAW
     await asyncio.wait_for(r2.entered.wait(), 2)
     assert await snapshots() == []
-    assert not [p for name, p in events if name == 'tool_called']
+    assert len([p for name, p in events if name == 'tool_called']) == 1
+    assert not [p for name, p in events if name == 'archive_body_stored']
     r2.gate.set()
     await archive.drain()
     rows = await snapshots()
     assert len(rows) == 1 and rows[0].body_storage == 'both'
     assert r2.objects[rows[0].content_hash] == RAW
     assert archive._unpack(rows[0].body, rows[0].enc) == RAW
-    props = [p for name, p in events if name == 'tool_called']
-    assert len(props) == 1 and props[0]['archive_body_upload_status'] == 'uploaded'
-    assert props[0]['archive_body_upload_ms'] >= 0
-    assert props[0]['archive_body_dropped'] is False
+    props = [p for name, p in events if name == 'archive_body_stored']
+    assert len(props) == 1 and props[0]['upload_status'] == 'uploaded'
+    assert props[0]['upload_ms'] >= 0
+    assert props[0]['dropped'] is False
 
 
-@pytest.mark.parametrize('mode,expected_rows', [('both', 1), ('r2', 0)])
+@pytest.mark.parametrize('mode,expected_rows', [('both', 1), ('r2', 1)])
 async def test_upload_failure_never_publishes_r2_pointer(clients, r2, monkeypatch, mode, expected_rows):
     monkeypatch.setattr(get_settings(), 'archive_body_write', mode)
     r2.fail_puts = 100
@@ -96,11 +97,12 @@ async def test_upload_failure_never_publishes_r2_pointer(clients, r2, monkeypatc
     assert response.content == RAW and response.status_code == 200
     await archive.drain()
     rows = await snapshots()
-    assert len(rows) == expected_rows and all(row.body_storage == 'db' for row in rows)
-    props = [p for name, p in events if name == 'tool_called']
+    assert len(rows) == expected_rows and all(row.body_storage == ('db' if mode == 'both' else None) for row in rows)
+    props = [p for name, p in events if name == 'archive_body_stored']
     assert len(props) == 1
-    assert props[0]['archive_body_drop_reason'] == 'upload_failed'
-    assert props[0]['archive_body_upload_status'] == 'failed'
+    assert props[0]['drop_reason'] == 'upload_failed'
+    assert props[0]['upload_status'] == 'failed'
+    assert props[0]['dropped'] is (mode == 'r2')
 
 
 async def test_r2_queue_has_independent_concurrency_and_sheds_observably(clients, r2, monkeypatch):
@@ -110,7 +112,7 @@ async def test_r2_queue_has_independent_concurrency_and_sheds_observably(clients
     dropped = asyncio.Event()
     def capture(who, name, props, **kw):
         events.append((name, props))
-        if props.get('archive_body_drop_reason') == 'upload_queue_full':
+        if props.get('drop_reason') == 'upload_queue_full':
             dropped.set()
     monkeypatch.setattr(service.analytics, 'capture', capture)
     try:
@@ -236,7 +238,7 @@ async def test_checksum_mismatch_is_not_published(clients, r2, monkeypatch):
     monkeypatch.setattr(get_settings(), 'archive_body_write', 'r2')
     await clients.get(URL)
     await archive.drain()
-    assert await snapshots() == []
+    assert (await snapshots())[0].body_storage is None
 
 
 @pytest.mark.parametrize('path', ['/calls', '/calls/{ref}'])
@@ -267,11 +269,11 @@ async def test_upload_timeout_and_byte_shedding_are_observable(clients, r2, monk
     r2.gate = asyncio.Event()
     await clients.get(URL)
     await archive.drain()
-    assert any(p.get('archive_body_drop_reason') == 'upload_timeout' for _, p in events)
+    assert any(p.get('drop_reason') == 'upload_timeout' for _, p in events)
     monkeypatch.setattr(get_settings(), 'archive_r2_max_pending_bytes', 1)
     await clients.get(URL, headers={'Cache-Control': 'no-cache'})
     await archive.drain()
-    assert any(p.get('archive_body_drop_reason') == 'upload_bytes_full' for _, p in events)
+    assert any(p.get('drop_reason') == 'upload_bytes_full' for _, p in events)
 
 
 async def test_obstore_client_uses_one_request_and_checks_hash_and_size():
@@ -551,8 +553,8 @@ async def test_upload_wait_is_not_transfer_timeout(r2, monkeypatch):
     sem = archive_bodies._upload_sem()
     for _ in range(get_settings().archive_r2_upload_concurrency):
         await sem.acquire()
-    observation = archive_bodies.Observation()
-    task = asyncio.create_task(archive_bodies.prepare(RAW, archive.content_hash(RAW), keep=True, observation=observation))
+    observation = archive_bodies.StorageReport()
+    task = asyncio.create_task(archive_bodies.prepare(RAW, archive.content_hash(RAW), mode="both", keep=True, observation=observation))
     await asyncio.sleep(0.03)
     assert not task.done()
     for _ in range(get_settings().archive_r2_upload_concurrency):

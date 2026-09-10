@@ -48,31 +48,29 @@ def validate_configuration() -> bool:
     return True
 
 
-class Observation:
-    """Attach the completed storage outcome to the existing event without delaying the call."""
-    def __init__(self):
-        self.future = asyncio.get_running_loop().create_future()
-        self.props = {
-            "archive_body_write": get_settings().archive_body_write,
-            "archive_body_upload_status": "not_requested",
-            "archive_body_upload_ms": 0.0,
-            "archive_body_queue_wait_ms": 0.0,
-        }
+class StorageReport:
+    """One small completion event, independent of the caller's tool_called event."""
+    def __init__(self, *, call_ref=None, emit=None):
+        self.call_ref, self.emit = call_ref, emit
+        self.finished = False
+        self.props = {"archive_body_upload_status": "not_requested", "archive_body_upload_ms": 0.0,
+                      "archive_body_queue_wait_ms": 0.0}
 
-    def finish(self, *, storage: str | None = None, reason: str | None = None) -> None:
-        if self.future.done():
+    def finish(self, *, storage=None, reason=None):
+        if self.finished:
             return
-        props = self.props | {"archive_body_storage": storage or "none",
-                              "archive_body_dropped": reason is not None,
-                              "archive_body_drop_reason": reason or "none"}
+        self.finished = True
         outcomes[reason or storage or "none"] += 1
-        self.future.set_result(props)
-
-    def capture(self, emit) -> None:
-        if self.future.done():
-            emit(self.future.result())
-        else:
-            self.future.add_done_callback(lambda future: emit(future.result()))
+        data = {"call_ref": self.call_ref, "storage": storage or "none",
+                "upload_status": self.props["archive_body_upload_status"],
+                "upload_ms": round(self.props["archive_body_upload_ms"], 3),
+                "queue_wait_ms": round(self.props["archive_body_queue_wait_ms"], 3),
+                "dropped": storage is None, "drop_reason": reason or "none"}
+        if self.emit is not None:
+            self.emit(data)
+        elif self.call_ref:
+            from . import analytics
+            analytics.capture("archive", "archive_body_stored", data)
 
 
 def _upload_sem():
@@ -92,9 +90,8 @@ class WritePlan:
     reason: str | None = None
 
 
-async def prepare(body: bytes, content_hash: str, *, keep: bool, observation: Observation,
+async def prepare(body: bytes, content_hash: str, *, mode: str, keep: bool, observation: StorageReport,
                   terminal: bool = False) -> WritePlan:
-    mode = observation.props["archive_body_write"]
     if not keep:
         return WritePlan(None, False, reason="policy_or_size")
     if mode == "db":
@@ -132,12 +129,12 @@ async def prepare(body: bytes, content_hash: str, *, keep: bool, observation: Ob
         _log.error("archive body upload failed after %s attempt(s): %s", attempts, reason)
         # Double write preserves the DB copy when R2 fails, without publishing an R2 pointer.
         return WritePlan("db" if mode == "both" else None, mode == "both",
-                         publish=mode == "both", reason=reason)
+                         publish=True, reason=reason)
     finally:
         observation.props["archive_body_upload_ms"] = round(observation.props["archive_body_upload_ms"], 3)
 
 
-def submit(factory, body_len: int, observation: Observation) -> str | None:
+def submit(factory, body_len: int, observation: StorageReport) -> str | None:
     """Separate count/byte budgets from archive's DB queue and DB semaphore."""
     global _pending_bytes
     s = get_settings()
@@ -149,25 +146,15 @@ def submit(factory, body_len: int, observation: Observation) -> str | None:
         return reason
     _pending_bytes += body_len
 
-    async def run():
-        try:
-            # Upload has its own deadline; the DB phase retains archive's existing deadline.
-            await factory()
-        except asyncio.CancelledError:
-            observation.finish(reason="cancelled")
-            raise
-        except Exception:
-            observation.finish(reason="record_failed")
-        finally:
-            observation.finish(reason="record_failed")  # no-op after the writer completed it
-
-    task = asyncio.create_task(run())
+    task = asyncio.create_task(factory())
     _pending.add(task)
 
     def done(task):
         global _pending_bytes
         _pending.discard(task)
         _pending_bytes -= body_len
+        if task.cancelled():
+            observation.finish(reason="cancelled")
     task.add_done_callback(done)
 
 
@@ -176,7 +163,6 @@ async def drain() -> None:
         tasks = list(_pending)
         await asyncio.gather(*tasks, return_exceptions=True)
         _pending.difference_update(tasks)
-    await asyncio.sleep(0)  # flush observation/event callbacks before analytics.drain()
 
 
 @dataclass(frozen=True)

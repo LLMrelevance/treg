@@ -291,7 +291,7 @@ def record(
     media_type: str,
     body: bytes,
     origin: str = "caller",
-    observation: archive_bodies.Observation | None = None,
+    observation: archive_bodies.StorageReport | None = None,
 ) -> tuple[str, str]:
     """Schedule one observation of a metered platform answer. Returns immediately; the write runs
     off-request on its own session. Call sites gate on `recording()` and 2xx — this function
@@ -305,7 +305,7 @@ def record(
     global _pending_bytes
     kh = cache_key(method, endpoint_id, url, caller_body, headers)
     ch = content_hash(body)
-    observation = observation or archive_bodies.Observation()
+    observation = observation or archive_bodies.StorageReport()
     upload_rejection = None
     if get_settings().archive_body_write != "db":
         upload_rejection = archive_bodies.submit(lambda: _store(
@@ -314,9 +314,6 @@ def record(
             media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
             observation=observation), len(body), observation)
         if upload_rejection is None:
-            return kh, ch
-        if get_settings().archive_body_write == "r2":
-            observation.finish(reason=upload_rejection)
             return kh, ch
         # Both mode preserves the old DB path even when the separate upload queue sheds.
 
@@ -337,7 +334,11 @@ def record(
     # Release bytes AND task when done. NOT redundant with drain()'s own removal: on a running
     # server drain() never fires, and this callback is the only exit from `_pending` — without it
     # the set fills to _MAX_PENDING and record() sheds every recording from then on.
-    task.add_done_callback(lambda task: _task_done(task, body_len))
+    def done(task):
+        _task_done(task, body_len)
+        if task.cancelled():
+            observation.finish(reason="cancelled")
+    task.add_done_callback(done)
     return kh, ch
 
 
@@ -364,7 +365,7 @@ async def store_terminal_response(
                     method="GET", endpoint_id=endpoint_id, provider=provider,
                     url=f"treg://asynctasks/{call_id}", caller_body=b"", headers={},
                     status_code=status_code, media_type="application/json", body=body,
-                    origin="async_terminal")
+                    origin="async_terminal", observation=archive_bodies.StorageReport(call_ref=call_id))
         except TimeoutError:
             _log.error("terminal archive total deadline exceeded for %s", call_id)
     task = asyncio.create_task(persist())
@@ -429,9 +430,6 @@ async def drain() -> None:
             if isinstance(r, asyncio.TimeoutError | TimeoutError):
                 _log.error("archive recording dropped: database did not answer in %ss",
                            _STORE_TIMEOUT_S)
-    # DB task completion can enqueue the observation callback after gather resumes. Flush it
-    # before shutdown drains analytics, including when R2 is disabled.
-    await asyncio.sleep(0)
 
 
 async def _bump_stats(s, *, endpoint_id: str, provider: str, pol: str, new_key: bool,
@@ -483,7 +481,7 @@ async def _store(
     origin: str = "caller",
     key_hash: str | None = None,
     body_hash: str | None = None,
-    observation: archive_bodies.Observation | None = None,
+    observation: archive_bodies.StorageReport | None = None,
     upload_rejection: str | None = None,
 ) -> None:
     """One recording: upsert the key, append a version, keep the change statistics honest.
@@ -499,16 +497,17 @@ async def _store(
 
     from .domain.catalog import store as catalog_store
 
-    observation = observation or archive_bodies.Observation()
+    observation = observation or archive_bodies.StorageReport()
     kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
     ch = body_hash or content_hash(body)
     keep = ((origin == "async_terminal" or storable(catalog_store.load().by_id.get(endpoint_id)))
             and len(body) <= get_settings().archive_max_body_bytes)
     try:
         async def prepare():
-            return (archive_bodies.WritePlan("db" if keep else None, keep, reason=upload_rejection)
+            return (archive_bodies.WritePlan("db" if keep and get_settings().archive_body_write != "r2" else None,
+                                            keep and get_settings().archive_body_write != "r2", reason=upload_rejection)
                     if upload_rejection else
-                    await archive_bodies.prepare(body, ch, keep=keep, observation=observation,
+                    await archive_bodies.prepare(body, ch, mode=get_settings().archive_body_write, keep=keep, observation=observation,
                                                  terminal=origin == "async_terminal"))
         if origin == "async_terminal":
             try:
@@ -518,7 +517,7 @@ async def _store(
                 observation.props["archive_body_upload_status"] = "failed"
                 plan = archive_bodies.WritePlan("db" if keep else None, keep, reason="upload_timeout")
                 _log.error("terminal archive upload deadline exceeded; saving DB evidence")
-            if not plan.publish:
+            if plan.storage is None and keep:
                 plan = archive_bodies.WritePlan("db" if keep else None, keep, reason=plan.reason)
         else:
             plan = await prepare()
@@ -716,7 +715,7 @@ async def _store_locked(
         await _bump_stats(
             s, endpoint_id=endpoint_id, provider=provider, pol=pol, new_key=new_key,
             stable_d=key.stable_seen - seen_before[0], changed_d=key.change_seen - seen_before[1],
-            kept=snap.body is not None, size=len(body), now=now)
+            kept=body_storage is not None, size=len(body), now=now)
         await s.commit()
 
 
