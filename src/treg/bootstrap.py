@@ -20,6 +20,7 @@ from starlette.routing import BaseRoute, Mount
 
 from . import adsconv, analytics, archive, audit
 from .application.call import route as routed_call
+from .application import arena, arena_insights
 from . import bootstrap_handlers
 from .bootstrap_http import (
     _BodyDecodeMiddleware,
@@ -41,6 +42,25 @@ RouteKey = tuple[str, tuple[str, ...], str]
 # Every HTTP route has one workload owner. A new decorator in api.py fails app creation until its
 # key is placed here, so the dataplane cannot silently acquire a management or runner endpoint.
 _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
+    ('/enrich-arena', ('GET',), 'enrich_arena_page'),
+    ('/enrich-arena/people-search-bench', ('GET',), 'enrich_arena_page'),
+    ('/enrich-arena/leaderboard', ('GET',), 'enrich_arena_page'),
+    ('/enrich-arena/{asset}', ('GET',), 'enrich_arena_asset'),
+    ('/arena/tasks', ('GET',), 'arena_tasks'),
+    ('/arena/insights', ('GET',), 'arena_insights_data'),
+    ('/arena/plans', ('POST',), 'arena_plan'),
+    ('/arena/runs/{run_id}/start', ('POST',), 'arena_start'),
+    ('/arena/runs', ('GET',), 'arena_history'),
+    ('/arena/runs/{run_id}', ('GET',), 'arena_run'),
+    ('/arena/runs/{run_id}/cancel', ('POST',), 'arena_cancel'),
+    ('/arena/runs/{run_id}/evaluations', ('POST',), 'arena_evaluate'),
+    ('/arena/runs/{run_id}/reveal', ('POST',), 'arena_reveal'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/report', ('POST',), 'arena_report'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/rating', ('POST',), 'arena_rate'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/verification/plan', ('POST',), 'arena_verification_plan'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/verification/start', ('POST',), 'arena_verification_start'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/plan', ('POST',), 'arena_manual_plan'),
+    ('/arena/runs/{run_id}/attempts/{attempt_id}/start', ('POST',), 'arena_manual_start'),
     ('/meta', ('GET',), 'meta'),
     ('/providers.json', ('GET',), 'providers_catalog'),
     ('/catalog/platforms', ('GET',), 'catalog_platforms'),
@@ -116,6 +136,7 @@ _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
     ('/privacy', ('GET',), 'privacy_page'),
     ('/connectors/claude', ('GET',), 'claude_connector_page'),
     ('/adtrack.js', ('GET',), 'adtrack_js'),
+    ('/agent-setup.js', ('GET',), 'agent_setup_js'),
     ('/gtag.js', ('GET',), 'gtag_js'),
     ('/resources', ('GET',), 'resources_page'),
     ('/grokbot', ('GET',), 'grokbot_page'),
@@ -281,9 +302,9 @@ _DATAPLANE_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
 })
 
 ROLE_BACKGROUND_TASKS: dict[AppRole, tuple[str, ...]] = {
-    "all": ("treg.adsconv.worker",),
+    "all": ("treg.adsconv.worker", "treg.application.arena_insights.worker"),
     "dataplane": (),
-    "control": ("treg.adsconv.worker",),
+    "control": ("treg.adsconv.worker", "treg.application.arena_insights.worker"),
 }
 ROLE_STARTUP_CHECKS: dict[AppRole, tuple[str, ...]] = {
     "all": (
@@ -492,6 +513,7 @@ def _lifespan(role: AppRole):
             if ROLE_BACKGROUND_TASKS[role] and archive.prune_enabled()
             else None
         )
+        insights_task = asyncio.create_task(arena_insights.worker()) if role != "dataplane" else None
         endpoint_observations = app.state.endpoint_observation_reader
         routed_call.configure_endpoint_observation_reader(endpoint_observations)
         mcp_reader_bound = role != "control" and _mcp is not None
@@ -509,17 +531,18 @@ def _lifespan(role: AppRole):
                     yield
         finally:
             try:
-                if gauge_task is not None:
-                    gauge_task.cancel()
-                if ads_task is not None:
-                    ads_task.cancel()
-                if archive_task is not None:
-                    archive_task.cancel()
-                if prune_task is not None:
-                    prune_task.cancel()
+                workers = [task for task in (
+                    gauge_task, ads_task, archive_task, prune_task, insights_task,
+                ) if task is not None]
+                for task in workers:
+                    task.cancel()
+                # Wait for session rollback/close before the event loop or shared client closes.
+                # A second cancellation during asyncio.run() teardown can interrupt that cleanup.
+                await asyncio.gather(*workers, return_exceptions=True)
                 if mcp_reader_bound:
                     _mcp.clear_endpoint_observation_reader(endpoint_observations)
                 routed_call.clear_endpoint_observation_reader(endpoint_observations)
+                await arena.shutdown()
                 await endpoint_observations.aclose()
                 # analytics LAST: it is the sink the other two report their losses into, and a
                 # drop during their drain is the one most worth hearing about. Draining it first

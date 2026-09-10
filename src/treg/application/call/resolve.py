@@ -883,7 +883,10 @@ def _marketplace_upstream(
         # Agents often pass `siteUrl` straight from GSC's sites list, where it may already be
         # encoded. Preserve a value containing a real %HH escape; otherwise encode it exactly once.
         # A literal/invalid percent sequence has no valid escape and therefore becomes `%25`.
-        rendered = value if _VALID_PERCENT_ESCAPE_RE.search(value) else quote(value, safe="")
+        # @ is a legal character inside a path segment (RFC 3986 pchar), not a path/query
+        # delimiter. Email-path APIs may validate it before percent-decoding (Tomba does).
+        # Keep it literal; slashes, ?, # and other delimiters still need escaping.
+        rendered = value if _VALID_PERCENT_ESCAPE_RE.search(value) else quote(value, safe="@")
         path = path.replace("{%s}" % name, rendered)
         consumed.add(name)
     required = [k for k, v in (inp.get("queryParams") or {}).items()

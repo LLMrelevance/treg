@@ -3060,6 +3060,12 @@ async def claude_connector_page():
     return _legal_page("claude-connector.html")
 
 
+@app.get("/agent-setup.js", include_in_schema=False)
+async def agent_setup_js():
+    return FileResponse(_WEB_DIR / "agent-setup.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/adtrack.js", include_in_schema=False)
 async def adtrack_js():
     """First-party ad-click capture (see the file itself): sets the `treg_ad` cookie that

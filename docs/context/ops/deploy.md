@@ -625,3 +625,9 @@ on an existing deployment or copy a local `.env` key to production.
 The ContactOut server platform-key slot (`TREG_PLATFORM_KEY_CONTACTOUT`) is forwarded to the
 worker by `render.yaml`. The provider allow-list still controls serving; see
 [ContactOut](../architecture/contactout.md) for informational capacity checks.
+
+Arena adds one `arena_insights.worker` consumer to the background pool (default total nine).
+Its public snapshot endpoint makes a single primary-key read on the API pool; aggregation remains
+on the background worker. The default per-process budget is now 27 slots; with two workers and
+two instances a rolling deployment can reach 108. Existing deployment overrides remain necessary
+for the 103-connection plan; this merge does not alter production overrides.
