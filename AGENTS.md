@@ -14,8 +14,8 @@ Everything else in this file is guidance; these are the contract, and they win o
 1. A team's own key always wins over treg's, is never metered, and is never routed or overflowed.
 2. A hold (the balance `reserve` sets aside for one call) is settled or released exactly once, on
    every path: timeout, cancellation and exceptions included.
-3. Zero database connections are held while an upstream request is in flight. This is why
-   `reserve` and `settle` are two transactions; never merge them.
+3. A request holds zero database connections while upstream or object-storage I/O is in flight.
+   Keep `reserve` and `settle` separate; read archive pointers, close the session, then fetch bytes.
 4. Plain `/call/` is a faithful relay: the injected credential, the transport headers listed in
    `src/treg/infra/upstream/relay.py`, and (on treg's shared key only) the per-org re-scoping of the
    caller's `Idempotency-Key` are the only rewrites. Never add upstream-specific modeling or body

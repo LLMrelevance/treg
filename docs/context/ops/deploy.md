@@ -430,9 +430,12 @@ grep. **A quiet audit table is now a bug you can alert on**, not one you find ou
 task closure — up to `_MAX_PENDING` (512) tasks × `archive_max_body_bytes` (2 MB) = 1 GB worst case.
 After #363 reduced `_MAX_CONCURRENT_WRITES` from 4 to 2, backlog built faster than it drained under
 heavy `/call` + MCP traffic, and the 2026-09-07T00:43:06Z OOM killed the web service at 4 GB.
-`_MAX_PENDING_BYTES` (256 MB) now caps total body bytes in pending work: `record()` sheds when
+`_MAX_PENDING_BYTES` (256 MiB) caps body bytes in the DB queue: `record()` sheds when
 EITHER the task count OR the bytes threshold is exceeded. The done callback releases bytes when a
-task completes; a regression test pins the bound.
+task completes; a regression test pins the bound. R2 uploads have a separate
+`archive_r2_max_pending_bytes` budget (128 MiB by default), so the two queues together can
+retain **384 MiB** of body bytes. This is not an RSS ceiling: SDK buffers, compression and
+mandatory terminal evidence (outside the best-effort queues) need additional headroom.
 
 The proxy is thin and IO-bound (a relay, low CPU/memory), so cheap machines scale it.
 

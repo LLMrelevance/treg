@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from .config import get_settings
+from . import archive_bodies
 
 # ---------------------------------------------------------------------------------------------
 # Mode
@@ -44,10 +45,6 @@ def recording() -> bool:
 def serving() -> bool:
     return mode() == "serve"
 
-
-def comparison_mode() -> str:
-    return ("legacy_noise" if get_settings().archive_comparison_mode.strip().lower()
-            == "legacy_noise" else "strict")
 
 
 def serve_endpoints() -> set[str]:
@@ -282,6 +279,14 @@ def key_url(upstream_url: str, query_items: list[tuple[str, str]], exclude: set[
     return f"{upstream_url}&{q}" if "?" in upstream_url else f"{upstream_url}?{q}"
 
 
+def _write_plan(endpoint_id: str, body: bytes, origin: str) -> archive_bodies.WritePlan:
+    from .domain.catalog import store as catalog_store
+    keep = ((origin == "async_terminal" or storable(catalog_store.load().by_id.get(endpoint_id)))
+            and len(body) <= get_settings().archive_max_body_bytes)
+    return archive_bodies.WritePlan(get_settings().archive_body_write if keep else None,
+                                    reason=None if keep else "policy_or_size")
+
+
 def record(
     *,
     method: str,
@@ -294,6 +299,7 @@ def record(
     media_type: str,
     body: bytes,
     origin: str = "caller",
+    observation: archive_bodies.StorageReport | None = None,
 ) -> tuple[str, str]:
     """Schedule one observation of a metered platform answer. Returns immediately; the write runs
     off-request on its own session. Call sites gate on `recording()` and 2xx — this function
@@ -307,23 +313,41 @@ def record(
     global _pending_bytes
     kh = cache_key(method, endpoint_id, url, caller_body, headers)
     ch = content_hash(body)
+    observation = observation or archive_bodies.StorageReport()
+    plan = _write_plan(endpoint_id, body, origin)
+    if plan.storage in ("both", "r2"):
+        rejection = archive_bodies.submit(lambda: _store(
+            method=method, endpoint_id=endpoint_id, provider=provider, url=url,
+            caller_body=caller_body, headers=headers, status_code=status_code,
+            media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
+            observation=observation, plan=plan), len(body), observation)
+        if rejection is None:
+            return kh, ch
+        plan = archive_bodies.WritePlan("db" if plan.keep_db else None, reason=rejection)
+        # Both mode preserves the old DB path even when the separate upload queue sheds.
+
     body_len = len(body)
     # Shed on EITHER count OR bytes — whichever bound bites first. The bytes bound prevents OOM
     # when a few large bodies queue while the semaphore is full; the count bound is the legacy
     # backstop for many small bodies (archive_max_body_bytes is 2 MB, so 512 × 2 MB = 1 GB).
     if len(_pending) >= _MAX_PENDING or _pending_bytes + body_len > _MAX_PENDING_BYTES:
+        observation.finish(reason="db_queue_full" if len(_pending) >= _MAX_PENDING else "db_bytes_full")
         return kh, ch
     _pending_bytes += body_len
-    task = asyncio.create_task(asyncio.wait_for(_store(
+    task = asyncio.create_task(_store(
         method=method, endpoint_id=endpoint_id, provider=provider, url=url,
         caller_body=caller_body, headers=headers, status_code=status_code,
-        media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch),
-        timeout=_STORE_TIMEOUT_S))
+        media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
+        observation=observation, plan=plan))
     _pending.add(task)
     # Release bytes AND task when done. NOT redundant with drain()'s own removal: on a running
     # server drain() never fires, and this callback is the only exit from `_pending` — without it
     # the set fills to _MAX_PENDING and record() sheds every recording from then on.
-    task.add_done_callback(lambda t: _task_done(t, body_len))
+    def done(task):
+        _task_done(task, body_len)
+        if task.cancelled():
+            observation.finish(reason="cancelled")
+    task.add_done_callback(done)
     return kh, ch
 
 
@@ -334,19 +358,34 @@ def _task_done(task: asyncio.Task, body_len: int) -> None:
     _pending_bytes -= body_len
 
 
+_TERMINAL_TOTAL_S = 28.0
+_TERMINAL_UPLOAD_S = 8.0
+_TERMINAL_DB_S = 20.0
+
+
 async def store_terminal_response(
     call_id: str, provider: str, endpoint_id: str, status_code: int, body: bytes,
 ) -> None:
     """Archive terminal task JSON under the originating call id without fetching linked media."""
+    async def persist():
+        try:
+            async with asyncio.timeout(_TERMINAL_TOTAL_S):
+                await _store(
+                    method="GET", endpoint_id=endpoint_id, provider=provider,
+                    url=f"treg://asynctasks/{call_id}", caller_body=b"", headers={},
+                    status_code=status_code, media_type="application/json", body=body,
+                    origin="async_terminal", observation=archive_bodies.StorageReport(call_ref=call_id))
+        except TimeoutError:
+            _log.error("terminal archive total deadline exceeded for %s", call_id)
+    task = asyncio.create_task(persist())
     try:
-        await asyncio.wait_for(_store(
-        method="GET", endpoint_id=endpoint_id, provider=provider,
-        url=f"treg://asynctasks/{call_id}", caller_body=b"", headers={},
-        status_code=status_code, media_type="application/json", body=body,
-        origin="async_terminal"), timeout=_STORE_TIMEOUT_S)
-    except (asyncio.TimeoutError, TimeoutError):
-        _log.warning("terminal archive recording dropped: database did not answer in %ss",
-                     _STORE_TIMEOUT_S)
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # Settlement is already committed. Finish this bounded evidence operation even when
+        # the polling request/worker deadline cancels its waiter, then preserve cancellation.
+        _log.warning("terminal archive waiter cancelled; finishing bounded evidence for %s", call_id)
+        await asyncio.shield(task)
+        raise
 
 
 async def load_terminal_responses(tasks: list[tuple[str, str]]) -> dict[str, bytes]:
@@ -370,26 +409,25 @@ async def load_terminal_responses(tasks: list[tuple[str, str]]) -> dict[str, byt
             return out
         by_key = {k.id: hashes[k.key_hash] for k in keys}
         snaps = (await s.execute(
-            select(ArchiveSnapshot).where(ArchiveSnapshot.key_id.in_(list(by_key)))
+            select(ArchiveSnapshot).options(*archive_bodies.read_options("terminal")).where(ArchiveSnapshot.key_id.in_(list(by_key)))
             .order_by(ArchiveSnapshot.key_id, ArchiveSnapshot.version.desc()))).scalars().all()
         newest: dict[int, ArchiveSnapshot] = {}
         for snap in snaps:
             newest.setdefault(snap.key_id, snap)
-        for key_id, snap in newest.items():
-            body = snap.body
-            enc = snap.enc
-            if body is None and snap.body_of is not None:
-                carrier = await s.get(ArchiveSnapshot, snap.body_of)
-                body = carrier.body if carrier is not None else None
-                enc = carrier.enc if carrier is not None else None
-            if body is not None:
-                out[by_key[key_id]] = _unpack(body, enc)
-    return out
+        pointers = {by_key[key_id]: await archive_bodies.pointer(s, snap, "terminal")
+                    for key_id, snap in newest.items()}
+    semaphore = asyncio.Semaphore(8)
+    async def load(call_id, pointer):
+        async with semaphore:
+            return call_id, await archive_bodies.read(pointer, "terminal")
+    return {call_id: body for call_id, body in await asyncio.gather(
+        *(load(call_id, pointer) for call_id, pointer in pointers.items())) if body is not None}
 
 
 async def drain() -> None:
     """Flush in-flight recordings — shutdown and tests. Bounded: every task carries its own
     _STORE_TIMEOUT_S, so this cannot wait longer than the slowest permitted recording."""
+    await archive_bodies.drain()
     while _pending:
         tasks = list(_pending)
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -402,7 +440,6 @@ async def drain() -> None:
             if isinstance(r, asyncio.TimeoutError | TimeoutError):
                 _log.error("archive recording dropped: database did not answer in %ss",
                            _STORE_TIMEOUT_S)
-
 
 
 async def _bump_stats(s, *, endpoint_id: str, provider: str, pol: str, new_key: bool,
@@ -454,6 +491,8 @@ async def _store(
     origin: str = "caller",
     key_hash: str | None = None,
     body_hash: str | None = None,
+    observation: archive_bodies.StorageReport | None = None,
+    plan: archive_bodies.WritePlan | None = None,
 ) -> None:
     """One recording: upsert the key, append a version, keep the change statistics honest.
 
@@ -466,27 +505,57 @@ async def _store(
     bytes are stored now, so a policy upgrade heals the store forward without a backfill."""
     from sqlalchemy.exc import IntegrityError
 
-    kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
+    observation = observation or archive_bodies.StorageReport()
+    stored, reason = None, "record_failed"
     try:
+        kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
+        ch = body_hash or content_hash(body)
+        plan = plan or _write_plan(endpoint_id, body, origin)
+        if plan.storage in ("both", "r2"):
+            if origin == "async_terminal":
+                try:
+                    async with asyncio.timeout(_TERMINAL_UPLOAD_S):
+                        plan = await archive_bodies.prepare(body, ch, mode=plan.storage,
+                                                           observation=observation, terminal=True)
+                except TimeoutError:
+                    observation.props["archive_body_upload_status"] = "failed"
+                    plan = archive_bodies.WritePlan("db", reason="timeout")
+                    _log.error("terminal archive upload deadline exceeded; saving DB evidence")
+                if plan.storage is None:
+                    plan = archive_bodies.WritePlan("db", reason=plan.reason)
+            else:
+                plan = await archive_bodies.prepare(body, ch, mode=plan.storage, observation=observation)
+
         # Same-key waiters must queue before taking a scarce database-write slot. Otherwise four
         # duplicate recordings can occupy the whole semaphore while only one touches the database.
-        async with _get_key_lock(kh):
+        async with asyncio.timeout(_TERMINAL_DB_S if origin == "async_terminal" else _STORE_TIMEOUT_S), _get_key_lock(kh):
             async with _get_sem():
                 # Postgres row locking handles other processes. A retry also covers the narrow
                 # first-key race and multi-process SQLite, where SELECT FOR UPDATE is ignored.
                 for attempt in range(4):
                     try:
-                        return await _store_locked(
+                        await _store_locked(
                             method=method, endpoint_id=endpoint_id, provider=provider, url=url,
                             caller_body=caller_body, headers=headers, status_code=status_code,
                             media_type=media_type, body=body, origin=origin,
-                            key_hash=kh, body_hash=body_hash)
+                            key_hash=kh, body_hash=ch, plan=plan)
+                        stored, reason = plan.storage, plan.reason
+                        return
                     except IntegrityError:
                         if attempt == 3:
                             raise
                         await asyncio.sleep(0.01 * (attempt + 1))
-    except Exception:  # noqa: BLE001 — recording must never surface anywhere
+    except asyncio.CancelledError:
+        reason = "cancelled"
+        raise
+    except TimeoutError:
+        reason = "record_timeout"
+        _log.error("archive record_timeout for %s", endpoint_id)
+    except Exception:
+        reason = "record_failed"
         _log.error("archive recording dropped for %s", endpoint_id, exc_info=True)
+    finally:
+        observation.finish(storage=stored, reason=reason)
 
 
 async def _lock_archive_key(s, key_id: int):
@@ -526,6 +595,7 @@ async def _store_locked(
     origin: str = "caller",
     key_hash: str | None = None,
     body_hash: str | None = None,
+    plan: archive_bodies.WritePlan,
 ) -> None:
     from sqlalchemy import select
     from sqlalchemy.exc import IntegrityError
@@ -543,10 +613,6 @@ async def _store_locked(
     # `_store` callable on its own (tests).
     kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
     ch = body_hash or content_hash(body)
-    cap = get_settings().archive_max_body_bytes
-    # Terminal task JSON is mandatory settlement evidence. It contains only the provider's JSON
-    # envelope (possibly including expiring media URLs), never the media itself.
-    keep_bytes = (origin == "async_terminal" or pol in _STORABLE) and len(body) <= cap
     now = _utcnow()
 
     async with background_session_maker() as s:
@@ -584,16 +650,16 @@ async def _store_locked(
         new_key = newest is None            # first version ⇒ this recording created the key
         seen_before = (key.stable_seen, key.change_seen)
 
-        stored, enc = _pack(body) if keep_bytes else (None, None)
+        stored, enc = _pack(body) if plan.keep_db else (None, None)
         snap = ArchiveSnapshot(
             key_id=key.id, version=1 if newest is None else newest.version + 1,
             status_code=status_code, media_type=media_type, content_hash=ch,
             body=stored, enc=enc, size_bytes=len(body),
-            fetched_at=now, origin=origin)
+            fetched_at=now, origin=origin, body_storage=plan.storage)
         # Byte deduplication is independent of usefulness, including empty history.
         if newest is not None and newest.content_hash == ch:
             carrier = newest.body_of or (newest.id if newest.body is not None else None)
-            if carrier is not None:
+            if plan.keep_db and carrier is not None:
                 snap.body, snap.body_of = None, carrier
 
         baseline = None
@@ -623,9 +689,6 @@ async def _store_locked(
         decisive = next_state in ("found", "empty") and origin != "async_terminal"
         if decisive and baseline is not None and (previous_state, next_state) != ("empty", "empty"):
             stable = previous_state == next_state == "found" and baseline.content_hash == ch
-            if (not stable and previous_state == next_state == "found"
-                    and comparison_mode() == "legacy_noise"):
-                stable = _noise_only(await _snapshot_body(s, baseline), body, key)
             if stable:
                 key.stable_seen += 1
             else:
@@ -648,7 +711,7 @@ async def _store_locked(
         await _bump_stats(
             s, endpoint_id=endpoint_id, provider=provider, pol=pol, new_key=new_key,
             stable_d=key.stable_seen - seen_before[0], changed_d=key.change_seen - seen_before[1],
-            kept=snap.body is not None, size=len(body), now=now)
+            kept=plan.storage is not None, size=len(body), now=now)
         await s.commit()
 
 
@@ -727,7 +790,8 @@ async def prune_once() -> int:
             # a surviving version may reference a body on an older row (dedup), and stripping the
             # carrier would silently orphan it.
             candidates = [v for v in versions[budget:]
-                          if v.id != key.result_snapshot_id and v.body is not None
+                          if v.id != key.result_snapshot_id
+                          and v.body is not None
                           and (key.ttl_s == TTL_NEVER or v.fetched_at <= min_age)]
             surviving = [v for v in versions if v not in candidates]
             protected = ({v.id for v in surviving}
@@ -738,8 +802,12 @@ async def prune_once() -> int:
                 if v.id in protected:
                     continue
                 v.body, v.enc = None, None
-                freed_n += 1
-                freed_bytes += v.size_bytes
+                if v.body_storage == "both":
+                    v.body_storage = "r2"
+                else:
+                    v.body_storage = None
+                    freed_n += 1
+                    freed_bytes += v.size_bytes
                 s.add(v)
                 stripped += 1
                 if stripped >= batch:
@@ -765,7 +833,7 @@ def _decode(body: bytes | None) -> str | None:
         return None
 
 
-async def resolve_result(session, key_hash: str, content_hash: str) -> dict[str, Any] | None:
+async def resolve_result(key_hash: str, content_hash: str) -> dict[str, Any] | None:
     """The request shape and the stored answer a call row points at, or None when the key or
     that exact answer is no longer on file.
 
@@ -777,20 +845,21 @@ async def resolve_result(session, key_hash: str, content_hash: str) -> dict[str,
 
     from .models import ArchiveKey, ArchiveSnapshot
 
-    key = (await session.execute(
-        select(ArchiveKey).where(ArchiveKey.key_hash == key_hash))).scalars().one_or_none()
-    if key is None:
-        return None
-    snap = (await session.execute(
-        select(ArchiveSnapshot)
-        .where(ArchiveSnapshot.key_id == key.id, ArchiveSnapshot.content_hash == content_hash)
-        .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
-    if snap is None:
-        return None
-    body = _unpack(snap.body, snap.enc)
-    if body is None and snap.body_of is not None:
-        carrier = await session.get(ArchiveSnapshot, snap.body_of)
-        body = _unpack(carrier.body, carrier.enc) if carrier is not None else None
+    from .infra.db import session_maker
+
+    async with session_maker() as session:
+        key = (await session.execute(
+            select(ArchiveKey).where(ArchiveKey.key_hash == key_hash))).scalars().one_or_none()
+        if key is None:
+            return None
+        snap = (await session.execute(
+            select(ArchiveSnapshot).options(*archive_bodies.read_options("result"))
+            .where(ArchiveSnapshot.key_id == key.id, ArchiveSnapshot.content_hash == content_hash)
+            .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
+        if snap is None:
+            return None
+        pointer = await archive_bodies.pointer(session, snap, "result")
+    body = await archive_bodies.read(pointer, "result")
     return {
         "stored": body is not None,
         "request": {"method": key.req_method or "", "url": key.req_url or "",
@@ -925,7 +994,7 @@ async def lookup(
             if window <= 0:
                 return miss("ttl_disabled")
             newest = (await s.execute(
-                select(ArchiveSnapshot).where(ArchiveSnapshot.key_id == key.id)
+                select(ArchiveSnapshot).options(*archive_bodies.read_options("lookup")).where(ArchiveSnapshot.key_id == key.id)
                 .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
             # Older writers can still append during a rolling deploy. A version they wrote
             # invalidates our saved decision; classify that newest body as legacy evidence.
@@ -934,7 +1003,7 @@ async def lookup(
             if assessed:
                 if key.result_state != "found":
                     return miss("result_" + key.result_state)
-                newest = await s.get(ArchiveSnapshot, key.result_snapshot_id)
+                newest = await s.get(ArchiveSnapshot, key.result_snapshot_id, options=archive_bodies.read_options("lookup"))
                 if newest is not None and newest.key_id != key.id:
                     return miss("snapshot_unavailable")
             if newest is None or not (200 <= newest.status_code < 300):
@@ -944,13 +1013,14 @@ async def lookup(
                 diagnostics.update(cache_age_s=age_s, cache_window_s=window)
             if age_s < 0 or age_s > window:
                 return miss("stale")
-            body = await _snapshot_body(s, newest)
-            if body is None:
-                return miss("body_missing")
-            if result_aware:
-                result = classify(endpoint_id, newest.status_code, body)
-                if result.state != "found":
-                    return miss("result_" + result.state)
+            pointer = await archive_bodies.pointer(s, newest, "lookup")
+        body = await archive_bodies.read(pointer, "lookup", diagnostics=diagnostics)
+        if body is None:
+            return miss("body_missing")
+        if result_aware:
+            result = classify(endpoint_id, newest.status_code, body)
+            if result.state != "found":
+                return miss("result_" + result.state)
         if diagnostics is not None:
             diagnostics["cache_outcome"] = "hit"
         _touch(kh)
@@ -996,80 +1066,12 @@ async def _touch_write(key_hash: str) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# The learner (PR 5) — AIMD timers and noise detection, applied inside the recorder.
+# The learner (PR 5): AIMD timers on admitted results, applied inside the recorder.
 
 TTL_FLOOR_S = 60
 TTL_CEILING_S = 30 * 86400
 TTL_NEVER = -1          # the key marked itself never-cache: changes on every fetch
 _NEVER_AFTER = 4        # consecutive changed refetches (no stables) before self-marking
-_NOISE_MAX_LEAF_SHARE = 0.4   # a repeated identical diff-set is noise only if it is a MINOR
-_NOISE_MIN_LEAVES = 5         # corner of a body with at least this many leaves — a tiny body
-#                               whose one value moves (a price) must stay "changed", never noise.
-
-
-def _leaf_paths(node: Any, prefix: str = "$", *, depth: int = 0, out: list | None = None) -> list[str]:
-    """Dotted leaf paths of a JSON tree; list items collapse to `[]` so per-row ids do not
-    explode one logical path into hundreds. Bounded by depth and count — comparison machinery
-    must never be the expensive part of a recording."""
-    if out is None:
-        out = []
-    if len(out) >= 400 or depth > 6:
-        return out
-    if isinstance(node, dict):
-        for k, v in node.items():
-            _leaf_paths(v, f"{prefix}.{k}", depth=depth + 1, out=out)
-    elif isinstance(node, list):
-        for v in node[:50]:
-            _leaf_paths(v, f"{prefix}[]", depth=depth + 1, out=out)
-    else:
-        out.append(prefix)
-    return out
-
-
-def _changed_paths(old: Any, new: Any, prefix: str = "$", *, depth: int = 0,
-                   out: set | None = None) -> set[str]:
-    """Leaf paths whose values differ between two JSON trees (same collapse rules as above)."""
-    if out is None:
-        out = set()
-    if len(out) >= 400 or depth > 6:
-        return out
-    if isinstance(old, dict) and isinstance(new, dict):
-        for k in set(old) | set(new):
-            _changed_paths(old.get(k), new.get(k), f"{prefix}.{k}", depth=depth + 1, out=out)
-    elif isinstance(old, list) and isinstance(new, list):
-        for a, b in zip(old[:50], new[:50]):
-            _changed_paths(a, b, f"{prefix}[]", depth=depth + 1, out=out)
-        if len(old) != len(new):
-            out.add(f"{prefix}[]")
-    elif old != new:
-        out.add(prefix)
-    return out
-
-
-def _noise_only(old_body: bytes | None, new_body: bytes, key) -> bool:
-    """True when this refetch's difference is the SAME small diff-set as last time — learned
-    request ids and server timestamps, not data. Two guards keep a real signal out of the noise
-    bin: the identical set must repeat (first occurrence always counts as changed, and gets
-    remembered as the candidate), and it must be a minor share (< 40%) of a body with at least
-    5 leaves — a tiny body whose one value moves every fetch is a PRICE, not noise."""
-    if not old_body:
-        return False
-    try:
-        old_json, new_json = json.loads(old_body), json.loads(new_body)
-    except (ValueError, UnicodeDecodeError):
-        return False
-    changed = _changed_paths(old_json, new_json)
-    if not changed:
-        return False
-    known = set(key.volatile_paths or [])
-    leaves = len(_leaf_paths(new_json))
-    is_noise = (changed <= known
-                and leaves >= _NOISE_MIN_LEAVES
-                and len(changed) / leaves < _NOISE_MAX_LEAF_SHARE)
-    # Remember this diff-set as the next candidate either way (bounded), so the SAME noise
-    # repeating is recognized from its second occurrence on.
-    key.volatile_paths = sorted(changed)[:50]
-    return is_noise
 
 
 def learn(key, *, stable: bool, entry: dict[str, Any] | None) -> None:
