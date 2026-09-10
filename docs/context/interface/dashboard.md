@@ -1008,6 +1008,17 @@ amount is chosen at the buttons, and the first preset ($5) is below the $10 mini
 own would let the most-clicked button quietly forfeit the reward. Null offer = the page renders
 exactly as it did before this shipped.
 
+## Sumble catalog presentation
+
+Company data contains 25 Sumble operations; People & contact data contains people search and
+four contact-list operations. Account operations and helpers use the existing management expander.
+Endpoint details use credential-registry `auth_kind` and the configured `metered` flag to distinguish
+platform + BYOK, BYOK only and OAuth connections. Routed tools retain their own label. Public
+catalog responses include the same provider facts for signed-out visitors. No free-call claim is
+inferred from platform eligibility alone. Provider pills keep the endpoint that supplied the price. `costLabel` and `costTitle` consume `cost_view` display metadata
+for selected-attribute pricing, rounded lookup blocks and per-technology charges. Billing notes
+remain available in expanded details.
+
 ## Arena attribution at the dashboard boundary
 
 The credit link from Arena opens `/app?from=enrich-arena#billing`. `sitetrack.js` snapshots that

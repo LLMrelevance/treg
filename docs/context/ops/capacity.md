@@ -43,6 +43,8 @@ related:
 
 # Provider capacity
 
+`collectors._sumble` reads `credits_remaining` from a free technology-search miss. Its monthly allowance and optional vendor top-ups remain separate from per-call pricing; no renewal date or auto-funding status is assumed. See [Sumble](../architecture/sumble.md).
+
 **Problem.** Tier 4 serves ~2,850 catalog endpoints on treg's own vendor keys. When one of *our*
 accounts runs dry, every caller on that endpoint inherits a 402 that isn't theirs to fix — 4,604
 such errors in the 30 days to 2026-08-26, almost all on the enrichment (money) workload. The plan

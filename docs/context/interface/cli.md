@@ -526,3 +526,10 @@ alias. Self-hosted URLs send nothing unless `TREG_CLI_POSTHOG_KEY` is set; the h
 all analytics and ID creation. SDK import and synchronous capture run in a daemon thread with
 no retries, a 0.2-second request timeout and a 1-second caller wait budget. Slow delivery may
 be dropped at exit; telemetry failures are silent and preserve command output and exit status.
+
+## Catalog price display
+
+`_cost_label` and `_cost_usd` consume the same computed display USD/unit/suffix fields as the web
+pages. Grouped prices show the full block amount, and variable prices show a plus sign. The source
+is provider-neutral `cost.display` catalog metadata. Missing metadata retains the existing format.
+CLI call billing still uses the shared server call path.
