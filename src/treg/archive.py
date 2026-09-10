@@ -795,7 +795,7 @@ async def prune_once() -> int:
             # a surviving version may reference a body on an older row (dedup), and stripping the
             # carrier would silently orphan it.
             candidates = [v for v in versions[budget:]
-                          if v.id != key.result_snapshot_id and v.body_storage not in ("both", "r2")
+                          if v.id != key.result_snapshot_id
                           and v.body is not None
                           and (key.ttl_s == TTL_NEVER or v.fetched_at <= min_age)]
             surviving = [v for v in versions if v not in candidates]
@@ -807,8 +807,12 @@ async def prune_once() -> int:
                 if v.id in protected:
                     continue
                 v.body, v.enc = None, None
-                freed_n += 1
-                freed_bytes += v.size_bytes
+                if v.body_storage == "both":
+                    v.body_storage = "r2"
+                else:
+                    v.body_storage = None
+                    freed_n += 1
+                    freed_bytes += v.size_bytes
                 s.add(v)
                 stripped += 1
                 if stripped >= batch:

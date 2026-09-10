@@ -188,7 +188,7 @@ async def test_terminal_retries_synchronously_bypassing_full_queue(clients, r2, 
     assert not archive_bodies._pending
 
 
-async def test_pruner_preserves_r2_rows_and_db_carriers(clients, r2, monkeypatch):
+async def test_pruner_strips_both_db_bytes_but_preserves_r2(clients, r2, monkeypatch):
     from datetime import timedelta
     for i in range(4):
         monkeypatch.setattr(service, 'relay', _fake_relay(200, RAW + b' ' * i))
@@ -203,8 +203,12 @@ async def test_pruner_preserves_r2_rows_and_db_carriers(clients, r2, monkeypatch
         key.ttl_s = archive.TTL_NEVER
         s.add(key)
         await s.commit()
-    assert await archive.prune_once() == 0
-    assert all(row.body is not None for row in await snapshots())
+    assert await archive.prune_once() == 3
+    rows = await snapshots()
+    assert all(row.body is None and row.body_storage == "r2" for row in rows[:-1])
+    assert rows[-1].body is not None and rows[-1].body_storage == "both"
+    for row in rows:
+        assert await r2.get(row.content_hash) is not None
 
 
 @pytest.mark.parametrize('setting', ['archive_body_write', 'archive_body_read_lookup',
@@ -589,3 +593,30 @@ async def test_terminal_reads_are_bounded_and_do_not_load_db_body(clients, r2, m
     monkeypatch.setattr(r2, 'get', get)
     assert len(await archive.load_terminal_responses([(str(i), EP) for i in range(17)])) == 17
     assert peak == 8
+
+
+async def test_r2_legacy_admission_restarts_unknown_baseline(clients, r2, monkeypatch):
+    from tests.test_cache_result_admission import FOUND
+    monkeypatch.setattr(get_settings(), 'archive_body_write', 'r2')
+    async def store():
+        await archive._store(method='GET', endpoint_id='hunter.companies.emails', provider='hunter',
+                             url='https://api.hunter.io/v2/domain-search?domain=example.com',
+                             caller_body=b'', headers={}, status_code=200,
+                             media_type='application/json', body=FOUND)
+    await store()
+    async with db.session_maker() as session:
+        key = (await session.execute(select(ArchiveKey))).scalar_one()
+        key.result_state = key.result_snapshot_id = key.result_observed_version = None
+        session.add(key)
+        await session.commit()
+    async def no_get(key):
+        pytest.fail('lazy write classification fetched R2 body')
+    monkeypatch.setattr(r2, 'get', no_get)
+    await store()
+    async with db.session_maker() as session:
+        key = (await session.execute(select(ArchiveKey))).scalar_one()
+        assert key.result_state == 'found' and key.stable_seen == 0
+    await store()
+    async with db.session_maker() as session:
+        key = (await session.execute(select(ArchiveKey))).scalar_one()
+        assert key.result_state == 'found' and key.stable_seen == 1

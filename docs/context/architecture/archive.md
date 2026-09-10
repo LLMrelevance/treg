@@ -117,7 +117,8 @@ only tries R2 for a published `both`/`r2` location; missing objects, timeouts, e
 mismatches fall back to DB. Lookup selects `result_snapshot_id` under the existing result-state
 and observed-version guards, then classifies the resolved body after closing the session. Unknown
 results retain the decisive snapshot; empty results invalidate serving without deleting history.
-Pruning protects both that decisive snapshot and all R2-backed rows and their DB carriers. `db` does not contact R2, including for R2-only rows. The admin body
+Pruning protects the decisive snapshot and DB carriers of surviving versions. Eligible `both`
+rows lose DB bytes and become `r2`; their objects remain untouched. `db` does not contact R2, including for R2-only rows. The admin body
 viewer remains a DB-only diagnostic in this first delivery. Read switches should be enabled
 before any future R2-only write rollout. No serving allowlist, cohort or production setting is
 changed here.
@@ -493,9 +494,9 @@ age no defense; then old (`archive_prune_min_age_days`, 7) versions beyond the n
 exempt — their history is the future data product. Runs from the lifespan beside the refresh
 worker whenever the archive records, `archive_prune_batch` (500) bodies per pass per
 `archive_prune_interval_s` (3600); batch 0 disables. Rollup counters (bodies_kept, kept_bytes)
-move atomically with each strip. Rows marked `both` or `r2` are excluded from stripping, and the
-DB carriers of surviving double-write rows remain protected. No R2 delete or prune operation
-exists. This intentionally preserves rollback copies during the double-write phase.
+decrease atomically only when stripping the last retained copy. Stripped `both` rows become
+`r2`, so their logical retained counts do not change. DB carriers of surviving versions stay
+protected. No R2 delete or prune operation exists.
 
 ## Recorder throttle (2026-09-03, memory-bounded 2026-09-07)
 
@@ -512,9 +513,11 @@ burst test proves all 12 concurrent recordings land while peak DB concurrency st
 **Memory bound (2026-09-07 OOM fix).** Each pending task holds its `body` bytes in a closure — up to
 `_MAX_PENDING` (512) tasks × `archive_max_body_bytes` (2 MB) = 1 GB worst case. After #363 reduced
 concurrent writes from 4 to 2, backlog built faster under heavy traffic and the 2026-09-07T00:43:06Z
-OOM killed production at 4 GB. `_MAX_PENDING_BYTES` (256 MB) now caps total body bytes held by
+OOM killed production at 4 GB. `_MAX_PENDING_BYTES` (256 MiB) caps body bytes in DB
 pending work: `record()` sheds when EITHER the task count OR the bytes threshold is exceeded. The
-done callback releases bytes when a task completes, keeping the budget accurate.
+done callback releases bytes when a task completes, keeping the budget accurate. The independent
+R2 queue adds 128 MiB by default, for a combined 384 MiB body budget before SDK, compression
+and terminal-evidence overhead.
 
 The semaphore is process-local, while production runs multiple processes. An exact in-process key
 lock is acquired before the semaphore, so duplicate recordings queue without consuming both
@@ -542,3 +545,15 @@ script has no bucket argument and accepts only `treg-archive-dev`.
 ObjectStore owns the sole download hash validation; the memory fake follows the same contract.
 `put` accepts the internally computed content hash to avoid rehashing immutable bytes. Read and
 write errors use the same typed classification; SDK text is never parsed or logged.
+
+Pruning still strips eligible DB bytes during double writing. A stripped `both` row becomes
+`r2`; its content hash and object remain intact, and logical retained-body statistics do not
+decrease. Existing deduplicated DB carriers and result baselines retain their protections.
+The admin DB body viewer identifies object-stored bodies without fetching them. Retired
+`volatile_paths` remains in the schema but is no longer displayed.
+
+Known result-admission upgrade limit: when a historical R2-only row has no current
+`result_state`/observed-version metadata, the write path does not GET its old body to classify
+it. The baseline becomes unknown; the next decisive result establishes a new baseline without
+a stability comparison. Subsequent observations learn normally. This conservative loss of one
+learning interval avoids object I/O inside a write session or an extra speculative GET per write.

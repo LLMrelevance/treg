@@ -1373,8 +1373,8 @@ class ArchiveKey(SQLModel, table=True):
     Timer state is AIMD (grow slowly on stability, shrink fast on change): `ttl_s` is the current
     per-key timer, adjusted by the learner on every refetch outcome. `change_seen` / `stable_seen`
     count eligible observations. Only found-to-found comparisons can count stable; explicit
-    appearance/disappearance counts changed. `volatile_paths` belongs to the opt-in legacy noise
-    comparison; strict mode compares raw hashes. Neither mode changes stored bytes.
+    appearance/disappearance counts changed. Comparisons use raw hashes without changing stored
+    bytes. `volatile_paths` is a retired column retained for schema compatibility.
     """
 
     __table_args__ = (UniqueConstraint("key_hash", name="uq_archive_key_hash"),)
