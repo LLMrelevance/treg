@@ -59,7 +59,10 @@ request quotes. It reads the same cached database snapshot as Arena. The account
 is a button opening `/app?from=enrich-arena#billing` through `topUp`, preserving the selected team and Arena draft.
 The shared header also links to GitHub ("Open source"), Discord and X using the same icons and
 destinations as the people-search landing page. The links remain visible across Arena, Leaderboard
-and Benchmark, wrapping with account controls on narrow screens.
+and Benchmark. Account controls stay on one line above 600px; the centered page pill moves
+to its own row at 1800px and below so signed-in team, balance and sign-out controls do not wrap.
+On mobile, explicit grid rows place community links beside the brand and balance, with team
+and sign-out controls underneath. Community labels collapse to icons where space is limited.
 Its visual system follows the treg redesign reference (`https://treg-design.vercel.app/#start`):
 Geist Pixel headings, Google Sans Flex body text, DM Mono for technical values, a cool gray canvas,
 white rounded cards with fine borders, black actions and restrained teal status accents. A static
