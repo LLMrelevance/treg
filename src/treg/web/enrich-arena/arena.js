@@ -154,7 +154,7 @@
     components:{ArenaTaskTabs,TregTryItOut:TregAgentSetup.TryItOut,TregAgentPicker:TregAgentSetup.AgentPicker,TregSetupInstructions:TregAgentSetup.SetupInstructions,ArenaFighters,ArenaResultTable:{directives:{stickyHeader:StickyHeader},inject:['arena'],props:{rows:{type:Array,required:true},entryView:Boolean},methods:{resultLabel(r){return this.arena.providerName(r.provider)+(this.entryView?' · '+this.arena.entryLabel(this.arena.runEntries[r.entry_index||0]):'');}},template:'#arena-result-table-template'}},
     provide(){return {arena:this};},
     data:()=>({benchmark:(location.pathname||'').endsWith('/people-search-bench'),benchCategories:[],benchCategory:'',benchLoading:false,benchError:'',leaderboard:(location.pathname||'').endsWith('/leaderboard'),setupStep:1,setupTeamName:'',setupExampleCopied:'',setupAgentId:'claude-code',setupToken:null,setupShowToken:false,setupCopied:false,setupError:'',setupLoading:false,setupSequence:0,tasks:[],taskId:'people.email.find',variant:0,inputs:{},extraInputs:[],showAllEntries:false,selectedEntry:null,selectedVendor:'',resultFilter:'all',mode:'waterfall',autoVerify:true,verificationHintHidden:false,verificationQuotes:{},verificationPending:{},
-      user:null,teams:[],team:'',balance:null,meta:{},busy:false,error:'',run:null,quote:null,history:[],customServices:false,services:[],
+      user:null,teams:[],team:'',balance:null,meta:{},intercomStarted:false,intercomIdentity:'',busy:false,error:'',run:null,quote:null,history:[],customServices:false,services:[],
       insights:null,insightsState:'idle',insightsTimer:null,statsView:'rate',chartFocus:null,metricTooltip:null,requestDone:false,requestBusy:false,vendorPromptCopied:false,vendorPromptError:'',requestError:'',requestQuery:'',requestForm:{capability:'',note:'',contact:''},
       manualQuotes:{},manualPending:{},reporting:'',reportDrafts:{},pricing:false,quoteTimer:null,quoteSequence:0,pricedKey:'',expandedResults:[],email:'',code:'',emailStep:'email',devCode:'',authBusy:false,authError:'',
       newTeamName:'',pendingSubmit:false,pollTimer:null,pollFailures:0,scrollOnComplete:'',runTeam:'',booted:false,draftRestored:false,historySequence:0,historyLoading:false,historyHasMore:false,linkedRunPending:false,urlPopHandler:null}),
@@ -320,7 +320,7 @@
         if(!this.user){await this.openLogin(false);return true;}
         const team=params.get('team');
         if(team&&!this.teams.some(t=>t.slug===team)){this.error='This saved run is not available to your account or team.';return true;}
-        if(team)this.team=team;
+        if(team){this.team=team;this.syncIntercom();}
         if(!this.team){this.error='This saved run is not available to your account or team.';return true;}
         await this.loadHistory(id,{replace:true});this.linkedRunPending=false;
         await this.loadBalance();await this.refreshHistory();return true;
@@ -495,17 +495,42 @@
       },
       track(event,props={}){window.TregTracking?.capture(event,props);},
       identify(){window.TregTracking?.identify(this.user?.email||'',this.team);},
+      shutdownIntercom(){
+        try{if(this.intercomStarted)window.Intercom?.('shutdown');}catch{}
+        this.intercomStarted=false;this.intercomIdentity='';delete window.intercomSettings;
+      },
+      syncIntercom(){
+        const app=this.meta.intercom_app_id,user=this.user;
+        if(!app||!user){this.shutdownIntercom();return;}
+        if(this.intercomStarted&&this.intercomIdentity!==user.email)this.shutdownIntercom();
+        const payload={app_id:app};
+        // Match /app: never identify an email without the server's signed hash.
+        if(user.email&&user.intercom_user_hash){
+          payload.email=user.email;payload.user_hash=user.intercom_user_hash;
+          if(this.team)payload.company={id:this.team,name:this.team};
+        }
+        try{
+          if(!window.Intercom){
+            const intercom=function(){intercom.q.push(arguments);};intercom.q=[];window.Intercom=intercom;
+            const script=document.createElement('script');script.async=true;script.src='https://widget.intercom.io/widget/'+encodeURIComponent(app);
+            document.head.appendChild(script);
+          }
+          window.intercomSettings=payload;
+          window.Intercom(this.intercomStarted?'update':'boot',payload);
+          this.intercomStarted=true;this.intercomIdentity=user.email;
+        }catch{} // Support chat must not block Arena when the widget is unavailable.
+      },
       async loadIdentity(){
-        try{this.user=await this.api('/auth/me',{},'');}catch(e){if(e.status!==401)throw e;this.user=null;this.teams=[];this.team='';this.balance=null;this.history=[];this.historySequence++;this.identify();return;}
+        try{this.user=await this.api('/auth/me',{},'');}catch(e){if(e.status!==401)throw e;this.user=null;this.teams=[];this.team='';this.balance=null;this.history=[];this.historySequence++;this.identify();this.syncIntercom();return;}
         this.identify();
         const orgs=await this.api('/orgs');this.teams=orgs.filter(t=>!t.demo);
         let saved='';try{saved=localStorage.getItem('treg.arena.team')||'';}catch{}
         this.team=this.teams.find(t=>t.slug===this.team)?.slug||this.teams.find(t=>t.slug===saved)?.slug||this.teams[0]?.slug||'';
-        this.identify();
+        this.identify();this.syncIntercom();
         if(this.team){await this.loadBalance();if(!this.leaderboard&&!this.benchmark)await this.refreshHistory();}
       },
       async loadBalance(){const t=this.teams.find(t=>t.slug===this.team);if(!t)return;const b=await this.api('/orgs/'+t.org_id+'/balance?limit=1');this.balance=b.balance_micro;},
-      async changeTeam(){this.quote=null;this.run=null;this.history=[];this.historySequence++;clearTimeout(this.pollTimer);remove(ACTIVE);this.linkedRunPending=false;this.syncUrl();try{localStorage.setItem('treg.arena.team',this.team);this.identify();await this.loadBalance();await this.refreshHistory();}catch(e){this.error=e.message;}},
+      async changeTeam(){this.quote=null;this.run=null;this.history=[];this.historySequence++;clearTimeout(this.pollTimer);remove(ACTIVE);this.linkedRunPending=false;this.syncUrl();this.syncIntercom();try{localStorage.setItem('treg.arena.team',this.team);this.identify();await this.loadBalance();await this.refreshHistory();}catch(e){this.error=e.message;}},
       setupIcon(icon){return TregAgentSetup.iconUrl(icon);},
       async openSetup(){
         this.setupStep=this.user&&!this.team?0:1;this.setupTeamName='';this.setupToken=null;this.setupShowToken=false;this.setupCopied=false;this.setupError='';this.setupLoading=false;this.setupSequence++;
@@ -737,7 +762,7 @@
       async newQuery(){this.manualQuotes={};this.reporting='';this.expandedResults=[];this.run=null;this.quote=null;this.linkedRunPending=false;clearTimeout(this.pollTimer);remove(ACTIVE);this.syncUrl();this.scheduleQuote();await this.$nextTick();document.querySelector('#composer')?.scrollIntoView({behavior:'smooth'});},
       tryWaterfall(){const previous=this.run;this.taskId=previous.capability;this.inputs={...previous.identity};this.extraInputs=(previous.identities||[]).slice(1).map(r=>({...r}));this.variant=Math.max(0,this.currentTask.variants.findIndex(v=>v.every(k=>k in previous.identity)));this.mode='waterfall';this.customServices=false;this.services=[];this.newQuery();},
       exportResult(){const b=new Blob([JSON.stringify(this.run,null,2)],{type:'application/json'});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='enrich-arena-'+this.run.id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},
-      async logout(){try{await this.api('/auth/logout',{method:'POST'});this.user=null;this.teams=[];this.team='';this.balance=null;this.run=null;this.quote=null;this.history=[];this.historySequence++;remove(ACTIVE);remove(DRAFT);}catch(e){this.error=e.message;}}
+      async logout(){try{await this.api('/auth/logout',{method:'POST'});this.shutdownIntercom();this.user=null;this.teams=[];this.team='';this.balance=null;this.run=null;this.quote=null;this.history=[];this.historySequence++;remove(ACTIVE);remove(DRAFT);}catch(e){this.error=e.message;}}
     },
     async mounted(){
       this.track('arena_page_viewed');

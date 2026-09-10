@@ -60,9 +60,14 @@ is a button opening `/app?from=enrich-arena#billing` through `topUp`, preserving
 The shared header also links to GitHub ("Open source"), Discord and X using the same icons and
 destinations as the people-search landing page. The links remain visible across Arena, Leaderboard
 and Benchmark. Account controls stay on one line above 600px; the centered page pill moves
-to its own row at 1800px and below so signed-in team, balance and sign-out controls do not wrap.
-On mobile, explicit grid rows place community links beside the brand and balance, with team
-and sign-out controls underneath. Community labels collapse to icons where space is limited.
+onto its own row at 1800px and below. On mobile, community icons sit beside the brand and
+balance; team selection and Sign out are in the account dropdown beside the balance.
+Support chat is enabled on these shared pages only after `/auth/me` establishes a signed-in
+user and `/meta` supplies `intercom_app_id`. `syncIntercom` boots once, updates the active team
+on team switches or saved-run restoration, and follows `/app` identity verification: email and
+company are sent only with `intercom_user_hash`; without the hash, chat remains anonymous.
+Logout, an expired session, or an account change shuts down the previous Intercom session.
+Guests and deployments without an Intercom app ID load no widget; widget failures do not block Arena.
 Its visual system follows the treg redesign reference (`https://treg-design.vercel.app/#start`):
 Geist Pixel headings, Google Sans Flex body text, DM Mono for technical values, a cool gray canvas,
 white rounded cards with fine borders, black actions and restrained teal status accents. A static

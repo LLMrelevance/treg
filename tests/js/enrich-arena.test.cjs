@@ -19,6 +19,37 @@ function setup(location={}){
   const price=(extra={})=>{app.quote=quote(extra);app.pricedKey=app.quoteKey;};
   return {app,quote,price,stored,destinations,components:options.components,directives:options.directives,runtime,mounted:options.mounted};
 }
+test('Intercom loads only for authenticated users on opted-in deployments and reuses its loader',()=>{
+ const {app,runtime}=setup(),scripts=[];
+ runtime.document.createElement=()=>({});runtime.document.head={appendChild:s=>scripts.push(s)};
+ app.meta={intercom_app_id:'test-app'};app.user=null;app.syncIntercom();assert.equal(scripts.length,0);
+ app.user={email:'test@example.com',intercom_user_hash:'signed-test-hash'};app.meta={};app.syncIntercom();assert.equal(scripts.length,0);
+ app.meta={intercom_app_id:'test-app'};app.syncIntercom();app.syncIntercom();
+ assert.equal(scripts.length,1);assert.equal(scripts[0].src,'https://widget.intercom.io/widget/test-app');
+ const calls=runtime.window.Intercom.q;
+ assert.equal(calls[0][0],'boot');assert.equal(calls[1][0],'update');assert.equal(calls[0][1].user_hash,'signed-test-hash');
+ assert.equal(calls[0][1].email,'test@example.com');assert.equal(calls[0][1].company.id,'test-team');
+});
+test('Intercom does not send unhashed identity and clears conversations between accounts',async()=>{
+ const {app,runtime}=setup(),calls=[];runtime.window.Intercom=(...args)=>calls.push(args);
+ app.meta={intercom_app_id:'test-app'};app.user={email:'first@example.com'};app.syncIntercom();
+ assert.deepEqual(Object.keys(calls[0][1]),['app_id']);
+ app.user={email:'second@example.com',intercom_user_hash:'second-hash'};app.syncIntercom();
+ assert.deepEqual(calls.map(c=>c[0]),['boot','shutdown','boot']);
+ app.api=async()=>({});await app.logout();assert.equal(calls.at(-1)[0],'shutdown');assert.equal(runtime.window.intercomSettings,undefined);
+ app.syncIntercom();assert.equal(calls.length,4);
+ app.user={email:'first@example.com',intercom_user_hash:'first-hash'};app.syncIntercom();assert.equal(calls.at(-1)[0],'boot');
+ app.api=async()=>{throw {status:401};};await app.loadIdentity();assert.equal(calls.at(-1)[0],'shutdown');assert.equal(app.intercomStarted,false);
+});
+test('Identity loading boots Intercom with the selected team, and team changes update it',async()=>{
+ const {app,runtime,stored}=setup(),calls=[];runtime.window.Intercom=(...args)=>calls.push(args);
+ app.meta={intercom_app_id:'test-app'};stored.set('treg.arena.team','second-team');
+ app.api=async path=>{if(path==='/auth/me')return {email:'test@example.com',intercom_user_hash:'signed-test-hash'};if(path==='/orgs')return [{slug:'first-team'},{slug:'second-team'}];throw Error(path);};
+ app.loadBalance=async()=>{};app.refreshHistory=async()=>{};
+ await app.loadIdentity();assert.equal(calls.length,1);assert.equal(calls[0][0],'boot');assert.equal(calls[0][1].company.id,'second-team');
+ app.team='first-team';await app.changeTeam();assert.equal(calls.at(-1)[0],'update');assert.equal(calls.at(-1)[1].company.id,'first-team');
+ runtime.window.Intercom=()=>{throw Error('Widget blocked');};await app.changeTeam();assert.equal(app.error,'');
+});
 test('Page-scrolling headers stop at table bounds, offset nested headers, and clean up listeners',()=>{
  const {directives,runtime}=setup(),listeners=new Map();let pending,offset,disconnected=false;
  runtime.requestAnimationFrame=fn=>{pending=fn;return 1;};runtime.cancelAnimationFrame=()=>{pending=null;};
