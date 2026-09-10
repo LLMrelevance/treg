@@ -1,13 +1,13 @@
 """Database-backed Arena observations and aggregate cursor.
 
-Revision ID: 0027
-Revises: 0026
+Revision ID: 0028
+Revises: 0027
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0027"
-down_revision = "0026"
+revision = "0028"
+down_revision = "0027"
 branch_labels = None
 depends_on = None
 

@@ -6,7 +6,7 @@ sources:
   - src/treg/application/arena.py
   - src/treg/routers/arena.py
   - src/treg/models.py
-  - src/treg/alembic/versions/0026_enrich_arena.py
+  - src/treg/alembic/versions/0027_enrich_arena.py
   - src/treg/domain/governance/teams.py
   - src/treg/routers/auth.py
   - src/treg/bootstrap.py
@@ -18,12 +18,12 @@ sources:
   - src/treg/web/enrich-arena/arena.css
   - src/treg/web/agent-setup.js
   - src/treg/application/arena_verification_insights.py
-  - src/treg/alembic/versions/0028_arena_verification_snapshot.py
+  - src/treg/alembic/versions/0029_arena_verification_snapshot.py
   - scripts/import_arena_verification.py
   - tests/test_arena_verification_insights.py
   - src/treg/application/arena_insights.py
   - src/treg/domain/arena_insights.py
-  - src/treg/alembic/versions/0027_arena_insights.py
+  - src/treg/alembic/versions/0028_arena_insights.py
   - tests/test_arena_insights.py
   - src/treg/web/logos/apollo.svg
   - src/treg/web/logos/branddev.svg
@@ -243,7 +243,7 @@ window remains unresolved until a version-triggered rebuild; lossy audit cannot 
 The source window is 30 days, with old facts pruned. Rule, adapter or contract changes produce a new
 version/cursor and rebuild from available evidence. PostgreSQL computes medians and unique-request
 counts in SQL; local SQLite uses an exact Python median. The collector owns writes to the two new
-tables, created by Alembic revision `0027`. Run `python -m treg upgrade` before restarting the app.
+tables, created by Alembic revision `0028`. Run `python -m treg upgrade` before restarting the app.
 A refresh failure retains the last aggregate and its original timestamp; partial collection is never
 presented as a complete window. The API does not expose identities, hashes, organization IDs or bodies.
 
@@ -514,7 +514,7 @@ The page opts out of PostHog autocapture and session recording through `sitetrac
 guard. All Arena routes belong to the control role (and default all role), including interactive
 paid execution; the dataplane's `/call/` contract is unchanged.
 
-Alembic revision `0026` creates `arenarun` and `arenaevaluation`. Run `python -m treg upgrade`
+Alembic revision `0027` creates `arenarun` and `arenaevaluation`. Run `python -m treg upgrade`
 before serving the new release. Tests cover auth/private access, aggregate admission, direct billing,
 own keys, cancellation, duplicate start/vote, attributed progress/results and pre-charge name validation, waterfall progression and OAuth return.
 
@@ -608,7 +608,7 @@ Verification cost annotations sit below the total in the Cost column, with a wra
 a separate amount line. Cost/Time column sizing keeps the annotation inside its own cell,
 including nested result tables and the existing mobile card layout.
 
-Arena migrations are ordered as 0026 (runs and evaluations), 0027 (rolling insights), and 0028
+Arena migrations are ordered after main’s 0026 (call reviews): 0027 (runs and evaluations), 0028 (rolling insights), and 0029
 (published verification aggregates). Public snapshot reads use the API pool; the incremental worker
 is listed explicitly in the background pool budget. Email verification adapters join the existing
 task through catalog-driven discovery.
@@ -653,7 +653,7 @@ including the nested footer interpolation that previously prevented all Arena vi
 ## Published verification pilot
 
 `application.arena_verification_insights` validates and publishes aggregate-only pilot data in
-`ArenaVerificationSnapshot` (revision `0028`). `GET /arena/insights` attaches the latest publication
+`ArenaVerificationSnapshot` (revision `0029`). `GET /arena/insights` attaches the latest publication
 as `verification` alongside rolling call stats. Both reads are bounded snapshot queries; rendering
 the table or Leaderboard never scans evidence or calls a verifier. The rolling worker cannot overwrite
 a publication. Reimporting an identical run is a no-op; different contents under the same run ID fail.

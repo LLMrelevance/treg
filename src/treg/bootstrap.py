@@ -89,6 +89,8 @@ _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
     ('/docs', ('GET',), 'docs_page'),
     ('/tool-requests', ('POST',), 'create_tool_request'),
     ('/feedback', ('POST',), 'submit_feedback'),
+    ('/reviews', ('POST',), 'submit_review'),
+    ('/admin/reviews', ('GET',), 'admin_reviews'),
     ('/feedback/{feedback_id}', ('GET',), 'get_feedback'),
     ('/admin/feedback', ('GET',), 'admin_feedback'),
     ('/auth/github', ('GET',), 'auth_github'),
@@ -300,9 +302,9 @@ _DATAPLANE_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
 })
 
 ROLE_BACKGROUND_TASKS: dict[AppRole, tuple[str, ...]] = {
-    "all": ("treg.adsconv.worker",),
+    "all": ("treg.adsconv.worker", "treg.application.arena_insights.worker"),
     "dataplane": (),
-    "control": ("treg.adsconv.worker",),
+    "control": ("treg.adsconv.worker", "treg.application.arena_insights.worker"),
 }
 ROLE_STARTUP_CHECKS: dict[AppRole, tuple[str, ...]] = {
     "all": (
@@ -529,20 +531,17 @@ def _lifespan(role: AppRole):
                     yield
         finally:
             try:
-                if gauge_task is not None:
-                    gauge_task.cancel()
-                if ads_task is not None:
-                    ads_task.cancel()
-                if archive_task is not None:
-                    archive_task.cancel()
-                if prune_task is not None:
-                    prune_task.cancel()
+                workers = [task for task in (
+                    gauge_task, ads_task, archive_task, prune_task, insights_task,
+                ) if task is not None]
+                for task in workers:
+                    task.cancel()
+                # Wait for session rollback/close before the event loop or shared client closes.
+                # A second cancellation during asyncio.run() teardown can interrupt that cleanup.
+                await asyncio.gather(*workers, return_exceptions=True)
                 if mcp_reader_bound:
                     _mcp.clear_endpoint_observation_reader(endpoint_observations)
                 routed_call.clear_endpoint_observation_reader(endpoint_observations)
-                if insights_task is not None:
-                    insights_task.cancel()
-                    await asyncio.gather(insights_task, return_exceptions=True)
                 await arena.shutdown()
                 await endpoint_observations.aclose()
                 # analytics LAST: it is the sink the other two report their losses into, and a

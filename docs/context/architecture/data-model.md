@@ -21,9 +21,9 @@ sources:
   - src/treg/alembic/versions/0022_org_spent_today_counter.py
   - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
   - src/treg/alembic/versions/0024_membership_calls_today_counter.py
-  - src/treg/alembic/versions/0026_enrich_arena.py
-  - src/treg/alembic/versions/0027_arena_insights.py
-  - src/treg/alembic/versions/0028_arena_verification_snapshot.py
+  - src/treg/alembic/versions/0027_enrich_arena.py
+  - src/treg/alembic/versions/0028_arena_insights.py
+  - src/treg/alembic/versions/0029_arena_verification_snapshot.py
 
   - src/treg/alembic/versions/0011_callrecord_archive_link.py
   - src/treg/alembic/versions/0015_idempotentcall_membership_cascade.py
@@ -49,7 +49,7 @@ related:
 
 # Data model
 
-Revision `0025` adds `ArenaRun` and `ArenaEvaluation` for [Enrich Arena](../interface/enrich-arena.md).
+Revision `0027` adds `ArenaRun` and `ArenaEvaluation` for [Enrich Arena](../interface/enrich-arena.md).
 Runs freeze encrypted inputs, adapter requests, outcomes and receipts; evaluations record an immutable
 preference with the exposed candidate set and feedback context (attributed since version 2). Both are creator/team scoped and expire after
 30 days. The run is claimed with a conditional update; a unique run-id evaluation constraint and
@@ -300,6 +300,10 @@ uses this metadata, never the encrypted token's shape.
   treg's direct price. Written inside the overflow child's settle transaction (and by the shadow probe);
   the $20/day budget reads it. Alembic `0007`. Not a balance.
 
+`CallReview` (revision 0026) stores one private usefulness rating per unique call reference.
+It has endpoint/time and tenant indexes and is deleted with its team via `ORG_SCOPED_MODELS`.
+See [feedback](feedback.md) for attribution, submission, sampling and collection-only scope.
+
 ## Bindings (the multi-credential shape)
 `Tool.bindings` is a JSON list; each entry is
 `{secret_id, injector, location, name, format, secret_field}` - one credential injection. A request
@@ -517,13 +521,13 @@ outside our own Stripe account) and lives here alone, never on `Org`, which keep
 
 ## Arena statistics
 
-Revision `0027` adds `ArenaObservation` (anonymous classified audit facts, 30-day window) and
+Revision `0028` adds `ArenaObservation` (anonymous classified audit facts, 30-day window) and
 `ArenaInsightState` (collection cursor and aggregate JSON). Only `application.arena_insights` writes
 them. They have no audit foreign key because audit retention is independent; neither stores raw
 requests, responses or credentials. The public table reads these database aggregates, not bundled
 production metrics. See [Enrich Arena](../interface/enrich-arena.md) for classification and refresh semantics.
 
-Revision `0028` adds `ArenaVerificationSnapshot`, written only by
+Revision `0029` adds `ArenaVerificationSnapshot`, written only by
 `application.arena_verification_insights.publish_snapshot`. Its immutable run ID, content digest,
 publication time and aggregate JSON keep verification pilots independent of rolling observations.
 It holds no contacts or raw evidence. The public insights API selects the latest publication through

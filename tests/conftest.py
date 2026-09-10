@@ -10,6 +10,9 @@ from __future__ import annotations
 import os
 import tempfile
 
+# Tests and their CLI subprocesses must never emit production analytics.
+os.environ["TREG_TELEMETRY"] = "0"
+
 # Isolate the test DB from any .env / running dev server BEFORE importing treg (the engine is
 # built at import time). A real env var overrides the .env file in pydantic-settings.
 # TREG_TEST_DB_URL (not TREG_DATABASE_URL — a stray production URL in a shell must never become the
@@ -43,11 +46,13 @@ for _k in (
     "X_CLIENT_ID", "X_CLIENT_SECRET", "SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET",
     "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET",
     "META_CLIENT_ID", "META_CLIENT_SECRET",
+    "POSTHOG_KEY", "ADS_CONV_REFRESH_TOKEN",
     "INSTAGRAM_CLIENT_ID", "INSTAGRAM_CLIENT_SECRET",
     # …and the tier-4 platform keys + their allow-list. A developer's .env carries real, FUNDED keys:
     # without this a suite run on their laptop could resolve tier 4 and spend actual money on the
     # in-process upstream's echo. Tests that exercise tier 4 set both halves via monkeypatch.
     "PLATFORM_KEY_TRYKITT", "PLATFORM_PROVIDERS", "PLATFORM_KEY_TIKHUB", "PLATFORM_KEY_DATAFORSEO", "PLATFORM_KEY_SCRAPECREATORS",
+    "PLATFORM_KEY_QUICKENRICH",
 ):
     os.environ[f"TREG_{_k}"] = ""  # the test upstream is an in-process ASGI transport, not real DNS
 

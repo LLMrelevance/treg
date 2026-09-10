@@ -98,9 +98,9 @@ architecture test separately pins the dataplane/control startup split and backgr
 
 | Role | HTTP routes and mounts | Background tasks | Startup checks |
 |---|---|---|---|
-| `all` | The complete surface, including `/run`, static files, `/mcp`, and the flagged `/mcp/v2` | Ads conversion worker when enabled | Read-only DB verify, HTTP client, enabled MCP lifespans |
+| `all` | The complete surface, including `/run`, static files, `/mcp`, and the flagged `/mcp/v2` | Arena insights collector; Ads conversion worker when enabled | Read-only DB verify, HTTP client, enabled MCP lifespans |
 | `dataplane` | `/call/{rest:path}`, `/catalog/call/{rest:path}`, MCP mounts, and their resource metadata; no `/run`, static files, docs, or OpenAPI | None | Read-only DB verify, HTTP client, enabled MCP lifespans |
-| `control` | Everything except the calling surfaces; includes OAuth issuance, `/run`, and static files | Ads conversion worker when enabled | Read-only DB verify, HTTP client |
+| `control` | Everything except the calling surfaces; includes OAuth issuance, `/run`, and static files | Arena insights collector; Ads conversion worker when enabled | Read-only DB verify, HTTP client |
 
 No role lifespan writes schema, performs a data backfill, or provisions the local single user. The explicit
 `python -m treg upgrade` release phase owns content-driven backfills; the default `python -m treg`
@@ -145,3 +145,7 @@ key file; listed in the ownership table beside `/sitemap.xml`. See `interface/se
 
 The control/all lifespan starts and drains `application.arena_insights.worker` for database-backed
 Arena statistics. Dataplane processes do not run this collector; `/arena/insights` is a control route.
+Shutdown cancels and awaits every started background worker before draining Arena, audit and
+analytics or closing the shared client, so database rollback/close finishes before event-loop teardown.
+
+`POST /reviews` and `GET /admin/reviews` belong to control, alongside feedback intake and reads.
