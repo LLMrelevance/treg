@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit
 
 from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -254,7 +254,7 @@ def _arena_return_target(target: str) -> str:
 def _arena_login_return(resp, request: Request, target: str) -> None:
     target = _arena_return_target(target)
     if target:
-        resp.set_cookie("treg_arena_return", target, httponly=True, max_age=600,
+        resp.set_cookie("treg_arena_return", quote(target, safe=""), httponly=True, max_age=600,
                         samesite="lax", secure=_is_https(request))
     else:
         resp.delete_cookie("treg_arena_return")
@@ -266,7 +266,7 @@ def _finish_oauth_login(request: Request, user: User, st: tuple | None) -> Redir
     handshake goes through the SAME team picker as the other doors (instead of completing blind — which
     would leave the CLI guessing the org). The picker's POST /auth/cli/approve reads this same cookie."""
     login_id = st[0] if st is not None else None
-    browser_dest = _arena_return_target(request.cookies.get("treg_arena_return", "")) or "/app"
+    browser_dest = _arena_return_target(unquote(request.cookies.get("treg_arena_return", ""))) or "/app"
     dest = f"/login?cli={login_id}" if login_id else browser_dest
     resp = RedirectResponse(dest, status_code=302)
     resp.set_cookie(sess.COOKIE, sess.make_session(user.id, token_version=user.token_version), httponly=True,

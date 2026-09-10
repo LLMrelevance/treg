@@ -153,7 +153,8 @@ Submission checks the existing browser session. Signed-out visitors see Sign up.
 or Google/GitHub authentication opens the existing agent setup modal next, without dispatching a run.
 A ten-minute, single-use session-storage marker resumes setup after OAuth; ordinary page loads do not
 reopen it. OAuth returns allow only Arena, Leaderboard and Benchmark paths with task/run/team query
-parameters, validated both before redirect and at callback. A ten-minute session-storage draft
+parameters, validated both before redirect and at callback. The return cookie percent-encodes
+the complete target; callbacks decode it once before repeating the allowlist check. A ten-minute session-storage draft
 preserves the query through signup. The top navigation also links to `https://treg.to` via Treg.
 New users can create a team here. Valid inputs for signed-in
 users fetch a quote after an 800 ms pause. The compact Run button displays the estimated cost

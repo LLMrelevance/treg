@@ -323,3 +323,23 @@ async def test_oauth_callback_carries_arena_acquisition_and_counts_signup_once(g
     signups = [a for a in events if a[1] == "signup_completed"]
     assert len(signups) == 1
     assert signups[0][2] == {"signup_method": "github", "entry_surface": "arena"}
+
+
+async def test_oauth_arena_return_cookie_encodes_and_restores_query(gc):
+    from urllib.parse import quote, urlencode
+
+    target = "/enrich-arena?" + urlencode({
+        "run": "saved-run", "team": "sales; Secure\r\nSet-Cookie: injected=1",
+    })
+    started = await gc.get("/auth/github", params={"return_to": target})
+    assert gc.cookies.get("treg_arena_return") == quote(target, safe="")
+    assert set(gc.cookies.keys()) == {"treg_oauth_state", "treg_arena_return"}
+    return_header = next(h for h in started.headers.get_list("set-cookie")
+                         if h.startswith("treg_arena_return="))
+    assert "HttpOnly" in return_header and "SameSite=lax" in return_header
+
+    state = gc.cookies.get("treg_oauth_state")
+    response = await gc.get("/auth/github/callback", params={"code": "test", "state": state})
+    assert response.status_code == 302
+    assert response.headers["location"] == target
+    assert gc.cookies.get("treg_arena_return") is None

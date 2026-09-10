@@ -264,8 +264,9 @@ async def test_compare_shows_vendors_and_costs_before_one_click_vote(clients, en
         feedback = arena._unpack(evaluation.payload)
         assert feedback["feedback_context"] == "attributed" and feedback["version"] == "2"
         stored = await db.get(ArenaRun, quote["id"])
-        assert "example.com" not in stored.payload
-        assert "example.com" in crypto.decrypt(stored.payload)
+        plaintext = crypto.decrypt(stored.payload)
+        assert stored.payload != plaintext
+        assert json.loads(plaintext)["identity"] == IDENTITY
 
 
 async def test_waterfall_exposes_steps_and_stops_on_first_hit(clients, enrichment_on, monkeypatch):
@@ -382,6 +383,7 @@ def test_false_mailbox_verdict_is_not_a_miss():
 
 async def test_oauth_return_only_allows_arena(clients,monkeypatch):
     from types import SimpleNamespace
+    from urllib.parse import quote
     from starlette.requests import Request
     from treg.routers.auth import _finish_oauth_login
     u=SimpleNamespace(id=1,token_version=0)
@@ -394,9 +396,10 @@ async def test_oauth_return_only_allows_arena(clients,monkeypatch):
         ('https://evil.example', '/app'), ('//evil.example', '/app'),
         ('/enrich-arena/../app', '/app'), ('/enrich-arena?redirect=https://evil.example', '/app'),
         ('/enrich-arena?team=a&team=b', '/app'), ('/enrich-arena#evil', '/app'),
+        ('/enrich-arena\r\nSet-Cookie: injected=1', '/app'),
     ]:
         req=Request({'type':'http','scheme':'http','server':('registry',80),'path':'/auth/google/callback',
-                     'headers':[(b'cookie',('treg_arena_return='+value).encode())]})
+                     'headers':[(b'cookie',('treg_arena_return='+quote(value, safe='')).encode())]})
         response=_finish_oauth_login(req,u,None)
         assert response.headers['location']==expected
         from treg.routers.auth import _arena_return_target
