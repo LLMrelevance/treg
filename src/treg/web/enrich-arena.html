@@ -31,13 +31,13 @@
         <a href="https://x.com/treg_ai" target="_blank" rel="noopener" aria-label="treg on X (Twitter)" title="treg on X (Twitter)"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644Z"/></svg></a>
       </span>
       <template v-if="user">
-        <label v-if="teams.length > 1" class="team-switcher"><span>Team</span><select aria-label="Team paying for runs" v-model="team" @change="changeTeam" :disabled="running || busy"><option v-for="t in teams" :value="t.slug">{{t.name}}</option></select></label>
+        <label v-if="teams.length > 1" class="team-switcher desktop-team-switcher"><span>Team</span><select aria-label="Team paying for runs" v-model="team" @change="changeTeam" :disabled="running || busy"><option v-for="t in teams" :value="t.slug">{{t.name}}</option></select></label>
         <div class="account-actions">
           <button class="balance" v-if="balance !== null" type="button" @click="topUp" :aria-label="'Top up credits · balance '+usd(balance)" title="Top up credits">{{usd(balance)}} <span>credits</span></button>
           <button class="text-button desktop-signout" @click="logout" :disabled="running || busy">Sign out</button>
           <details class="mobile-account-menu">
             <summary aria-label="Account options" title="Account options"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></summary>
-            <div class="account-menu-panel"><button class="text-button" type="button" @click="logout" :disabled="running || busy">Sign out</button></div>
+            <div class="account-menu-panel"><label v-if="teams.length > 1" class="team-switcher"><span>Team</span><select aria-label="Team paying for runs" v-model="team" @change="changeTeam" :disabled="running || busy"><option v-for="t in teams" :value="t.slug">{{t.name}}</option></select></label><button class="text-button" type="button" @click="logout" :disabled="running || busy">Sign out</button></div>
           </details>
         </div>
       </template>

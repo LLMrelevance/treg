@@ -819,8 +819,6 @@ body:has(dialog[open]) { overflow:hidden; }
   .masthead .brand { grid-column:1; grid-row:1; min-height:44px; }
   .masthead .sign-in-button,.masthead .account-actions { grid-column:3; grid-row:1; justify-self:end; }
   .masthead .arena-community { grid-column:2; grid-row:1; }
-  .masthead .team-switcher { grid-column:1/-1; grid-row:2; }
-  .masthead:has(.team-switcher) .arena-page-tabs { grid-row:3; }
   .masthead .arena-page-tabs { grid-column:1/-1; grid-row:2; width:100%; gap:2px; margin-top:0; }
   .masthead .arena-page-tabs a { flex:1; min-height:44px; justify-content:center; padding:10px 6px; font-size:12px; }
   .arena-community { gap:0; }
@@ -894,6 +892,10 @@ body:has(dialog[open]) { overflow:hidden; }
 .account-menu-panel button { width:100%; text-align:left; padding:10px 14px; white-space:nowrap; }
 @media(max-width:600px) {
   .account-actions { gap:0; }
-  .account-actions .desktop-signout { display:none; }
+  .account-actions .desktop-signout,.masthead .desktop-team-switcher { display:none; }
   .mobile-account-menu { display:block; }
 }
+
+.account-menu-panel .team-switcher { flex-direction:column; align-items:stretch; gap:6px; padding:8px; width:220px; max-width:calc(100vw - 56px); }
+.account-menu-panel .team-switcher>span { padding:0 4px; font-size:12px; }
+.masthead .account-menu-panel select { width:100%; max-width:100%; }
