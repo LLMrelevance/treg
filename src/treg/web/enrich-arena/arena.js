@@ -614,7 +614,7 @@
       },
       verificationEstimate(task){const prices=(this.tasks.find(t=>t.id===task)?.provider_previews?.[0]||[]).filter(p=>Number.isFinite(p.estimate_micro));return prices.length?Math.min(...prices.map(p=>p.estimate_micro)):null;},
       verificationLabel(r){const task=({'people.email.find':'people.email.verify','people.phone.find':'people.phone.verify'})[this.run?.capability],q=this.verificationQuotes[r.id],price=q?.estimate_micro??this.verificationEstimate(task);return (this.verificationPending[r.id]?'Verifying…':q?.affordable===false?'Top up':task==='people.phone.verify'?'Verify phone':'Verify email')+(price==null?'':' · '+this.usd(price));},
-      verificationVerdict(r){const v=r.verification;if(!v)return '';if(['queued','running'].includes(v.state))return 'Verifying…';if(v.state!=='hit')return 'Verification unavailable';const o=v.output||{};if(v.capability==='people.phone.verify')return o.valid===true?'Valid phone format':o.valid===false?'Invalid phone number':'Unknown';return this.emailVerdict(o).label;},
+      verificationVerdict(r){const v=r.verification;if(!v)return '';if(v.not_started)return 'Verification not run';if(['queued','running'].includes(v.state))return 'Verifying…';if(v.state!=='hit')return 'Verification unavailable';const o=v.output||{};if(v.capability==='people.phone.verify')return o.valid===true?'Valid phone format':o.valid===false?'Invalid phone number':'Unknown';return this.emailVerdict(o).label;},
       async verifyResult(r){
         if(!r.can_verify||this.verificationPending[r.id])return;
         const id=this.run.id,team=this.runTeam,task=({'people.email.find':'people.email.verify','people.phone.find':'people.phone.verify'})[this.run.capability];
