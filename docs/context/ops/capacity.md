@@ -259,6 +259,11 @@ pays the aggregator's real price, 0% markup, disclosed in-band when it ships (st
 
 ## Protect, part one (step D) — refuse before reserve
 
+PDL's HTTP 402 `hit your account maximum for …` response is an operation quota signature,
+so the existing strike ladder locks only the affected endpoint (for example `pdl.x.person-identify`).
+Person/company enrichment can remain usable on the same key. Other PDL 402 responses retain the
+balance classification. An Arena team top-up cannot replenish this vendor-side allowance.
+
 The call path reads the view and runs the breaker (`marks.py`); the mechanics and the typed
 `provider_capacity` 503 are documented in `architecture/proxy-model.md` § Platform capacity and
 `interface/api.md`. In one line: locked provider or endpoint → 503 before any hold, with
@@ -305,6 +310,12 @@ or settlement-path failure is logged, any reserved child hold is released, and t
 back to the direct vendor response. A skip-direct call has no direct response, so the same fallback
 returns the original typed `provider_capacity` 503. Cancellation and typed call failures still
 propagate to the call service for their dedicated cleanup and response handling.
+
+Overflow reservations also enforce `MarketplaceCall.max_cost_micro` at the aggregator's own
+estimate, before any aggregator request. The value is inherited from a direct caller's explicit
+ceiling or a routed child's remaining ceiling. A refused reservation releases the temporary
+`OverflowSpend` budget claim and leaves no child hold. See `architecture/money.md` for the shared
+reservation guard.
 
 ## Enabling overflow (step F) — the opt-out and the rollout
 

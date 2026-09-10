@@ -46,6 +46,7 @@ for _k in (
     "X_CLIENT_ID", "X_CLIENT_SECRET", "SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET",
     "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET",
     "META_CLIENT_ID", "META_CLIENT_SECRET",
+    "POSTHOG_KEY", "ADS_CONV_REFRESH_TOKEN",
     "INSTAGRAM_CLIENT_ID", "INSTAGRAM_CLIENT_SECRET",
     # …and the tier-4 platform keys + their allow-list. A developer's .env carries real, FUNDED keys:
     # without this a suite run on their laptop could resolve tier 4 and spend actual money on the
@@ -340,6 +341,10 @@ def _reset_call_path_caches():
             limiter.reset()
         except ImportError:
             pass
+        # The shared store's in-process fallback (the review-invitation budget): org ids restart
+        # with every reset_db(), so a counter left over would ration the NEXT test's team.
+        from treg.infra import kv
+        kv._store = None
     _clear()
     yield
     _clear()

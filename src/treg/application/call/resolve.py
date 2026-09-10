@@ -301,6 +301,7 @@ class MarketplaceCall:
     tier: str                       # tool | credential | platform | platform-overflow (child cycle only)
     cost_type: str = ""             # cost.type — decides whether a 4xx is billable (per_call is)
     estimate_micro: int = 0         # RAW provider estimate; the ledger applies the margin
+    max_cost_micro: int | None = None  # remaining caller ceiling, inherited by overflow
     params_hash: str = ""
     call_id: str | None = None      # the ledger hold, once reserved (metered calls only)
     # The call rides a REGISTRY OAUTH CONNECT of a provider that bills treg's app per use (X's
@@ -878,7 +879,10 @@ def _marketplace_upstream(
         # Agents often pass `siteUrl` straight from GSC's sites list, where it may already be
         # encoded. Preserve a value containing a real %HH escape; otherwise encode it exactly once.
         # A literal/invalid percent sequence has no valid escape and therefore becomes `%25`.
-        rendered = value if _VALID_PERCENT_ESCAPE_RE.search(value) else quote(value, safe="")
+        # @ is a legal character inside a path segment (RFC 3986 pchar), not a path/query
+        # delimiter. Email-path APIs may validate it before percent-decoding (Tomba does).
+        # Keep it literal; slashes, ?, # and other delimiters still need escaping.
+        rendered = value if _VALID_PERCENT_ESCAPE_RE.search(value) else quote(value, safe="@")
         path = path.replace("{%s}" % name, rendered)
         consumed.add(name)
     required = [k for k, v in (inp.get("queryParams") or {}).items()

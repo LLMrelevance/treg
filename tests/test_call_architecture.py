@@ -231,9 +231,9 @@ def test_catalog_access_router_only_translates_the_application_result() -> None:
 
 def test_startup_manifests_keep_dataplane_and_control_work_separate() -> None:
     assert bootstrap.ROLE_BACKGROUND_TASKS == {
-        "all": ("treg.adsconv.worker",),
+        "all": ("treg.adsconv.worker", "treg.application.arena_insights.worker"),
         "dataplane": (),
-        "control": ("treg.adsconv.worker",),
+        "control": ("treg.adsconv.worker", "treg.application.arena_insights.worker"),
     }
     for checks in bootstrap.ROLE_STARTUP_CHECKS.values():
         assert "treg.api._backfill_provider_extra_tools" not in checks

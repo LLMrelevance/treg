@@ -45,6 +45,7 @@ from .domain.identity.access import (
 from .models import (CallRecord, CapabilityPin, LedgerEntry, Membership, Org, RunRecord, Secret,
                      Tool, ToolRequest, User)
 from .routers import admin as admin_routes
+from .routers import arena as arena_routes
 from .routers import auth as auth_routes
 from .routers import billing as billing_routes
 from .routers import call as call_routes
@@ -847,6 +848,7 @@ router.routes.extend(admin_routes.reports_router.routes)
 
 # ---- the proxy: call a tool without holding its credential; tier-4 metering ----------------
 router.routes.extend(call_routes.router.routes)
+router.routes.extend(arena_routes.router.routes)
 
 
 # ---- server-side CLI execution (Tier 0 `treg run`) ---------------------------------------

@@ -1247,3 +1247,13 @@ def tool_examples(service: str) -> list[dict]:
             note = f"{note} [capability: {ep['capability']}]"
         out.append({"method": ep["method"], "path": ep["path"], "note": note})
     return out
+
+
+def headline_counts(cat: Catalog) -> tuple[str, int]:
+    """The two numbers every agent-facing surface quotes, taken from the loaded catalog instead of
+    typed by hand: direct (non-routed) endpoints rounded DOWN to the hundred with a trailing "+",
+    and the providers behind them. Six hand-written copies once disagreed with each other and the
+    smallest undersold the catalog by six hundred endpoints; generated, the number cannot drift."""
+    direct = [e for e in cat.by_id.values() if e.get("kind") != "routed"]
+    providers = {e.get("provider") for e in direct if e.get("provider")}
+    return f"{len(direct) // 100 * 100:,}+", len(providers)

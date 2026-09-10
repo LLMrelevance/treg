@@ -758,6 +758,16 @@ after a tier-4 balance/quota signature, and `_note_capacity_recovery` removes it
 resolution - and both are listed in the dataplane write allowlist on their own
 (`capacity_exhausted_mark`), not under the money entries. See `ops/capacity.md`.
 
+## Caller cost ceilings
+
+`MarketplaceCall.max_cost_micro` carries the caller's remaining ceiling. `_platform_reserve`
+checks the actual reservation estimate with margin before opening its transaction or creating a
+hold. Direct calls only set it when the caller supplies `X-Treg-Route-Max-Cost`; routed children
+always inherit their route's remaining ceiling, including its default. A refusal is a 402
+`route_max_cost` and moves no money for that attempt. Overflow inherits the same field via its
+child snapshot and checks its own estimate; a preceding direct charge reduces the remainder.
+This is a pre-reservation guard, not a rewrite of provider-reported settlement evidence.
+
 ## Overflow money
 
 The overflow child (`application.call.overflow`) is an ordinary metered cycle on its own hold
@@ -839,3 +849,13 @@ from returned profiles using the YAML Starter micro-USD rates. It reuses the exi
 Profile-only LinkedIn enrichment reserves and settles 20,000 micro-USD when a profile is found;
 misses remain free. Platform reveal search requires an explicit page size to bound its hold.
 Own keys are unmetered; see [ContactOut](contactout.md) for prices, free verification and evidence limits.
+
+## Top-up product attribution
+
+Manual checkout accepts optional product attribution independent of billing policy. `start_topup`
+and `create_topup_checkout` normalize `entry_surface` and `checkout_source` to fixed surface names.
+Both Stripe Session and PaymentIntent metadata carry them. `_credit` passes only those normalized
+values into the top-up ledger metadata and `topup_completed`, under the existing fresh-credit
+guard; webhook order and sequential redelivery do not change attribution or duplicate events.
+Missing/legacy attribution is `unknown`. No query inputs, URLs, API keys or provider results are
+copied into this metadata. Amounts, reservations, settlement and payment authorization are unchanged.
