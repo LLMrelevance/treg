@@ -75,6 +75,9 @@ can finalize the original task independently; the terminal-state guard prevents 
   category/message/references, authenticated org and user attribution, and the references verified
   against that team's call records or ledger. Revision `0025`; `domain.feedback` owns inserts;
   `application.feedback` commits. Team deletion removes these rows. See [feedback](feedback.md).
+- **`FeedbackHandling` / `FeedbackHandlingEvent`** - internal current processing state and
+  versioned history (revision 0030), owned by this schema and written only by the private admin
+  service. Both cascade from the original report. See [feedback](feedback.md).
 
 `src/treg/models.py` is authoritative for columns, indexes and defaults. This section records
 ownership and behavior that a field declaration alone does not explain.

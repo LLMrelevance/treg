@@ -78,6 +78,9 @@ agents then built against a constitution that was wrong.
   exceptions: only money writes `org.balance_micro`, the daily-spend counter (`spent_today_*`) and
   the auto-top-up fields; the call runtime may persist an OAuth token refresh into `secret`; audit
   writes `callrecord`, domains only read it.
+- **Feedback handling.** This repo owns `FeedbackHandling` and `FeedbackHandlingEvent` models and
+  migrations; the private admin service is their only runtime writer. Original reports remain
+  owned by the feedback domain. See `docs/context/architecture/feedback.md`.
 - **The call runtime is self-contained.** `src/treg/application/call/` depends on no management
   code (routes, login, OAuth consent, Stripe top-up), reads only membership, deny rules,
   credentials, catalog prices and balances, and writes only what `tests/test_call_architecture.py`
