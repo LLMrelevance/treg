@@ -59,7 +59,15 @@ request quotes. It reads the same cached database snapshot as Arena. The account
 is a button opening `/app?from=enrich-arena#billing` through `topUp`, preserving the selected team and Arena draft.
 The shared header also links to GitHub ("Open source"), Discord and X using the same icons and
 destinations as the people-search landing page. The links remain visible across Arena, Leaderboard
-and Benchmark, wrapping with account controls on narrow screens.
+and Benchmark. Account controls stay on one line above 600px; the centered page pill moves
+onto its own row at 1800px and below. On mobile, community icons sit beside the brand and
+balance; team selection and Sign out are in the account dropdown beside the balance.
+Support chat is enabled on these shared pages only after `/auth/me` establishes a signed-in
+user and `/meta` supplies `intercom_app_id`. `syncIntercom` boots once, updates the active team
+on team switches or saved-run restoration, and follows `/app` identity verification: email and
+company are sent only with `intercom_user_hash`; without the hash, chat remains anonymous.
+Logout, an expired session, or an account change shuts down the previous Intercom session.
+Guests and deployments without an Intercom app ID load no widget; widget failures do not block Arena.
 Its visual system follows the treg redesign reference (`https://treg-design.vercel.app/#start`):
 Geist Pixel headings, Google Sans Flex body text, DM Mono for technical values, a cool gray canvas,
 white rounded cards with fine borders, black actions and restrained teal status accents. A static
@@ -87,7 +95,7 @@ automatically. Vendor selection resets on task switches. Shared column labels st
 the fields on mobile as well as desktop. Narrow screens keep wider input grids in a local
 horizontal scroll region, with 16px editable text and 44px primary touch controls. The mobile
 header keeps the brand, community links and signup/credit controls together above the page tabs.
-On narrow phones community links use labelled icons; team selection/sign-out use an account row
+At widths up to 600px, community links use accessible icons without the Open source text; Sign out and team selection live in an account dropdown beside the credit balance
 when signed in. Comparison filters use a two-column grid.
 Result tables keep their own horizontal scroll region and stats retain the vendor column while
 scrolling. Expanded answers become cards on small screens; selected overview rows and table
@@ -273,7 +281,8 @@ to this deployment's `/llms.txt`. Continuing as a signed-in team member fetches 
 for the active team; the token is masked by default, copied only on click, never persisted by the
 modal, and cleared when it closes. Stale responses cannot restore a closed or wrong-team token.
 Next opens the shared third “Try it out” step: four copyable example prompts, the waiting-for-agent
-message, grouped OAuth provider links and Skip/Browse all catalog actions. Copying an example
+message, grouped OAuth provider links, a secondary Browse all catalog action, and a primary Done
+button that closes setup and keeps the user in Arena. Copying an example
 only writes its prompt to the clipboard; provider links open the main app’s provider page without
 starting OAuth. The example definitions and `TryItOut` component are shared with dashboard onboarding.
 Signed-in visitors without a team first name and create their team inside the setup modal, matching
@@ -326,7 +335,20 @@ that entry; selecting it again collapses it. The shared `ArenaResultTable` compo
 single-entry and nested details. Overview cells show only attempted results; queued, skipped and
 uncalled cells remain empty. Thumbs, Try and optional report forms appear only inside the detailed
 table, avoiding duplicate controls. The overview entry column stays pinned during horizontal scrolling.
-Results grow to full height in the page, without an internal vertical scrollbar. The `stickyHeader`
+The run cost summary appears above the entries controls (or the single-entry result table).
+It uses the server's settled run total, which includes verification and unsuccessful calls.
+Average per result divides that total by distinct input entries with a found, non-rejected result;
+multiple vendors finding the same entry count once. Discovery labels this average per matched query,
+not per returned contact. Pending charges withhold the average, and runs with no found entries show a dash.
+The summary is independent of the entry filter and is the completion auto-scroll target.
+A repeated Setup treg in agents button sits to its right and wraps beneath on narrow screens,
+opening the same onboarding modal as the page header.
+
+When a newly started or resumed running battle/waterfall finishes, Arena scrolls once to the
+run cost summary above the entries matrix (or the single-entry results table) after Vue renders the result.
+Completed history views and subsequent manual provider/verification calls do not trigger another
+scroll. Reduced-motion users get an immediate scroll. Results grow to full height in the page,
+without an internal vertical scrollbar. The `stickyHeader`
 directive keeps real table headers aligned at the viewport top during page scrolling. The expanded
 entry row stays beneath the overview header until its detail section ends; the nested vendor header
 sits below both, preserving the entry name while reviewing a long vendor list. The directive observes
@@ -597,8 +619,16 @@ verification when enabled. Nested charges are included in row/run totals; cancel
 and process-loss recovery preserve the lookup and never retry paid work automatically.
 
 Verify phone number is also a standalone batch-capable task using Tomba's existing phone-validator
-endpoint. Input requires an international number with + and country code; spacing and punctuation
-are normalized. It returns numbering-plan validity, country, line type and carrier when supplied.
+endpoint. The default input requires an international number with + and country calling code;
+spacing and punctuation are normalized. Requests can alternatively supply a national-format
+number with the optional ISO-2 `country_code`. `verification_identity` carries a lookup's reported
+country context into automatic and manual verification, and the Tomba adapter forwards it as a
+query parameter. QuickEnrich preserves its reported `data.country_code` in normalized output.
+An explicit international calling code takes precedence over that country context. Missing or
+unusable context for a national number produces a specific explanation without making or charging
+a verification call; no default country is guessed. Pre-dispatch failures carry `not_started` so
+the table shows “Verification not run” with the reason and does not attribute an unmade call to
+the planned provider. It returns numbering-plan validity, country, line type and carrier when supplied.
 It does **not** establish that the line is live or belongs to the intended person. Arena can plan
 a single-provider task through the existing candidate planner; public synthetic routes still
 require two verified adapters. No public single-provider routed endpoint is added.
@@ -675,10 +705,16 @@ table to avoid clipping. No sample-status sublabels are shown.
 Row hover details identify the verifier providers and check date; the chart source shows the sample period. Fewer than 20 completed checks
 are withheld; small-sample labels are hidden. Risky, unknown and conflicting verdicts stay
 in the denominator but do not count as valid; unfinished checks are excluded. A genuine zero is
-displayed and missing values have no chart bars. Phone format checks never produce a verified rate:
-reachability and ownership remain unverified. The publication preserves the legacy `rate` projection
+displayed and missing values have no chart bars. Phone lookup uses a separate **Phone format validity**
+metric: the percentage of sampled returned numbers passing format checks among completed checks.
+The table hides this column when none of the displayed vendors has a published numeric rate.
+The header tooltip explains that this does not confirm a live line, deliverability or ownership.
+The API publishes this only as `format_validity_rate` for `phone_format` rows with at least 20
+completed checks; it never promotes phone format checks into email validity or verified hit rate.
+The publication preserves the legacy `rate` projection
 for older consumers and adds explicit `checked_n` and `validity_rate` fields; the UI only consumes
-`validity_rate`, so older snapshots cannot accidentally display the lookup projection as validity.
+`validity_rate` for email and `format_validity_rate` for phone, so older snapshots cannot
+accidentally display the lookup projection as validity.
 
 Publication data stays outside the checkout. To populate a migrated deployment, pass the private
 aggregate JSON to `scripts/import_arena_verification.py` with its configured `TREG_DATABASE_URL`;
