@@ -21,6 +21,10 @@ sources:
   - src/treg/alembic/versions/0022_org_spent_today_counter.py
   - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
   - src/treg/alembic/versions/0024_membership_calls_today_counter.py
+  - src/treg/alembic/versions/0030_enrich_arena.py
+  - src/treg/alembic/versions/0028_arena_insights.py
+  - src/treg/alembic/versions/0029_arena_verification_snapshot.py
+
   - src/treg/alembic/versions/0011_callrecord_archive_link.py
   - src/treg/alembic/versions/0015_idempotentcall_membership_cascade.py
   - src/treg/maintenance.py
@@ -45,6 +49,12 @@ related:
 
 # Data model
 
+Revision `0030` adds `ArenaRun` and `ArenaEvaluation` for [Enrich Arena](../interface/enrich-arena.md).
+Runs freeze encrypted inputs, adapter requests, outcomes and receipts; evaluations record an immutable
+preference with the exposed candidate set and feedback context (attributed since version 2). Both are creator/team scoped and expire after
+30 days. The run is claimed with a conditional update; a unique run-id evaluation constraint and
+run-row locking serialize concurrent feedback; viewing results does not submit a vote. These tables have no balance-writing responsibilities.
+
 `AsyncTaskRecord` is one deferred metered submission keyed by the original `call_id`: org,
 provider, endpoint, extracted task id, optional fetch/result id, optional validated dynamic poll URL,
 reserved micro-USD, frozen descriptor/basis/request evidence, scheduling attempts, status and
@@ -66,7 +76,7 @@ can finalize the original task independently; the terminal-state guard prevents 
   against that team's call records or ledger. Revision `0025`; `domain.feedback` owns inserts;
   `application.feedback` commits. Team deletion removes these rows. See [feedback](feedback.md).
 - **`FeedbackHandling` / `FeedbackHandlingEvent`** - internal current processing state and
-  versioned history (revision 0027), owned by this schema and written only by the private admin
+  versioned history (revision 0030), owned by this schema and written only by the private admin
   service. Both cascade from the original report. See [feedback](feedback.md).
 
 `src/treg/models.py` is authoritative for columns, indexes and defaults. This section records
@@ -385,6 +395,16 @@ strands those events behind a cancelled flusher. The engine adds Postgres pool
 hygiene (`pool_pre_ping`/`pool_recycle`/sizing) for non-SQLite URLs, and `verify_db` refuses to start with
 no `TREG_SECRET_KEY` on a real DB (an ephemeral key would lose every stored secret on restart).
 
+Arena adds `arena_run_started` / `arena_run_completed` after its claim/final save; ordinary
+`tool_called.client=enrich-arena` still attributes each lookup, Try and verification. Browser
+`TregTracking.identify` joins those email identities to anonymous Arena pageviews and the active
+team group. Email OTP and social auth emit `signup_completed` only after committing a newly
+created user. `treg_entry_surface` is a first-observed, 90-day product-surface cookie; server
+`funnel_surface` accepts only fixed surface names, never URLs or search data. Manual top-up events
+include this acquisition surface and a separate `checkout_source`, also copied through Stripe
+metadata into the durable top-up ledger metadata. See [Arena conversion tracking](../interface/enrich-arena.md#conversion-tracking)
+for event definitions, conversion denominators and the person-to-team payment join.
+
 Infrastructure faults use the same DB-independent queue through `capture_fault`: PostHog `$exception`
 events have the fixed `treg-server` identity and carry only the exception class, at most 500 characters
 of its string, an unhandled mechanism, and component/logger labels. URL query strings in the exception
@@ -501,3 +521,18 @@ minted lazily on first visit to the Referrals page - NULL is the normal state.
 `Referral.card_fingerprint` holds Stripe's stable per-card id. It is **not card data** (opaque
 outside our own Stripe account) and lives here alone, never on `Org`, which keeps
 `Org.stripe_default_pm`'s no-card-data posture intact.
+
+## Arena statistics
+
+Revision `0028` adds `ArenaObservation` (anonymous classified audit facts, 30-day window) and
+`ArenaInsightState` (collection cursor and aggregate JSON). Only `application.arena_insights` writes
+them. They have no audit foreign key because audit retention is independent; neither stores raw
+requests, responses or credentials. The public table reads these database aggregates, not bundled
+production metrics. See [Enrich Arena](../interface/enrich-arena.md) for classification and refresh semantics.
+
+Revision `0029` adds `ArenaVerificationSnapshot`, written only by
+`application.arena_verification_insights.publish_snapshot`. Its immutable run ID, content digest,
+publication time and aggregate JSON keep verification pilots independent of rolling observations.
+It holds no contacts or raw evidence. The public insights API selects the latest publication through
+the publication-time index; see [Enrich Arena](../interface/enrich-arena.md) for estimate semantics
+and the aggregate-only import workflow.

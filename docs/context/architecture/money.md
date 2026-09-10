@@ -849,3 +849,13 @@ from returned profiles using the YAML Starter micro-USD rates. It reuses the exi
 Profile-only LinkedIn enrichment reserves and settles 20,000 micro-USD when a profile is found;
 misses remain free. Platform reveal search requires an explicit page size to bound its hold.
 Own keys are unmetered; see [ContactOut](contactout.md) for prices, free verification and evidence limits.
+
+## Top-up product attribution
+
+Manual checkout accepts optional product attribution independent of billing policy. `start_topup`
+and `create_topup_checkout` normalize `entry_surface` and `checkout_source` to fixed surface names.
+Both Stripe Session and PaymentIntent metadata carry them. `_credit` passes only those normalized
+values into the top-up ledger metadata and `topup_completed`, under the existing fresh-credit
+guard; webhook order and sequential redelivery do not change attribution or duplicate events.
+Missing/legacy attribution is `unknown`. No query inputs, URLs, API keys or provider results are
+copied into this metadata. Amounts, reservations, settlement and payment authorization are unchanged.

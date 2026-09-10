@@ -48,6 +48,11 @@ class Settings(BaseSettings):
 
     review_sample_rate: float = Field(default=0, ge=0, le=1)
     feedback_hint_rate: float = Field(default=0, ge=0, le=1)
+    # Review invitations a team can receive per hour, whatever its call volume. Sampling decides
+    # WHICH calls qualify; this decides how many of them a team is actually asked about.
+    review_budget_per_hour: int = Field(default=5, ge=1)
+    # The shared key-value store (Redis protocol). Empty = an in-process fallback; see infra/kv.py.
+    kv_url: str = ""
 
     # SQLite locally, Postgres on Render — same code path, just swap the URL.
     database_url: str = "sqlite+aiosqlite:///./treg.db"
@@ -173,6 +178,7 @@ class Settings(BaseSettings):
     platform_key_contactout: str = ""  # raw API token; injected into the token header
     platform_key_millionverifier: str = ""  # raw key; injected as ?api=…
     platform_key_hunter: str = ""
+    platform_key_sumble: str = ""  # Bearer; Pro monthly credits, optional vendor auto-top-up
     platform_key_quickenrich: str = ""  # Bearer; monthly subscription credits, not auto-top-up
     platform_key_leadmagic: str = ""
     platform_key_lusha: str = ""

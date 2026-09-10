@@ -43,6 +43,8 @@ related:
 
 # Provider capacity
 
+`collectors._sumble` reads `credits_remaining` from a free technology-search miss. Its monthly allowance and optional vendor top-ups remain separate from per-call pricing; no renewal date or auto-funding status is assumed. See [Sumble](../architecture/sumble.md).
+
 **Problem.** Tier 4 serves ~2,850 catalog endpoints on treg's own vendor keys. When one of *our*
 accounts runs dry, every caller on that endpoint inherits a 402 that isn't theirs to fix — 4,604
 such errors in the 30 days to 2026-08-26, almost all on the enrichment (money) workload. The plan
@@ -258,6 +260,11 @@ pays the aggregator's real price, 0% markup, disclosed in-band when it ships (st
   How it is scheduled and run by hand is in `ops/deploy.md` § Worker commands.
 
 ## Protect, part one (step D) — refuse before reserve
+
+PDL's HTTP 402 `hit your account maximum for …` response is an operation quota signature,
+so the existing strike ladder locks only the affected endpoint (for example `pdl.x.person-identify`).
+Person/company enrichment can remain usable on the same key. Other PDL 402 responses retain the
+balance classification. An Arena team top-up cannot replenish this vendor-side allowance.
 
 The call path reads the view and runs the breaker (`marks.py`); the mechanics and the typed
 `provider_capacity` 503 are documented in `architecture/proxy-model.md` § Platform capacity and

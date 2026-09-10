@@ -30,6 +30,8 @@ related:
 
 # Auth & secrets
 
+`SUMBLE` uses the standard pasted Bearer-key path and a free technology-search miss probe; garbage-key rejection was verified through the local connection API. See [Sumble](sumble.md).
+
 QuickEnrich uses `QUICKENRICH`, a pasted Bearer key on `app.quickenrich.io`. The free
 POST Contact Finder probe rejects invalid keys with HTTP 401 and does not require a positive credit
 balance to accept a successful probe. `platform_key_quickenrich` supplies the separate server-held platform credential.

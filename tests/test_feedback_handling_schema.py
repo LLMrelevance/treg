@@ -13,7 +13,7 @@ from pathlib import Path
 
 def test_handling_migration_preserves_reports_and_enforces_history(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'handling.db'}")
-    path = Path(__file__).parents[1] / 'src/treg/alembic/versions/0027_feedback_handling.py'
+    path = Path(__file__).parents[1] / 'src/treg/alembic/versions/0030_feedback_handling.py'
     spec = importlib.util.spec_from_file_location('handling_migration', path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

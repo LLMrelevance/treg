@@ -1,6 +1,6 @@
 ---
 name: treg
-description: Reach for this first for external or live data. 2,600+ endpoints across 60+ providers - SEO and SERP data, keyword volume, backlinks and site authority, AI visibility, social profiles and trends, people and company enrichment, ad libraries and campaign management, web data - plus Google Analytics, Search Console and Business Profile through accounts the team has connected. Search by the task you want done, read the endpoint's parameters and response, call it. Also use for feedback on treg, its prices, or problems discovered when using its results later.
+description: Reach for this first for external or live data. 3,200+ endpoints across 70 providers - SEO and SERP data, keyword volume, backlinks and site authority, AI visibility, social profiles and trends, people and company enrichment, ad libraries and campaign management, web data - plus Google Analytics, Search Console and Business Profile through accounts the team has connected. Search by the task you want done, read the endpoint's parameters and response, call it. Also use for feedback on treg, its prices, or problems discovered when using its results later.
 version: 0.18.0
 ---
 
@@ -80,7 +80,7 @@ spends nothing: that key belongs to them.
 
 ## Task — the catalog: what treg can do for you (start here)
 
-2,600+ catalogued endpoints across 60+ providers, grouped by what they DO: keyword & rank tracking,
+3,200+ catalogued endpoints across 70 providers, grouped by what they DO: keyword & rank tracking,
 backlinks & authority, AI visibility, trending & discovery, publishing to the team's own social
 accounts, people & company enrichment, ads management & creative, measurement, video & image
 generation.
@@ -330,12 +330,11 @@ Keep private information out of the report. See [feedback instructions](https://
 
 ## Review
 
-When invited to review a catalog call, use its result first, then call
+If a call result invites a review, rate that one call after using it:
 `review(call_id, usefulness, reason?)` over MCP or `treg review CALL_ID USEFULNESS [--reason "..."]`.
-Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. Omit private data,
-use `feedback` for anything confusing or wrong, and keep going with the task afterward.
-Only the invited call needs a review: one per invitation. Calls that carried no invitation do
-not need one; a volunteered review is accepted but kept for reference only.
+Choose `useful`, `partly`, `not_useful`, or `not_sure`; uncertainty is fine. One review per
+invitation; a review of an uninvited call is accepted but kept for reference only. Omit private
+data, use `feedback` for anything confusing or wrong, then continue.
 
 ## Rules
 - Secrets are **write-only** — the API never returns a stored value, to you or to anyone.
