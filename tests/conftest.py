@@ -8,6 +8,7 @@ The `clients` fixture also registers a user and authes the client by default.
 from __future__ import annotations
 
 import os
+import socket
 import tempfile
 
 # Tests and their CLI subprocesses must never emit production analytics.
@@ -71,6 +72,31 @@ from treg.infra.db import reset_db  # noqa: E402
 # The OTP-start + sandbox throttles (and the OTP codes) now live in the DB's `ephemeral` table, not in
 # process-global dicts — so `reset_db()` (called by every client fixture) already clears them between
 # tests. No separate rate-limit reset fixture is needed.
+
+
+@pytest.fixture
+def fake_getaddrinfo(monkeypatch):
+    """Override named hosts only, leaving DB and other infrastructure DNS untouched.
+
+    An empty address list models an unresolvable host without querying external DNS.
+    """
+    original = socket.getaddrinfo
+
+    def install(addresses: dict[str, list[str]]) -> None:
+        def resolve(host, port, *args, **kwargs):
+            if host not in addresses:
+                return original(host, port, *args, **kwargs)
+            if not addresses[host]:
+                raise socket.gaierror(socket.EAI_NONAME, "unresolvable")
+            return [
+                (socket.AF_INET6 if ":" in address else socket.AF_INET,
+                 socket.SOCK_STREAM, 0, "",
+                 (address, port or 0, 0, 0) if ":" in address else (address, port or 0))
+                for address in addresses[host]
+            ]
+        monkeypatch.setattr(socket, "getaddrinfo", resolve)
+
+    return install
 
 
 def make_upstream(hook_hits: list | None = None) -> FastAPI:
