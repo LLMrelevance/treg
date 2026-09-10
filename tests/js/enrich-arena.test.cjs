@@ -42,6 +42,31 @@ test('Page-scrolling headers stop at table bounds, offset nested headers, and cl
  bounds.top=-2000;listeners.get('scroll')();pending();assert.equal(offset,'960px');
  directives.stickyHeader.unmounted(table);assert.equal(listeners.size,0);assert.equal(disconnected,true);
 });
+for(const mode of ['compare','waterfall'])for(const batch of [false,true])test(`${mode} completion reveals ${batch?'entries':'single-entry results'} once, including fast runs`,async()=>{
+ const {app,price,runtime}=setup(),scrolls=[];let rendered=false;
+ app.mode=mode;if(batch)app.extraInputs=[{full_name:'Second Person',domain:'second.example'}];price();
+ runtime.document.querySelector=selector=>({scrollIntoView:options=>{assert.equal(rendered,true);scrolls.push({selector,...options});}});
+ app.$nextTick=async()=>{rendered=true;};app.loadBalance=async()=>{};app.refreshHistory=async()=>{};
+ const result={id:'q1',state:'completed',capability:app.taskId,mode,identity:app.inputs,identities:app.inputRows,results:[]};
+ app.api=async(path,options)=>options?.method==='POST'?{}:{...result};
+ await app.startRun();assert.equal(scrolls.length,1);assert.equal(scrolls[0].selector,'.results-section .run-cost-summary');assert.equal(scrolls[0].behavior,'smooth');
+ await app.pollRun('q1');assert.equal(scrolls.length,1,'A repeated completion poll must not scroll again');
+ app.run.state='running';await app.pollRun('q1');assert.equal(scrolls.length,1,'Later Try/Verify calls must not scroll again');
+});
+test('Result scroll honors reduced motion and ignores a run replaced before rendering',async()=>{
+ const {app,runtime}=setup(),scrolls=[];runtime.window.matchMedia=()=>({matches:true});
+ runtime.document.querySelector=()=>({scrollIntoView:o=>scrolls.push(o)});
+ app.run={id:'run',state:'completed'};app.scrollOnComplete='run';await app.scrollToCompletedResults('run');assert.equal(scrolls[0].behavior,'instant');
+ app.scrollOnComplete='run';app.$nextTick=async()=>{app.run=null;};await app.scrollToCompletedResults('run');assert.equal(scrolls.length,1);
+});
+test('Opening completed history does not scroll, but a resumed running history scrolls on completion',async()=>{
+ const {app,runtime}=setup(),scrolls=[];runtime.document.querySelector=()=>({scrollIntoView:o=>scrolls.push(o)});
+ app.loadBalance=async()=>{};app.refreshHistory=async()=>{};
+ let state='completed';app.api=async()=>({id:'saved',state,capability:app.taskId,mode:'waterfall',identity:app.inputs,results:[]});
+ await app.loadHistory('saved');assert.equal(scrolls.length,0);assert.equal(app.scrollOnComplete,'');
+ state='running';await app.loadHistory('saved');assert.equal(scrolls.length,0);assert.equal(app.scrollOnComplete,'saved');
+ state='completed';await app.pollRun('saved');assert.equal(scrolls.length,1);
+});
 test('Waterfall is the default and the priced button includes its estimate',()=>{
  const {app,price}=setup();assert.equal(app.mode,'waterfall');price();assert.equal(app.runButtonLabel,'Run from $0.025');
 });
@@ -903,4 +928,30 @@ test('Arena counts arrival before data loading, including a failed page-data req
  app.api=async()=>{assert.equal(events[0][0],'arena_page_viewed');throw new Error('Data unavailable');};
  await mounted.call(app);
  assert.equal(events.length,1);assert.equal(app.error,'Data unavailable');
+});
+
+test('Phone verified rate column is hidden without displayed rates, including format-only evidence',()=>{
+  const {app}=setup();app.taskId='people.phone.find';
+  assert.equal(app.showVerifiedRateColumn,false);
+  app.tasks.push({id:'people.phone.find',variants:[['linkedin_url']],provider_previews:[[{provider:'tomba',endpoint_id:'tomba.phone'}]]});
+  app.verifiedRateValue=()=>null;
+  assert.equal(app.showVerifiedRateColumn,false);
+  app.verifiedRateValue=()=>0;
+  assert.equal(app.showVerifiedRateColumn,true,'Zero is a real rate');
+  app.taskId='people.email.find';
+  assert.equal(app.showVerifiedRateColumn,true,'Email validity column is unchanged');
+ });
+
+test('Run costs include every charge but count found entries once across vendors',()=>{
+ const {app}=setup();app.run={charged_micro:90000,results:[
+  {state:'hit',entry_index:0,charged_micro:30000,verification:{charged_micro:10000}},
+  {state:'hit',entry_index:0,charged_micro:20000},
+  {state:'hit',entry_index:1,charged_micro:30000},
+  {state:'miss',entry_index:2,charged_micro:10000}]};
+ assert.equal(app.runCostSummary.total,90000);assert.equal(app.runCostSummary.found,2);assert.equal(app.runCostSummary.average,45000);
+ app.resultFilter='unresolved';assert.equal(app.runCostSummary.average,45000);
+ app.run.charge_pending=true;assert.equal(app.runCostSummary.average,null);
+ app.run.charge_pending=false;app.run.results[0].charged_micro=null;assert.equal(app.runCostSummary.pending,true);
+ app.run.results=[];assert.equal(app.runCostSummary.average,null);
+ app.run={charged_micro:0,results:[{state:'hit',charged_micro:0}]};assert.equal(app.runCostSummary.average,0);
 });

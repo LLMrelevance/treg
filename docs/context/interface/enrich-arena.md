@@ -273,7 +273,8 @@ to this deployment's `/llms.txt`. Continuing as a signed-in team member fetches 
 for the active team; the token is masked by default, copied only on click, never persisted by the
 modal, and cleared when it closes. Stale responses cannot restore a closed or wrong-team token.
 Next opens the shared third “Try it out” step: four copyable example prompts, the waiting-for-agent
-message, grouped OAuth provider links and Skip/Browse all catalog actions. Copying an example
+message, grouped OAuth provider links, a secondary Browse all catalog action, and a primary Done
+button that closes setup and keeps the user in Arena. Copying an example
 only writes its prompt to the clipboard; provider links open the main app’s provider page without
 starting OAuth. The example definitions and `TryItOut` component are shared with dashboard onboarding.
 Signed-in visitors without a team first name and create their team inside the setup modal, matching
@@ -326,7 +327,20 @@ that entry; selecting it again collapses it. The shared `ArenaResultTable` compo
 single-entry and nested details. Overview cells show only attempted results; queued, skipped and
 uncalled cells remain empty. Thumbs, Try and optional report forms appear only inside the detailed
 table, avoiding duplicate controls. The overview entry column stays pinned during horizontal scrolling.
-Results grow to full height in the page, without an internal vertical scrollbar. The `stickyHeader`
+The run cost summary appears above the entries controls (or the single-entry result table).
+It uses the server's settled run total, which includes verification and unsuccessful calls.
+Average per result divides that total by distinct input entries with a found, non-rejected result;
+multiple vendors finding the same entry count once. Discovery labels this average per matched query,
+not per returned contact. Pending charges withhold the average, and runs with no found entries show a dash.
+The summary is independent of the entry filter and is the completion auto-scroll target.
+A repeated Setup treg in agents button sits to its right and wraps beneath on narrow screens,
+opening the same onboarding modal as the page header.
+
+When a newly started or resumed running battle/waterfall finishes, Arena scrolls once to the
+run cost summary above the entries matrix (or the single-entry results table) after Vue renders the result.
+Completed history views and subsequent manual provider/verification calls do not trigger another
+scroll. Reduced-motion users get an immediate scroll. Results grow to full height in the page,
+without an internal vertical scrollbar. The `stickyHeader`
 directive keeps real table headers aligned at the viewport top during page scrolling. The expanded
 entry row stays beneath the overview header until its detail section ends; the nested vendor header
 sits below both, preserving the entry name while reviewing a long vendor list. The directive observes
@@ -676,7 +690,7 @@ Row hover details identify the verifier providers and check date; the chart sour
 are withheld; small-sample labels are hidden. Risky, unknown and conflicting verdicts stay
 in the denominator but do not count as valid; unfinished checks are excluded. A genuine zero is
 displayed and missing values have no chart bars. Phone format checks never produce a verified rate:
-reachability and ownership remain unverified. The publication preserves the legacy `rate` projection
+reachability and ownership remain unverified. For Find phone number, the vendor table hides the verified hit rate column when none of its displayed rows has a numeric verified rate. Email validity column visibility is unchanged. The publication preserves the legacy `rate` projection
 for older consumers and adds explicit `checked_n` and `validity_rate` fields; the UI only consumes
 `validity_rate`, so older snapshots cannot accidentally display the lookup projection as validity.
 

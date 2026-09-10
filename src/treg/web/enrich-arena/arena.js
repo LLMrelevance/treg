@@ -157,7 +157,7 @@
       user:null,teams:[],team:'',balance:null,meta:{},busy:false,error:'',run:null,quote:null,history:[],customServices:false,services:[],
       insights:null,insightsState:'idle',insightsTimer:null,statsView:'rate',chartFocus:null,metricTooltip:null,requestDone:false,requestBusy:false,vendorPromptCopied:false,vendorPromptError:'',requestError:'',requestQuery:'',requestForm:{capability:'',note:'',contact:''},
       manualQuotes:{},manualPending:{},reporting:'',reportDrafts:{},pricing:false,quoteTimer:null,quoteSequence:0,pricedKey:'',expandedResults:[],email:'',code:'',emailStep:'email',devCode:'',authBusy:false,authError:'',
-      newTeamName:'',pendingSubmit:false,pollTimer:null,pollFailures:0,runTeam:'',booted:false,draftRestored:false,historySequence:0,historyLoading:false,historyHasMore:false,linkedRunPending:false,urlPopHandler:null}),
+      newTeamName:'',pendingSubmit:false,pollTimer:null,pollFailures:0,scrollOnComplete:'',runTeam:'',booted:false,draftRestored:false,historySequence:0,historyLoading:false,historyHasMore:false,linkedRunPending:false,urlPopHandler:null}),
     watch:{
       'run.id'(){this.selectedVendor='';},
       quoteKey(){this.scheduleQuote();},
@@ -173,6 +173,13 @@
       visibleInputs(){return this.showAllEntries?this.inputRows:this.inputRows.slice(0,3);},
       runEntries(){return this.run?.identities||[this.run?.identity||{}];},
       isBatch(){return this.runEntries.length>1;},
+      runCostSummary(){
+        const results=this.run?.results||[];
+        const found=new Set(results.filter(r=>r.state==='hit'&&this.ratingValue(r)!=='down').map(r=>r.entry_index??0)).size;
+        const pending=!!this.run?.charge_pending||results.some(r=>this.hasAttempt(r)&&r.charged_micro==null);
+        const total=Number.isFinite(this.run?.charged_micro)?this.run.charged_micro:null;
+        return {total,found,pending,average:!pending&&found&&total!==null?total/found:null};
+      },
       vendorResults(){return (this.run?.results||[]).filter(r=>r.provider===this.selectedVendor&&this.hasAttempt(r));},
       hasBatchFeedback(){return this.batchVendors.some(v=>v.up>0||v.down>0);},
       visibleResults(){return this.isBatch?this.run.results.filter(r=>r.entry_index===this.selectedEntry):this.run?.results||[];},
@@ -234,6 +241,7 @@
         }).sort((a,b)=>this.providerName(a.provider).localeCompare(this.providerName(b.provider)));
       },
       supportsVerifiedRate(){return ['people.email.find','people.phone.find'].includes(this.taskId);},
+      showVerifiedRateColumn(){return this.supportsVerifiedRate&&(this.taskId!=='people.phone.find'||this.chartRows.some(p=>Number.isFinite(p.verifiedRate)));},
       vendorListingPrompt(){return 'Read https://treg.to/vendor-listing.md and add our API to the treg catalog, then open a PR.';},
       verifiedRateLabel(){return this.taskId==='people.email.find'?'Email validity rate':'Verified hit rate';},
       verifiedExplanation(){return this.taskId==='people.phone.find'?'Phone format checks do not establish reachability or ownership. Verified hit rate is not available yet.':'Percentage of sampled returned emails with completed checks that both verifiers marked valid. Risky, unknown and conflicting verdicts do not count as valid.';},
@@ -601,7 +609,7 @@
       async startRun(){
         if(this.busy||this.running||!this.readyQuote)return;
         const id=this.readyQuote.id;this.busy=true;this.error='';this.selectedEntry=null;this.resultFilter='all';this.expandedResults=[];this.runTeam=this.team;clearTimeout(this.quoteTimer);
-        try{await this.api('/arena/runs/'+id+'/start',{method:'POST'},this.runTeam);this.quote=null;await this.pollRun(id);this.syncUrl(id);if(this.running)await this.refreshHistory();}
+        try{await this.api('/arena/runs/'+id+'/start',{method:'POST'},this.runTeam);this.scrollOnComplete=id;this.quote=null;await this.pollRun(id);this.syncUrl(id);if(this.running)await this.refreshHistory();}
         catch(e){if(e.status===401){this.user=null;this.quote=null;await this.openLogin(true);}else if(e.status===402){this.topUp();}else{this.error=e.message;if(e.status===409){this.quote=null;await this.prepare(true);}}}
         finally{this.busy=false;}
       },
@@ -609,8 +617,16 @@
         clearTimeout(this.pollTimer);
         try{this.run=await this.api('/arena/runs/'+id,{},this.runTeam);this.pollFailures=0;
           if(this.run.state==='running')this.pollTimer=setTimeout(()=>this.pollRun(id),1500);
-          else{await this.loadBalance();await this.refreshHistory();}
+          else{await this.scrollToCompletedResults(id);await this.loadBalance();await this.refreshHistory();}
         }catch(e){this.error=e.message;this.pollFailures++;if(this.pollFailures<5&&e.status!==401&&e.status!==403&&e.status!==404)this.pollTimer=setTimeout(()=>this.pollRun(id),3000);}
+      },
+      async scrollToCompletedResults(id){
+        if(this.scrollOnComplete!==id)return;
+        this.scrollOnComplete='';
+        await this.$nextTick();
+        if(this.run?.id!==id||this.running||this.leaderboard||this.benchmark)return;
+        const target='.results-section .run-cost-summary';
+        document.querySelector(target)?.scrollIntoView({block:'start',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'instant':'smooth'});
       },
       verificationEstimate(task){const prices=(this.tasks.find(t=>t.id===task)?.provider_previews?.[0]||[]).filter(p=>Number.isFinite(p.estimate_micro));return prices.length?Math.min(...prices.map(p=>p.estimate_micro)):null;},
       verificationLabel(r){const task=({'people.email.find':'people.email.verify','people.phone.find':'people.phone.verify'})[this.run?.capability],q=this.verificationQuotes[r.id],price=q?.estimate_micro??this.verificationEstimate(task);return (this.verificationPending[r.id]?'Verifying…':q?.affordable===false?'Top up':task==='people.phone.verify'?'Verify phone':'Verify email')+(price==null?'':' · '+this.usd(price));},
@@ -707,7 +723,7 @@
           this.variant=Math.max(0,this.currentTask.variants.findIndex(v=>v.every(k=>k in this.inputs)));
           this.customServices=true;this.services=[...new Set(result.results.map(r=>r.provider))];this.quote=null;this.saveDraft(false);
           this.syncUrl(id,replace);
-          if(this.running)this.pollTimer=setTimeout(()=>this.pollRun(id),1500);
+          if(this.running){this.scrollOnComplete=id;this.pollTimer=setTimeout(()=>this.pollRun(id),1500);}
         }catch(e){this.error=[403,404,410].includes(e.status)?'This saved run is unavailable, expired, or belongs to another account.':e.message;}finally{this.busy=false;}
       },
       async newSession(){

@@ -176,14 +176,14 @@
       <div v-else class="results-table-wrap" tabindex="0" role="region" aria-label="Vendor stats and pricing table" @scroll.passive="metricTooltip=null">
         <table class="results-table pricing-table" :class="{'discovery-pricing':discovery}">
           <caption class="sr-only">{{discovery?'Vendor estimates':'Vendor hit rates, response times and estimated prices'}} for {{currentTask.label}} using {{variantLabel(inputKeys)}}</caption>
-          <thead><tr><th scope="col">Vendor</th><th v-if="!discovery" scope="col" class="number-cell">{{insightVerification?'Verdict rate':'Hit rate'}}</th><th v-if="supportsVerifiedRate" scope="col" class="number-cell metric-help-header" @mouseenter="showMetricTooltip" @mouseleave="metricTooltip=null" @focusin="showMetricTooltip" @focusout="metricTooltip=null" @keydown.esc="metricTooltip=null"><button type="button" class="metric-help-trigger" :aria-describedby="metricTooltip?'email-validity-help':null" @click="showMetricTooltip">{{verifiedRateLabel}}</button></th><th v-if="!discovery" scope="col" class="number-cell">Response time</th><th scope="col" class="number-cell">Price <span v-if="inputRows.length>1">· {{inputRows.length}} entries</span></th></tr></thead>
+          <thead><tr><th scope="col">Vendor</th><th v-if="!discovery" scope="col" class="number-cell">{{insightVerification?'Verdict rate':'Hit rate'}}</th><th v-if="showVerifiedRateColumn" scope="col" class="number-cell metric-help-header" @mouseenter="showMetricTooltip" @mouseleave="metricTooltip=null" @focusin="showMetricTooltip" @focusout="metricTooltip=null" @keydown.esc="metricTooltip=null"><button type="button" class="metric-help-trigger" :aria-describedby="metricTooltip?'email-validity-help':null" @click="showMetricTooltip">{{verifiedRateLabel}}</button></th><th v-if="!discovery" scope="col" class="number-cell">Response time</th><th scope="col" class="number-cell">Price <span v-if="inputRows.length>1">· {{inputRows.length}} entries</span></th></tr></thead>
           <tbody><tr v-for="p in chartRows" :key="p.endpoint_id">
             <th scope="row"><div class="vendor-name"><span class="vendor-logo"><span aria-hidden="true">{{providerName(p.provider).slice(0,1)}}</span><img :src="'/logos/'+p.provider+'.svg?v=arena-real-1'" alt="" width="24" height="24" @error="$event.target.style.display='none'"></span>{{providerName(p.provider)}}</div></th>
             <td v-if="!discovery" class="number-cell historical-rate"><div class="inline-metric"><span class="metric-track" :class="{missing:p.rate===null}" aria-hidden="true"><span v-if="p.rate!==null" :style="{width:p.rate+'%'}"></span></span><span class="metric-value">{{insightRate(p)}}</span></div><small v-if="insightSampleLabel(p)">{{insightSampleLabel(p)}}</small></td>
-            <td v-if="supportsVerifiedRate" class="number-cell historical-rate" :title="verifiedRateNote(p)" tabindex="0" :aria-label="verifiedRateLabel+' '+verifiedRate(p)+'. '+verifiedRateNote(p)"><div class="inline-metric"><span class="metric-track verified-track" :class="{missing:p.verifiedRate===null}" aria-hidden="true"><span v-if="p.verifiedRate!==null" :style="{width:p.verifiedRate+'%'}"></span></span><span class="metric-value">{{verifiedRate(p)}}</span></div><small v-if="taskId==='people.phone.find'">Not verified</small></td>
+            <td v-if="showVerifiedRateColumn" class="number-cell historical-rate" :title="verifiedRateNote(p)" tabindex="0" :aria-label="verifiedRateLabel+' '+verifiedRate(p)+'. '+verifiedRateNote(p)"><div class="inline-metric"><span class="metric-track verified-track" :class="{missing:p.verifiedRate===null}" aria-hidden="true"><span v-if="p.verifiedRate!==null" :style="{width:p.verifiedRate+'%'}"></span></span><span class="metric-value">{{verifiedRate(p)}}</span></div><small v-if="taskId==='people.phone.find'">Not verified</small></td>
             <td v-if="!discovery" class="number-cell"><div class="inline-metric"><span class="metric-track time-track" :class="{missing:p.ms===null}" aria-hidden="true"><span v-if="p.ms!==null" :style="{width:(100*p.ms/chartTimeMax)+'%'}"></span></span><span class="metric-value">{{insightResponseTime(p)}}</span></div><small v-if="insightResponseTime(p)!=='—'">median · shorter is faster</small></td>
             <td class="number-cell">{{p.estimate_micro==null?'Price unavailable':usd(p.estimate_micro)}}<small>{{billingLabel(p)}}</small></td>
-          </tr><tr v-if="!previewProviders.length"><td :colspan="supportsVerifiedRate?5:discovery?2:4" class="result-empty">{{customServices?'Click a vendor avatar to include it.':'No services support this input type.'}}</td></tr></tbody>
+          </tr><tr v-if="!previewProviders.length"><td :colspan="showVerifiedRateColumn?5:discovery?2:4" class="result-empty">{{customServices?'Click a vendor avatar to include it.':'No services support this input type.'}}</td></tr></tbody>
         </table>
       </div>
       <teleport to="body"><div v-if="metricTooltip" id="email-validity-help" role="tooltip" class="metric-help-tooltip" :style="{left:metricTooltip.left+'px',top:metricTooltip.top+'px',width:metricTooltip.width+'px'}">{{verifiedExplanation}}</div></teleport>
@@ -220,6 +220,15 @@
           </table>
         </div>
         <p class="pricing-note">{{run.mode==='waterfall'?'Later vendors receive only unresolved entries; their hit rates are not directly comparable.':'Coverage crowns use results kept after thumbs-down rejections.'}} {{discoveryRun()?'Coverage counts queries with matches, not the number or relevance of contacts.':'Found is not verified accuracy.'}} Timing excludes queue time.</p>
+      </template>
+      <div class="run-cost-summary">
+      <dl class="run-cost-metrics">
+        <div><dt>{{running||runCostSummary.pending?'Total cost so far':'Total cost'}}</dt><dd>{{usd(runCostSummary.total)}}<small v-if="runCostSummary.pending"> · Finalizing charges</small></dd></div>
+        <div :title="'Total run charges, including verification and unsuccessful calls, divided by entries with a found result that has not been rejected. Each entry counts once across vendors; this is not verified accuracy.'"><dt>{{discoveryRun()?'Average per matched query':'Average per result'}}</dt><dd>{{usd(runCostSummary.average)}}<small v-if="runCostSummary.found"> · {{runCostSummary.found}} {{discoveryRun()?'queries matched':'entries found'}}</small></dd></div>
+      </dl>
+      <button class="setup-trigger" type="button" @click="openSetup" aria-label="Setup treg in Claude Code, Codex, OpenClaw, Hermes and more agents"><span>Setup treg in</span><span class="setup-logos" aria-hidden="true"><img v-for="agent in setupFeatured" :key="agent.id" :src="setupIcon(agent.icon)" :title="agent.name" alt=""><span>+{{setupOtherCount}}</span></span></button>
+      </div>
+      <template v-if="isBatch">
         <div class="batch-controls"><span>{{runEntries.length}} entries <span v-if="running">· {{run.progress}} / {{run.total}} outcomes</span></span><label class="input-method"><span class="sr-only">Filter entries</span><select v-model="resultFilter"><option value="all">All entries</option><option value="found">Found</option><option value="unresolved">Unresolved</option><option value="disagreement">Different answers</option></select></label></div>
         <div class="results-table-wrap batch-results-wrap" tabindex="0" role="region" aria-label="Entry by vendor results">
           <table v-sticky-header class="results-table batch-matrix" :style="{'--vendor-count':batchVendors.length}">
@@ -284,7 +293,7 @@
     </template>
     <template v-else>
       <treg-try-it-out heading-id="setup-title" :copied="setupExampleCopied" @example="copySetup($event.prompt,$event.k)" @provider="openSetupCatalog"></treg-try-it-out>
-      <div class="setup-footer"><button class="text-button" type="button" @click="closeSetup">Skip</button><button class="primary" type="button" @click="openSetupCatalog()">Browse all catalog →</button></div>
+      <div class="setup-footer"><button class="text-button" type="button" @click="openSetupCatalog()">Browse all catalog</button><button class="primary" type="button" @click="closeSetup">Done</button></div>
     </template>
     <p v-if="setupError" role="alert" class="auth-error">{{setupError}}</p>
   </dialog>
