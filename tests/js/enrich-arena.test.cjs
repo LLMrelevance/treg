@@ -755,10 +755,19 @@ test('Email validity matches exact endpoint and input and is independent of look
  audit.checked_n=40;audit.validity_rate=NaN;assert.equal(app.chartBars.length,0);
 });
 
-test('Phone format-only evidence never becomes verified hit rate',()=>{
+test('Phone format validity uses its own metric and never implies verified hit rate',()=>{
  const {app}=setup();app.taskId='people.phone.find';
- const row={audit:{method:'phone_format',sample_n:100,checked_n:100,validity_rate:100,baseline_n:200,rate:100,estimate:true}};
- assert.equal(app.verifiedRate(row),'—');assert.match(app.verifiedRateNote(row),/ownership/);assert.ok(app.chartViews.some(v=>v.id==='verified'));
+ const row={audit:{method:'phone_format',sample_n:100,checked_n:100,validity_rate:100,baseline_n:200,rate:100,verifiers:['tomba']}};
+ assert.equal(app.verifiedRate(row),'—','Legacy email and projected rates must not leak into phone metrics');
+ row.audit.format_validity_rate=82.5;assert.equal(app.verifiedRate(row),'82.5%');
+ assert.equal(app.verifiedRateLabel,'Phone format validity');assert.match(app.verifiedExplanation,/does not confirm a live line/);
+ assert.match(app.verifiedRateNote(row),/ownership are not verified/);assert.ok(app.chartViews.some(v=>v.id==='verified'));
+ row.audit.format_validity_rate=0;assert.equal(app.verifiedRate(row),'0.0%');
+ row.audit.checked_n=19;assert.equal(app.verifiedRate(row),'—');
+ delete row.audit.checked_n;assert.equal(app.verifiedRate(row),'—');
+ row.audit.checked_n=100;row.audit.format_validity_rate=101;assert.equal(app.verifiedRate(row),'—');
+ row.audit.format_validity_rate=82.5;row.audit.method='email_verifier_consensus';assert.equal(app.verifiedRate(row),'—');
+ app.taskId='people.email.find';assert.equal(app.verifiedRate(row),'100.0%','Email still uses email validity only');
  app.taskId='people.email.verify';assert.ok(!app.chartViews.some(v=>v.id==='verified'));
 });
 
