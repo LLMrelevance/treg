@@ -721,7 +721,5 @@ async def test_server_instructions_explain_review_invitations(clients, path):
         }, clients.headers['X-Treg-Token'], path=path)
     assert response.status_code == 200
     assert response.json()['result']['instructions'].endswith(
-        'When a call result carries a review invitation, use the result first, then call '
-        'review(call_id, usefulness, reason?) and keep going with the task. Only the invited call '
-        'needs a review: one per invitation.'
+        'If a call result invites a review, rate that one call with review(call_id, usefulness, reason?) after using it, then continue.'
     )
