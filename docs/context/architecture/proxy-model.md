@@ -22,6 +22,7 @@ sources:
   - src/treg/domain/governance/publicdemo.py
   - src/treg/domain/governance/usage.py
   - src/treg/routers/call.py
+  - tests/test_ssrf_public_addresses.py
   - tests/test_call_application_contract.py
   - tests/test_call_cancellation.py
   - tests/test_error_capture.py
@@ -304,6 +305,12 @@ that resolves differently later. Registration itself (`infra.upstream.ssrf.safe_
 by `health` and reused for `base_url`)
 also rejects numeric IP encodings - decimal/hex/octal/short forms like `2130706433` / `0x7f000001` /
 `127.1` are normalized via `inet_aton` and re-checked, so they can't sneak past the literal-IP block.
+Targets must be globally routable unicast addresses. CGNAT `100.64.0.0/10` is internal
+service space: Tailscale, WireGuard overlay deployments, Fly.io, some Kubernetes pod CIDRs,
+and Alibaba Cloud's metadata endpoint `100.100.100.200` use addresses in this range. These are
+precisely the services a caller-controlled upstream must not reach. NAT64 translation prefixes
+mapping non-global IPv4 addresses do not make those targets public; `64:ff9b::/96` remains blocked.
+
 (A narrow resolve-vs-connect race remains; pinning the resolved IP would need a custom transport.)
 
 > Why relay instead of modeling the upstream: [foundation/charter.md](../foundation/charter.md).
