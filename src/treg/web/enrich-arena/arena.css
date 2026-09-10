@@ -793,16 +793,24 @@ dialog form>.primary { width:100%; margin-top:5px; }
 .vendor-copy-prompt:hover { background:#eaf1ed; }
 
 /* Shared landing-page community links, kept visible beside the account controls. */
-.masthead>nav[aria-label="Arena account"] { flex-wrap:wrap; justify-content:flex-end; row-gap:8px; }
+.masthead>nav[aria-label="Arena account"] { flex-wrap:nowrap; justify-content:flex-end; }
+.masthead>nav[aria-label="Arena account"]>.text-button { flex-shrink:0; white-space:nowrap; }
 .arena-community { display:flex; align-items:center; gap:14px; flex-shrink:0; }
 .arena-community a { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; color:var(--muted); text-decoration:none; white-space:nowrap; }
 .arena-community a:hover { color:var(--ink); }
 .arena-community a:focus-visible { outline:2px solid var(--teal-ink); outline-offset:4px; border-radius:6px; }
 .arena-community svg { flex-shrink:0; }
-@media(max-width:1280px) {
+@media(max-width:1800px) {
   .masthead { grid-template-columns:minmax(0,1fr) auto; }
   .masthead .arena-page-tabs { grid-column:1/-1; grid-row:2; }
   .masthead>nav[aria-label="Arena account"] { grid-column:2; grid-row:1; }
+}
+
+@media(min-width:601px) and (max-width:960px) {
+  .masthead>nav[aria-label="Arena account"] { gap:10px; }
+  .arena-community { gap:4px; }
+  .arena-community a { min-width:32px; }
+  .arena-community a>span { display:none; }
 }
 
 /* Mobile layouts keep wide data inside their own scroll regions. */
