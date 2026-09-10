@@ -313,3 +313,11 @@ Two consequences worth stating plainly:
 - **Shared-provider async objects are org-scoped.** Platform-key poll and result-fetch utility calls
   must resolve their id through an org-owned `AsyncTaskRecord` or `AsyncResourceRecord` before the
   upstream is contacted. BYOK calls keep access to ids in the team's own provider account.
+
+## Signup analytics boundary
+
+`find_or_create_user` optionally collects the IDs it actually inserted after a successful flush;
+a concurrent insert loser returns the existing user without marking it new. Email OTP and
+GitHub/Google auth pass that collection to `track_signup` **after their commit**, emitting
+`signup_completed` only for new accounts. The optional entry-surface cookie is analytics metadata,
+allowlisted by `analytics.funnel_surface`; it never affects authentication or team access.

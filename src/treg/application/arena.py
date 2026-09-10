@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 from sqlalchemy import delete, or_, update
 from sqlmodel import select
 
-from .. import crypto
+from .. import analytics, crypto
 from ..domain import arena as rules, money
 from ..domain.catalog import store as catalog_store
 from ..domain.catalog.routing.paths import country_name
@@ -81,7 +81,7 @@ def public_tasks() -> list[dict]:
                     providers[provider] = item
             previews.append(sorted(providers.values(), key=lambda p: (p["estimate_micro"] is None, p["estimate_micro"] or 0, p["provider"])))
         tasks.append({"id": t.capability, "label": t.label, "description": t.description,
-                      "variants": t.variants, "fields": list(contract.output),
+                      "variants": t.variants, "examples": rules.example_inputs(t), "fields": list(contract.output),
                       "discovery": t.capability in rules.DISCOVERY_TASKS,
                       "max_entries": rules.DISCOVERY_ENTRIES if t.capability in rules.DISCOVERY_TASKS else rules.MAX_ENTRIES,
                       "result_limit": rules.DISCOVERY_LIMIT if t.capability in rules.DISCOVERY_TASKS else None,
@@ -217,13 +217,40 @@ def _verification_source(row, payload, attempt_id):
     return a, capability, identity
 
 
+async def _verification_attempt(cat, caller, capability, identity):
+    candidates, _, _ = await _plan_entry(cat, caller, capability, identity, None)
+    if capability != "people.email.verify":
+        return min(candidates, key=lambda a: (a["estimate_micro"], a["provider"]))
+    endpoint = cat.by_id.get("treg.people.email.verify")
+    if not endpoint:
+        raise rules.ArenaError("Email verification routing is unavailable.", 409)
+    # Admit the full fallback ceiling, not just the first (possibly free) provider.
+    candidates.sort(key=lambda a: (a["estimate_micro"], a["provider"]))
+    return {"id": uuid.uuid4().hex, "provider": "treg", "endpoint_id": endpoint["id"],
+            "routed": True, "tier": "routed", "method": "POST", "query": {}, "body": identity,
+            "state": "queued", "output": {}, "charged_micro": 0,
+            "estimate_micro": sum(a["estimate_micro"] for a in candidates),
+            "providers": [a["provider"] for a in candidates],
+            "endpoint_hash": _hash(endpoint),
+            "children": [{k: a[k] for k in ("endpoint_id", "endpoint_hash", "adapter_hash")} for a in candidates]}
+
+
+def _verification_catalog_matches(cat, attempt):
+    ep = cat.by_id.get(attempt["endpoint_id"])
+    if not ep or _hash(ep) != attempt["endpoint_hash"]:
+        return False
+    if attempt.get("routed"):
+        return all(_verification_catalog_matches(cat, child) for child in attempt["children"])
+    ad = cat.adapters.get(attempt["endpoint_id"])
+    return bool(ad and _hash(ad.__dict__) == attempt["adapter_hash"])
+
+
 async def verification_plan(caller, run_id, attempt_id):
     async with session_maker() as db:
         row = await _owned(db, run_id, caller)
         payload = _unpack(row.payload)
         _, capability, identity = _verification_source(row, payload, attempt_id)
-    candidates, _, _ = await _plan_entry(catalog_store.load(), caller, capability, identity, None)
-    v = min(candidates, key=lambda a: (a["estimate_micro"], a["provider"]))
+    v = await _verification_attempt(catalog_store.load(), caller, capability, identity)
     if v["estimate_micro"] > 10_000_000:
         raise rules.ArenaError("Verification exceeds the per-call limit.")
     q = {"id":uuid.uuid4().hex, "expires_at":(now()+timedelta(minutes=5)).isoformat(), "attempt":{**v, "capability":capability}}
@@ -250,8 +277,7 @@ async def start_verification(caller, run_id, attempt_id, quote_id, client, clien
         if q.get("id") != quote_id or datetime.fromisoformat(q["expires_at"]) < now():
             raise rules.ArenaError("Verification price expired. Try again.", 409)
         v, cat = q["attempt"], catalog_store.load()
-        ep, ad = cat.by_id.get(v["endpoint_id"]), cat.adapters.get(v["endpoint_id"])
-        if not ep or not ad or _hash(ep) != v["endpoint_hash"] or _hash(ad.__dict__) != v["adapter_hash"]:
+        if not _verification_catalog_matches(cat, v):
             raise rules.ArenaError("The catalog changed. Refresh verification pricing.", 409)
         if v["estimate_micro"] > 0 and await money.balance_of(db, caller.org_id) < v["estimate_micro"]:
             raise rules.ArenaError("Not enough team credits.", 402)
@@ -384,9 +410,10 @@ async def quote(caller, *, capability: str, mode: str, providers: list[str] | No
             raise rules.ArenaError("Auto verification is only available for finding emails or phone numbers.")
         verify_task, field = rules.VERIFICATION_TASKS[capability]
         probe = {field: "person@example.com" if field == "email" else "+14155550100"}
-        verifiers, _, _ = await _plan_entry(cat, caller, verify_task, probe, None)
-        v = min(verifiers, key=lambda a: (a["estimate_micro"], a["provider"]))
+        v = await _verification_attempt(cat, caller, verify_task, probe)
         verification = {**{k:v[k] for k in ("provider", "endpoint_id", "estimate_micro")}, "capability":verify_task, "field":field}
+        if v.get("routed"):
+            verification.update({k:v[k] for k in ("routed", "providers", "children", "endpoint_hash")})
     chosen, dropped, fields, cohort = [], [], [], None
     display = {}
     for index, entry in enumerate(entries):
@@ -478,6 +505,10 @@ async def start(caller, run_id: str, client, client_ip: str) -> dict:
         await db.commit()
         mode, capability = row.mode, row.capability
     if claim.rowcount:
+        analytics.capture(caller.email, "arena_run_started", {
+            "run_id": run_id, "capability": capability, "mode": mode, "client": "enrich-arena",
+            "entry_count": len(payload.get("identities", [payload["identity"]])),
+        }, groups={"team": caller.org.slug})
         task = asyncio.create_task(_run(run_id, mode, capability, payload, CallerSnapshot.capture(caller), client, client_ip))
         _track(run_id, task)
     return {"id": run_id, "state": "running"}
@@ -558,7 +589,7 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
             await _save(run_id, payload, only_attempt_id=only_attempt_id, verification_of=verification_of)
 
     async def attempt(a, verification_task=None):
-        ep, ad = cat.by_id[a["endpoint_id"]], cat.adapters[a["endpoint_id"]]
+        ep, ad = cat.by_id[a["endpoint_id"]], cat.adapters.get(a["endpoint_id"])
         current = await _fresh_caller(caller)
         a.update(state="running", started_ms=offset + round((time.monotonic() - started) * 1000), charged_micro=None)
         await persist()  # A dispatch is durably visible before any upstream work.
@@ -567,6 +598,12 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
         headers = ((b"content-type", b"application/json"), (b"content-length", str(len(data)).encode()),
                    (b"x-treg-client", b"enrich-arena"), (b"cache-control", b"no-cache"),
                    (b"x-treg-route-max-cost", f"{a['estimate_micro'] / 1e6:.6f}".encode()))
+        if a.get("routed"):
+            excluded = sorted({e["provider"] for e in cat.by_id.values()
+                               if e.get("capability") == verification_task and e["provider"] not in a["providers"]})
+            headers += ((b"x-treg-route-waterfall", b"1"),
+                        (b"x-treg-route-prefer", ",".join(a["providers"]).encode()),
+                        (b"x-treg-route-exclude", ",".join(excluded).encode()))
         context = service.create_call_context(CallInput(method=a["method"], raw_rest=a["endpoint_id"],
             raw_headers=headers, query_items=tuple(a["query"].items()), raw_query=urlencode(a["query"]),
             body=route._Bytes(data), caller=current, client_ip=client_ip))
@@ -589,7 +626,17 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
                     doc = json.loads(buf) if not oversized else None
                 except (ValueError, UnicodeDecodeError):
                     doc = None
-                outcome, output = rules.classify(cat.contracts[verification_task] if verification_task else contract, ad, ep, response.status, doc)
+                if a.get("routed"):
+                    meta = doc.get("_treg", {}) if isinstance(doc, dict) else {}
+                    outcome = "hit" if response.status < 400 and meta.get("outcome") == "hit" else "miss" if meta.get("outcome") == "miss" else "error"
+                    output = doc.get("output", {}) if outcome == "hit" else {}
+                    a["tried"] = meta.get("tried", [])
+                    if meta.get("provider"):
+                        a["provider"] = meta["provider"]
+                    if meta.get("served_by"):
+                        a["served_by"] = meta["served_by"]
+                else:
+                    outcome, output = rules.classify(cat.contracts[verification_task] if verification_task else contract, ad, ep, response.status, doc)
                 raw_omitted = is_batch and len(json.dumps(doc, ensure_ascii=True)) > raw_limit
                 a.update(state=outcome, output=output,
                          raw=None if raw_omitted else doc, raw_omitted=doc is not None and raw_omitted,
@@ -599,7 +646,10 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
                          status=response.status)
         except CallFailure as exc:
             a.update(state="error", detail=exc.kind, failure_kind=exc.kind, status=exc.status_code,
-                     charged_micro=context.cost_micro if context.cost_micro is not None else 0)
+                     charged_micro=context.cost_micro if context.cost_micro is not None else None if a.get("routed") else 0)
+            if a.get("routed") and isinstance(exc.detail, dict):
+                a["tried"] = exc.detail.get("tried", [])
+                a["raw"] = exc.detail
         except TimeoutError:
             a.update(state="timeout", detail="Service deadline exceeded.", charged_micro=context.cost_micro)
         except asyncio.CancelledError:
@@ -618,8 +668,14 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
             try:
                 current = await _fresh_caller(caller)
                 identity = rules.validate_identity(policy["capability"], {policy["field"]: a["output"].get(policy["field"], "")})
-                candidates, _, _ = await _plan_entry(cat, current, policy["capability"], identity, [policy["provider"]])
-                v = candidates[0]
+                if policy.get("routed"):
+                    if not _verification_catalog_matches(cat, policy):
+                        raise rules.ArenaError("Verification catalog changed; refresh the quote.")
+                    v = {**policy, "id":uuid.uuid4().hex, "tier":"routed", "method":"POST",
+                         "query":{}, "body":identity, "state":"queued", "output":{}, "charged_micro":0}
+                else:
+                    candidates, _, _ = await _plan_entry(cat, current, policy["capability"], identity, [policy["provider"]])
+                    v = candidates[0]
                 if v["endpoint_id"] != policy["endpoint_id"] or v["estimate_micro"] > policy["estimate_micro"]:
                     raise rules.ArenaError("Verification price or endpoint changed; no verification call was made.")
                 a["verification"] = {**v, "capability": policy["capability"], "automatic": True}
@@ -726,6 +782,13 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
             if a["state"] == "queued":
                 a.update(state="not_attempted", detail=payload["stop_reason"])
         await _save(run_id, payload, state, only_attempt_id=only_attempt_id, verification_of=verification_of)
+        if not only_attempt_id and not verification_of:
+            analytics.capture(caller.email, "arena_run_completed", {
+                "run_id": run_id, "capability": capability, "mode": mode, "client": "enrich-arena",
+                "state": state, "entry_count": len(payload.get("identities", [payload["identity"]])),
+                "returned_data": any(a["state"] == "hit" for a in payload["attempts"]),
+                "successful_call": any(a["state"] in {"hit", "miss"} for a in payload["attempts"]),
+            }, groups={"team": caller.org.slug})
 
 
 async def get_run(caller, run_id):

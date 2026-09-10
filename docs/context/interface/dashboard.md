@@ -1007,3 +1007,12 @@ made a correct payout look like a failure. Both are needed — the
 amount is chosen at the buttons, and the first preset ($5) is below the $10 minimum, so a note on its
 own would let the most-clicked button quietly forfeit the reward. Null offer = the page renders
 exactly as it did before this shipped.
+
+## Arena attribution at the dashboard boundary
+
+The credit link from Arena opens `/app?from=enrich-arena#billing`. `sitetrack.js` snapshots that
+entry point before SPA navigation can remove the query, and both manual top-up actions send
+`checkout_source=arena` (ordinary app entry sends `app`). First-observed acquisition surface is
+kept separately in the `treg_entry_surface` cookie. `analyticsIdentify` delegates to the shared
+`TregTracking` identity/group helper, matching the Arena-to-app person and clearing stale team
+groups on switches. See [Arena conversion tracking](enrich-arena.md#conversion-tracking).

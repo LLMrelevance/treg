@@ -56,7 +56,7 @@ white pill container, with a softly tinted sage active pill and dark green text.
 second header row. Links preserve task and input type; leaving Arena saves its
 query draft. Leaderboard does not restore or overwrite drafts, resume runs, fetch history or
 request quotes. It reads the same cached database snapshot as Arena. The account credit badge
-is a button opening `/app#billing` through `topUp`, preserving the selected team and Arena draft.
+is a button opening `/app?from=enrich-arena#billing` through `topUp`, preserving the selected team and Arena draft.
 The shared header also links to GitHub ("Open source"), Discord and X using the same icons and
 destinations as the people-search landing page. The links remain visible across Arena, Leaderboard
 and Benchmark, wrapping with account controls on narrow screens.
@@ -80,7 +80,20 @@ Visible field labels and the Using input-type selector
 remain, with Add entry and spreadsheet paste for batches. Multiple entries share one column-label
 row above the aligned inputs; each field retains its own hidden label and entry number for
 assistive technology. A single entry keeps its visible labels inside the input row. Discovery adds a short result/batch-limit
-note. Choosing a use case clears the previous query and vendor selection without dispatching a call.
+note. Fresh Arena visits, new queries and task/input-type switches prefill two editable public
+examples from `domain.arena.example_inputs`, exposed by `/arena/tasks`. Saved drafts (including
+intentionally cleared inputs) and historical results take precedence. No example dispatches
+automatically. Vendor selection resets on task switches. Shared column labels stay aligned with
+the fields on mobile as well as desktop. Narrow screens keep wider input grids in a local
+horizontal scroll region, with 16px editable text and 44px primary touch controls. The mobile
+header keeps the brand, community links and signup/credit controls together above the page tabs.
+On narrow phones community links use labelled icons; team selection/sign-out use an account row
+when signed in. Comparison filters use a two-column grid.
+Result tables keep their own horizontal scroll region and stats retain the vendor column while
+scrolling. Expanded answers become cards on small screens; selected overview rows and table
+headers stop pinning at 600px so they cannot cover those answers. The provider queue contains
+its positioned accessibility labels, avoiding page-wide overflow. Dialogs scroll within the
+dynamic viewport and prevent the page behind them from scrolling.
 Waterfall/Battle controls are centered in the fighter card, with Waterfall first and step/crossed-swords icons, VS connectors
 for battles and directional step arrows for waterfalls. Battle retains the internal `compare` mode value. Changing mode updates the query
 and invalidates pricing without dispatching; controls are locked during a run. Old result cards
@@ -136,9 +149,13 @@ Results start directly with the fighter card, with no query-summary row, aggrega
 or New query link. Inputs remain editable after completion; Stop sits in the fighter toolbar
 only during an active run.
 Visitors can select a task, input variant, execution mode, and services before signing in.
-Submission checks the existing browser session. Email login stays on the page; Google/GitHub
-accept only the allowlisted `/enrich-arena` return destination. A ten-minute session-storage draft
-preserves the query through login. New users can create a team here. Valid inputs for signed-in
+Submission checks the existing browser session. Signed-out visitors see Sign up. Successful email
+or Google/GitHub authentication opens the existing agent setup modal next, without dispatching a run.
+A ten-minute, single-use session-storage marker resumes setup after OAuth; ordinary page loads do not
+reopen it. OAuth returns allow only Arena, Leaderboard and Benchmark paths with task/run/team query
+parameters, validated both before redirect and at callback. A ten-minute session-storage draft
+preserves the query through signup. The top navigation also links to `https://treg.to` via Treg.
+New users can create a team here. Valid inputs for signed-in
 users fetch a quote after an 800 ms pause. The compact Run button displays the estimated cost
 (waterfall: “Run from” the cheapest selected vendor’s quoted price); per-service prices appear below the input. The page
 has no price-confirmation modal. Clicking a current affordable quote dispatches immediately.
@@ -242,7 +259,8 @@ prevent controlled rankings, and returned fields are not independently verified.
 
 The heading's “Setup treg in” button shows Claude Code, Codex, OpenClaw and Hermes logos plus
 the count of other choices. It opens a native dialog using the same `AgentPicker` and
-`SetupInstructions` components as the dashboard welcome modal (`agent-setup.js`). The remembered
+`SetupInstructions` components as the dashboard welcome modal (`agent-setup.js`). The instruction
+label sits inside the prompt card alongside Copy, above the setup command. The remembered
 `treg-agent` choice, expanded agent list and Grok Bot plugin step are shared. The setup text points
 to this deployment's `/llms.txt`. Continuing as a signed-in team member fetches `/auth/cli-token`
 for the active team; the token is masked by default, copied only on click, never persisted by the
@@ -251,10 +269,12 @@ Next opens the shared third “Try it out” step: four copyable example prompts
 message, grouped OAuth provider links and Skip/Browse all catalog actions. Copying an example
 only writes its prompt to the clipboard; provider links open the main app’s provider page without
 starting OAuth. The example definitions and `TryItOut` component are shared with dashboard onboarding.
-Visitors without a team receive the setup line and agent-guided login instructions. Opening setup
-does not start an Arena run or change its inputs/history.
+Signed-in visitors without a team first name and create their team inside the setup modal, matching
+the dashboard welcome flow. The agent step then fetches a token for that team; authenticated users
+never silently fall back to guest instructions. Anonymous visitors still receive the setup line and
+agent-guided login instructions. Opening setup does not start an Arena run or change its inputs/history.
 
-The composer starts with one row. Add entry and per-row remove controls expand that same input
+The composer starts with two example rows. Add entry and per-row remove controls expand that same input
 to at most 50 enrichment/verification entries or 10 discovery queries, sharing the task, input variant, mode and vendor selection. Spreadsheet
 paste accepts TSV/CSV, quoted fields and matching column headers; it replaces the focused row
 and inserts the remaining pasted rows beside it, preserving other entries. Overflow and malformed
@@ -501,13 +521,62 @@ own keys, cancellation, duplicate start/vote, attributed progress/results and pr
 Frontend billing-flow checks: `node --test tests/js/enrich-arena.test.cjs` exercises inline pricing,
 price invalidation, login gating, duplicate clicks, quote expiry and the correct-team top-up link.
 
+### Conversion tracking
+
+`TregTracking` in `sitetrack.js` connects anonymous pageviews to the authenticated email and
+active `team` group after `loadIdentity`, including OAuth returns and team creation. Team switches
+clear the previous group; account changes clear the previous identified analytics session. The
+page still disables autocapture and recording. Explicit events contain product metadata only:
+
+- `arena_page_viewed` (immediately at mount, before data requests, once per page, `surface=arena|leaderboard|benchmark`) and
+  `arena_signup_opened` are browser events. `entry_surface` is the first observed product surface
+  from the 90-day first-party cookie, distinct from UTMs/referrer; it is not historical attribution
+  for visits before this tracking shipped.
+- `signup_completed` is emitted by email OTP and GitHub/Google provisioning **after commit and
+  only for a new User**. Returning sign-ins and failed proofs do not count. `signup_method` and
+  the allowlisted entry surface are included. The event uses the same email identity as calls.
+- `arena_run_started` is emitted after a successful database claim, not for quotes or duplicate
+  start requests. `arena_run_completed` is emitted after saving the initial run's terminal state.
+  Both include run ID, capability, mode, entry count and team; completion includes `successful_call`
+  (at least one hit or evaluated miss) and `returned_data` (at least one hit). Manual Try and
+  verification continue to emit ordinary `tool_called` events with `client=enrich-arena` without
+  creating another logical-run event. Completion after a process crash is not reconstructed.
+- `arena_topup_clicked` records the link click. The app carries `checkout_source=arena` to both
+  top-up entry points even if SPA navigation removes the query. `topup_started` and the credited
+  `topup_completed` include both first entry and checkout source. Stripe Session and PaymentIntent
+  metadata carry both so either webhook order works; the top-up ledger metadata persists them.
+
+For an Arena visitor funnel, count unique people with `arena_page_viewed` **filtered to
+`surface=arena`**, then `signup_completed`, then `tool_called` filtered to `client=enrich-arena`
+(and `outcome=ok` for successful calls). Use an ordered conversion window, e.g. 30 days; report
+returning-user activation separately from new-signup activation. Do not count child calls as users
+or batches as multiple runs. To include a teammate paying, join an activated person's run/call
+`team` to subsequent `topup_completed` events and deduplicate people/teams at the intended grain;
+a person-only payment funnel misses those conversions. Count the first paid top-up per team for
+new-payer conversion, not repeat purchases or checkout redirects. Acquisition and checkout-source
+breakdowns answer different questions and should stay separate.
+
+Events remain best-effort PostHog analytics (disabled without a configured key); the existing
+ledger is the durable payment source. No schema migration or historical backfill is part of this
+tracking change. Live dashboard configuration and production event delivery must be checked after
+deployment. Tests exercise fresh-vs-returning auth, batch deduplication, both webhook orders,
+identity/group switching and exclusion of enrichment inputs from event properties.
+
 ### Optional verification after contact lookup
 
 Find work email and Find phone number enable verification by default for new queries. The switch choice is persisted in the draft and bound into the server quote.
-Restoring an explicit draft opt-out or historical run preserves its recorded setting. Each found result gets one follow-up check with the
-cheapest currently accessible verifier (own keys cost zero). Battle quotes include the cap for
-every vendor/entry; waterfall quotes include one check per entry. Misses incur no verification
-call. The original found contact is retained alongside the verifier's status and provider.
+Restoring an explicit draft opt-out or historical run preserves its recorded setting. New email checks,
+automatic and table-triggered, call `treg.people.email.verify` through the ordinary routed runtime.
+The quoted ceiling sums accessible verifier estimates (own keys cost zero), with candidates preferred
+in price order. The frozen provider set, catalog hashes and route max-cost header bound execution;
+newly added providers cannot silently enter an existing quote. The router falls back on unavailable
+providers and missing verdicts, subject to its existing error-fallback limit, and stops on completed
+valid, invalid or risky verdicts. Every child uses normal credit reservation and settlement.
+Phone checks remain a direct Tomba call because there is only one integrated phone verifier.
+Battle quotes include the verification ceiling for every vendor/entry; lookup waterfall quotes
+include one ceiling per entry. Lookup misses incur no verification call. The original found contact
+is retained alongside the actual serving verifier, tried-provider trace and total verification charge.
+Saved quotes retain their original policy; obtain a fresh quote to use the email waterfall.
 Invalid and catch-all verdicts are completed checks, not failed lookups. Waterfall still stops
 at the first structural lookup hit; verification does not silently start another lookup.
 

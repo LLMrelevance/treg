@@ -4705,7 +4705,7 @@ createApp({
       // Named differently from the server's topup_started (same click, two vantage points —
       // a shared name would double-count in trends); this one exists to link session replays.
       this.track('topup_checkout_opened',{amount_usd:amount});
-      try{ const out=await this.api('/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({amount_usd:amount})});
+      try{ const out=await this.api('/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({amount_usd:amount,checkout_source:window.TregTracking?.checkoutSource()||'app'})});
         // Stripe's own hosted page does the payment; the balance moves when its webhook lands, never
         // on the return redirect (which a payer could simply type). Same tab, so the return lands here.
         window.location.href=out.url; }
@@ -4736,7 +4736,7 @@ createApp({
           this.billing=await this.api('/billing/autotopup',{method:'POST',headers:{'content-type':'application/json'},
             body:JSON.stringify({enabled:true, consent:true, amount_usd:this.autoAmount, threshold_usd:this.autoThreshold, monthly_cap_usd:this.autoCapUsd, setup_url:false})});
         }
-        const out=await this.api('/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({amount_usd:usd})});
+        const out=await this.api('/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({amount_usd:usd,checkout_source:window.TregTracking?.checkoutSource()||'app'})});
         window.location.href=out.url; }
       catch(e){ this.topupErr='Could not start the payment: '+(e.detail||e.status); this.billingBusy=false; } },
     // The toggle itself never arms auto top-up - it can only DISARM (off is safe) or open the
@@ -5034,7 +5034,7 @@ createApp({
         this.skillResults=r.results; await this.loadAll();
         if(r.results.length && r.results.every(x=>x.ok)){ setTimeout(()=>{ this.newSkill=false; }, 1000); } }
       catch(e){ this.skillErr='Import failed: '+(e.detail||e.message||(e.status?('HTTP '+e.status):'request failed - try registering fewer skills at once')); } finally{ this.skillBusy=false; } },
-    logout(){ try{ if(window.Intercom) window.Intercom('shutdown'); }catch(e){}  // drop the Intercom cookie so the next user on this machine can't read these conversations
+    logout(){ window.TregTracking?.identify('',''); try{ if(window.Intercom) window.Intercom('shutdown'); }catch(e){}  // drop the Intercom cookie so the next user on this machine can't read these conversations
       if(this.sessionMode){ fetch('/auth/logout',{method:'POST',credentials:'include'}).finally(()=>{localStorage.removeItem('treg-active');location.reload();}); } else { this.cfg={active:null,orgs:{}}; this.save(); location.reload(); } },
     dot(s){ return s==='unknown'||s==='-'?'○':'●'; },
     short(e){ return (e||'').split('@')[0]; },
@@ -5126,7 +5126,7 @@ createApp({
         session_recording:{maskAllInputs:true, maskTextSelector:'pre, .lc-codewrap, .agent-copy'}});
       this.analyticsIdentify();
     },
-    analyticsIdentify(){ if(!window.posthog || !window.posthog.identify || !this.me) return;
+    analyticsIdentify(){ if(!this.me)return; if(window.TregTracking){window.TregTracking.identify(this.me,this.activeSlugNow);return;} if(!window.posthog || !window.posthog.identify || !this.me) return;
       try{ window.posthog.identify(this.me, {email:this.me}); if(this.activeSlugNow) window.posthog.group('team', this.activeSlugNow); }catch(e){} },
     track(name, props){ try{ if(window.posthog && window.posthog.capture) window.posthog.capture(name, props||{}); }catch(e){} },
     // Support chat (Intercom) — only when this deployment opted in (meta.intercom_app_id present);

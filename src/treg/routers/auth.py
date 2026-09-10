@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -93,7 +94,8 @@ async def auth_email_verify(
     cookie. The CLI reads the token from the body; the dashboard just reloads into session mode
     (same path as GitHub login) — one endpoint serves both clients."""
     try:
-        verified = await auth_use_cases.verify_email_login(body.email, body.code)
+        verified = await auth_use_cases.verify_email_login(body.email, body.code,
+            entry_surface=request.cookies.get("treg_entry_surface", ""))
     except auth_use_cases.EmailAuthError as exc:
         raise _email_http_error(exc) from exc
     resp = JSONResponse({"token": verified.token, "email": verified.email})
@@ -229,9 +231,29 @@ def _auth_page(headline: str, sub: str = "", *, ok: bool = True, status: int = 2
     return HTMLResponse(html, status_code=status)
 
 
+def _arena_return_target(target: str) -> str:
+    """Keep OAuth returns within Arena, including its selected task or saved run."""
+    if len(target) > 2048 or any(ord(c) < 32 or ord(c) == 127 or c == "\\" for c in target):
+        return ""
+    try:
+        url = urlsplit(target)
+    except ValueError:
+        return ""
+    if url.scheme or url.netloc or url.fragment or url.path not in {
+        "/enrich-arena", "/enrich-arena/leaderboard", "/enrich-arena/people-search-bench",
+    }:
+        return ""
+    params = parse_qsl(url.query, keep_blank_values=True)
+    if any(k not in {"run", "team", "capability", "variant", "mode"} for k, _ in params):
+        return ""
+    if len({k for k, _ in params}) != len(params):
+        return ""
+    return url.path + ("?" + urlencode(params) if params else "")
+
+
 def _arena_login_return(resp, request: Request, target: str) -> None:
-    # One allowlisted first-party destination, not an arbitrary open redirect primitive.
-    if target == "/enrich-arena":
+    target = _arena_return_target(target)
+    if target:
         resp.set_cookie("treg_arena_return", target, httponly=True, max_age=600,
                         samesite="lax", secure=_is_https(request))
     else:
@@ -244,7 +266,7 @@ def _finish_oauth_login(request: Request, user: User, st: tuple | None) -> Redir
     handshake goes through the SAME team picker as the other doors (instead of completing blind — which
     would leave the CLI guessing the org). The picker's POST /auth/cli/approve reads this same cookie."""
     login_id = st[0] if st is not None else None
-    browser_dest = "/enrich-arena" if request.cookies.get("treg_arena_return") == "/enrich-arena" else "/app"
+    browser_dest = _arena_return_target(request.cookies.get("treg_arena_return", "")) or "/app"
     dest = f"/login?cli={login_id}" if login_id else browser_dest
     resp = RedirectResponse(dest, status_code=302)
     resp.set_cookie(sess.COOKIE, sess.make_session(user.id, token_version=user.token_version), httponly=True,
@@ -270,6 +292,7 @@ async def auth_github_callback(
         proof = await auth_use_cases.complete_github_login(
             lambda: request.app.state.http, code, state, treg_oauth_state,
             lambda: _login_callback_base(request),
+            entry_surface=request.cookies.get("treg_entry_surface", ""),
         )
     except auth_use_cases.SocialLoginError as exc:
         return _social_login_failure(exc)
@@ -299,6 +322,7 @@ async def auth_google_callback(
         proof = await auth_use_cases.complete_google_login(
             lambda: request.app.state.http, code, state, treg_oauth_state,
             lambda: _login_callback_base(request),
+            entry_surface=request.cookies.get("treg_entry_surface", ""),
         )
     except auth_use_cases.SocialLoginError as exc:
         return _social_login_failure(exc)

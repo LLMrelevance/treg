@@ -34,6 +34,9 @@ test('Page-scrolling headers stop at table bounds, offset nested headers, and cl
  table.querySelector=()=>row;directives.stickyHeader.updated(table);pending();assert.equal(entryOffset,240);
  listeners.get('scroll')();pending();assert.equal(entryOffset,240,'Repeated scroll updates must not drift');
  end=20;listeners.get('scroll')();pending();assert.equal(entryOffset,140,'Entry stops at the end of its details');
+ runtime.window.matchMedia=()=>({matches:true});listeners.get('resize')();pending();
+ assert.equal(offset,'0px');assert.equal(entryOffset,0,'Mobile cards must not be covered by a pinned overview');
+ runtime.window.matchMedia=()=>({matches:false});listeners.get('resize')();pending();assert.equal(entryOffset,140);
  table.querySelector=()=>null;directives.stickyHeader.updated(table);pending();assert.equal(entryOffset,0);
  table.closest=()=>({closest:()=>({tHead:head,querySelector:()=>row})});listeners.get('scroll')();pending();assert.equal(offset,'370px');
  bounds.top=-2000;listeners.get('scroll')();pending();assert.equal(offset,'960px');
@@ -139,7 +142,7 @@ test('Changing input makes a quote unusable even before the watcher runs',()=>{
  const {app,price}=setup();price();app.mode='compare';assert.equal(app.readyQuote,null);
 });
 test('Insufficient credits go to the selected team billing page without dispatch',async()=>{
- const {app,price,destinations,stored}=setup();price({affordable:false});app.api=()=>assert.fail('Must not dispatch');await app.submit();assert.deepEqual(destinations,['/app#billing']);assert.equal(stored.get('treg-active'),'test-team');assert.equal(JSON.parse(stored.get('treg.arena.draft.v1')).pending,false);
+ const {app,price,destinations,stored}=setup();price({affordable:false});app.api=()=>assert.fail('Must not dispatch');await app.submit();assert.deepEqual(destinations,['/app?from=enrich-arena#billing']);assert.equal(stored.get('treg-active'),'test-team');assert.equal(JSON.parse(stored.get('treg.arena.draft.v1')).pending,false);
 });
 test('Anonymous submission triggers login without sending a plan or paid request',async()=>{
  const {app}=setup();app.user=null;let login=false;app.openLogin=async pending=>{login=pending;};app.api=()=>assert.fail('Must not call before login');await app.submit();assert.equal(login,true);
@@ -151,7 +154,7 @@ test('Incomplete names never request pricing',async()=>{
  const {app}=setup();app.inputs.full_name='Test';app.api=()=>assert.fail('Must validate first');await app.submit();assert.match(app.error,/first and last name/);
 });
 test('A balance consumed elsewhere redirects a rejected start to top-up',async()=>{
- const {app,price,destinations}=setup();price();app.api=async()=>{throw Object.assign(new Error('Not enough credits'),{status:402});};await app.submit();assert.deepEqual(destinations,['/app#billing']);assert.equal(app.busy,false);
+ const {app,price,destinations}=setup();price();app.api=async()=>{throw Object.assign(new Error('Not enough credits'),{status:402});};await app.submit();assert.deepEqual(destinations,['/app?from=enrich-arena#billing']);assert.equal(app.busy,false);
 });
 
 test('Vendor estimates appear before login or a complete input and follow input type',()=>{
@@ -233,7 +236,7 @@ test('A higher manual price is displayed for another click before spending',asyn
 test('Manual attempts with insufficient credits go to billing without starting',async()=>{
  const {app,destinations}=setup();app.run={id:'session',state:'completed'};app.runTeam=app.team;const calls=[];
  app.api=async path=>{calls.push(path);return {id:'price',estimate_micro:100,affordable:false,expires_at:new Date(Date.now()+60000).toISOString()};};
- await app.tryVendor({id:'next',can_try:true,estimate_micro:100});assert.equal(calls.length,1);assert.deepEqual(destinations,['/app#billing']);
+ await app.tryVendor({id:'next',can_try:true,estimate_micro:100});assert.equal(calls.length,1);assert.deepEqual(destinations,['/app?from=enrich-arena#billing']);
 });
 test('Reporting incorrect data sends feedback without dispatching vendor calls',async()=>{
  const {app}=setup();app.run={id:'session',state:'completed'};app.runTeam=app.team;const calls=[];const row={id:'answer',rating:{value:'down'}};
@@ -808,4 +811,96 @@ test('Vendor self-serve copy uses the published listing prompt and reports clipb
  const {app,runtime}=setup();let copied='';runtime.navigator={clipboard:{writeText:async text=>{copied=text;}}};
  await app.copyVendorListingPrompt();assert.equal(copied,'Read https://treg.to/vendor-listing.md and add our API to the treg catalog, then open a PR.');assert.equal(app.vendorPromptCopied,true);
  runtime.navigator.clipboard.writeText=async()=>{throw Error('Denied');};await app.copyVendorListingPrompt();assert.equal(app.vendorPromptCopied,false);assert.match(app.vendorPromptError,/Select and copy/);
+});
+
+test('Email signup opens agent setup and preserves the draft without running',async()=>{
+ const {app,stored}=setup({search:''});const calls=[];
+ app.pendingSubmit=true;app.$refs={loginDialog:{close:()=>calls.push('close')}};
+ app.api=async url=>{calls.push(url);};app.loadIdentity=async()=>calls.push('identity');
+ app.restoreLinkedRun=async()=>{calls.push('restore');return true;};
+ app.openSetup=async()=>calls.push('setup');app.prepare=async()=>assert.fail('Must not resume spending');
+ await app.verifyEmail();
+ assert.deepEqual(calls,['/auth/email/verify','close','identity','restore','setup']);
+ assert.equal(app.pendingSubmit,false);
+ assert.equal(JSON.parse(stored.get('treg.arena.draft.v1')).inputs.domain,'example.com');
+});
+test('Failed email signup does not open setup',async()=>{
+ const {app}=setup();app.api=async()=>{throw new Error('Invalid code');};app.openSetup=async()=>assert.fail('Unauthenticated setup');
+ await app.verifyEmail();assert.equal(app.authError,'Invalid code');
+});
+test('OAuth signup returns to the selected page and opens setup once',async()=>{
+ for(const provider of ['google','github']){
+  const {app,stored,destinations}=setup({pathname:'/enrich-arena',search:'?run=saved&team=test-team'});
+  app.socialLogin(provider);
+  assert.equal(destinations[0],'/auth/'+provider+'?return_to='+encodeURIComponent('/enrich-arena?run=saved&team=test-team'));
+  let opened=0;app.openSetup=async()=>opened++;
+  app.user=null;assert.equal(await app.resumeSignupSetup(),false);assert.equal(opened,0);
+  app.user={id:1};assert.equal(await app.resumeSignupSetup(),true);assert.equal(opened,1);
+  assert.equal(await app.resumeSignupSetup(),false);assert.equal(opened,1);
+  stored.set('treg.arena.signup-setup.v1',JSON.stringify({at:Date.now()-600001}));
+  assert.equal(await app.resumeSignupSetup(),false);assert.equal(opened,1);
+ }
+});
+
+test('New signup creates a named team before showing its setup token',async()=>{
+ const {app,stored}=setup();app.team='';app.teams=[];
+ app.$refs={setupDialog:{showModal(){},close(){}}};await app.openSetup();assert.equal(app.setupStep,0);
+ const calls=[];app.api=async(url,options,team)=>{
+  calls.push(url);
+  if(url==='/orgs'){assert.equal(options.method,'POST');assert.deepEqual(JSON.parse(options.body),{name:'My team'});return {org:'my-team'};}
+  assert.equal(url,'/auth/cli-token');assert.equal(team,'my-team');return {token:'fake-setup-secret'};
+ };
+ app.loadIdentity=async()=>{assert.equal(app.team,'my-team');};
+ await app.prepareSetup();assert.equal(app.setupStep,0);assert.deepEqual(calls,[]);
+ app.setupTeamName=' My team ';await app.createSetupTeam();assert.equal(app.setupStep,1);
+ await app.prepareSetup();assert.equal(app.setupStep,2);assert.equal(app.setupToken,'fake-setup-secret');assert.equal(app.setupShowToken,false);
+ assert.deepEqual(calls,['/orgs','/auth/cli-token']);
+ assert.ok(!Array.from(stored.values()).some(v=>v.includes('fake-setup-secret')));
+});
+test('Failed team creation stays in the modal and duplicate submissions are blocked',async()=>{
+ const {app}=setup();app.team='';app.setupStep=0;app.setupTeamName='My team';let reject,calls=0,closed=0;
+ app.$refs={setupDialog:{close(){closed++;}}};app.api=()=>{calls++;return new Promise((_,r)=>reject=r);};
+ const pending=app.createSetupTeam();await app.createSetupTeam();app.closeSetup();assert.equal(calls,1);assert.equal(closed,0);
+ reject(new Error('Could not create team'));await pending;
+ assert.equal(app.setupStep,0);assert.equal(app.setupLoading,false);assert.equal(app.setupToken,null);assert.equal(app.setupError,'Could not create team');
+});
+test('Successful team creation is retained if refreshing the account fails',async()=>{
+ const {app}=setup();app.team='';app.setupStep=0;app.setupTeamName='My team';
+ app.api=async()=>({org:'my-team'});app.loadIdentity=async()=>{throw new Error('Refresh failed');};
+ await app.createSetupTeam();assert.equal(app.team,'my-team');assert.equal(app.setupStep,1);
+ app.api=async(url,_,team)=>{assert.equal(url,'/auth/cli-token');assert.equal(team,'my-team');return {token:'test-token'};};
+ await app.prepareSetup();assert.equal(app.setupStep,2);
+});
+
+test('New Arena visits show two editable examples without starting a run',async()=>{
+ const {app,runtime,mounted}=setup({pathname:'/enrich-arena',search:''});runtime.setInterval=()=>1;
+ app.tasks[0].examples=[[{full_name:'First Example',domain:'one.example'},{full_name:'Second Example',domain:'two.example'}]];
+ app.inputs={};app.loadInsights=()=>{};app.loadIdentity=async()=>{app.user=null;};app.api=async path=>path==='/arena/tasks'?app.tasks:{};
+ app.startRun=()=>assert.fail('Samples must never auto-run');await mounted.call(app);
+ assert.equal(app.inputs.domain,'one.example');assert.equal(app.extraInputs.length,1);assert.equal(app.extraInputs[0].domain,'two.example');
+ app.inputs.domain='edited.example';assert.equal(app.tasks[0].examples[0][0].domain,'one.example');
+});
+test('Saved drafts, including intentionally blank rows, are not replaced by samples',async()=>{
+ for(const inputs of [{full_name:'My Person',domain:'mine.example'},{}]){
+  const {app,runtime,stored,mounted}=setup({pathname:'/enrich-arena',search:''});runtime.setInterval=()=>1;
+  app.tasks[0].examples=[[{full_name:'First Example',domain:'one.example'},{full_name:'Second Example',domain:'two.example'}]];
+  stored.set('treg.arena.draft.v1',JSON.stringify({taskId:app.taskId,variant:0,inputs,extraInputs:[],at:Date.now()}));
+  app.loadInsights=()=>{};app.loadIdentity=async()=>{app.user=null;};app.api=async path=>path==='/arena/tasks'?app.tasks:{};
+  await mounted.call(app);assert.equal(JSON.stringify(app.inputs),JSON.stringify(inputs));assert.equal(app.extraInputs.length,0);
+ }
+});
+test('Task and input type switches select their own examples without modifying shared samples',()=>{
+ const {app}=setup();app.booted=false;
+ app.tasks.push({id:'companies.enrich',variants:[['domain'],['name']],examples:[[{domain:'one.example'},{domain:'two.example'}],[{name:'One Company'},{name:'Two Company'}]],fields:[]});
+ app.chooseTask('companies.enrich');assert.equal(app.inputs.domain,'one.example');assert.equal(app.extraInputs.length,1);
+ app.chooseVariant(1);assert.equal(app.inputs.name,'One Company');assert.equal(app.inputs.domain,undefined);
+ app.extraInputs[0].name='Edited';app.chooseVariant(0);app.chooseVariant(1);assert.equal(app.extraInputs[0].name,'Two Company');
+});
+test('Arena counts arrival before data loading, including a failed page-data request',async()=>{
+ const {app,runtime,mounted}=setup({pathname:'/enrich-arena',search:''}),events=[];
+ runtime.setInterval=()=>1;app.loadInsights=async()=>{};
+ runtime.window.TregTracking={capture:(...args)=>events.push(args)};
+ app.api=async()=>{assert.equal(events[0][0],'arena_page_viewed');throw new Error('Data unavailable');};
+ await mounted.call(app);
+ assert.equal(events.length,1);assert.equal(app.error,'Data unavailable');
 });

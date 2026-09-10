@@ -385,11 +385,23 @@ async def test_oauth_return_only_allows_arena(clients,monkeypatch):
     from starlette.requests import Request
     from treg.routers.auth import _finish_oauth_login
     u=SimpleNamespace(id=1,token_version=0)
-    for value,expected in [('/enrich-arena','/enrich-arena'),('https://evil.example','/app'),('//evil.example','/app')]:
+    for value,expected in [
+        ('/enrich-arena', '/enrich-arena'),
+        ('/enrich-arena?run=saved&team=my-team', '/enrich-arena?run=saved&team=my-team'),
+        ('/enrich-arena?capability=people.phone.find&variant=0', '/enrich-arena?capability=people.phone.find&variant=0'),
+        ('/enrich-arena/leaderboard', '/enrich-arena/leaderboard'),
+        ('/enrich-arena/people-search-bench', '/enrich-arena/people-search-bench'),
+        ('https://evil.example', '/app'), ('//evil.example', '/app'),
+        ('/enrich-arena/../app', '/app'), ('/enrich-arena?redirect=https://evil.example', '/app'),
+        ('/enrich-arena?team=a&team=b', '/app'), ('/enrich-arena#evil', '/app'),
+    ]:
         req=Request({'type':'http','scheme':'http','server':('registry',80),'path':'/auth/google/callback',
                      'headers':[(b'cookie',('treg_arena_return='+value).encode())]})
         response=_finish_oauth_login(req,u,None)
         assert response.headers['location']==expected
+        from treg.routers.auth import _arena_return_target
+        assert (_arena_return_target(value) or '/app') == expected
+        assert _finish_oauth_login(req,u,('cli-id',)).headers['location']=='/login?cli=cli-id'
 
 
 async def test_cancel_releases_reserved_credit_once(clients, enrichment_on, monkeypatch):
@@ -1096,7 +1108,7 @@ async def test_auto_email_verification_is_priced_and_invalid_verdict_preserves_e
     monkeypatch.setattr(service, 'relay', _relay_by_provider({'tomba':[(200,TOMBA_HIT)], 'leadmagic':[(200,{'email_status':'invalid'})]}, seen))
     base = await plan(clients, mode='waterfall')
     q = await plan(clients, mode='waterfall', auto_verify=True)
-    assert q['auto_verify']['provider'] == 'leadmagic'
+    assert q['auto_verify']['provider'] == 'treg'
     assert q['required_micro'] == base['required_micro'] + q['verification_estimate_micro']
     before = await _balance(clients)
     final = await finish(clients, q)
@@ -1283,8 +1295,8 @@ async def test_new_free_verifier_is_selected_for_auto_verification(clients, enri
     seen=[]
     monkeypatch.setattr(service,'relay',_relay_by_provider({'tomba':[(200,TOMBA_HIT)],'contactout':[(200,{'status_code':200,'data':{'status':'valid'}})]},seen))
     q=await plan(clients,mode='waterfall',providers=['tomba'],auto_verify=True)
-    assert q['auto_verify']['provider']=='contactout'
-    assert q['auto_verify']['estimate_micro']==0
+    assert q['auto_verify']['provider']=='treg'
+    assert q['auto_verify']['estimate_micro']>0
     final=await finish(clients,q)
     result=final['results'][0]
     assert result['verification']['provider']=='contactout'
@@ -1292,3 +1304,73 @@ async def test_new_free_verifier_is_selected_for_auto_verification(clients, enri
     assert result['verification']['charged_micro']==0
     assert result['charged_micro']==result['lookup_charged_micro']
     assert [c[0] for c in seen]==['tomba','contactout']
+
+@pytest.mark.parametrize('automatic', [True, False])
+@pytest.mark.parametrize('first_response', [(403, {'status_code':403,'message':'Out of credits'}), (200, {'status_code':200,'data':{}})])
+@pytest.mark.parametrize('verdict', ['valid', 'invalid', 'catch_all'])
+async def test_email_verification_uses_routed_fallback_and_accounts_for_children(clients, enrichment_on, monkeypatch, automatic, first_response, verdict):
+    from treg.config import get_settings
+    monkeypatch.setenv('TREG_PLATFORM_PROVIDERS','tomba,contactout,leadmagic')
+    monkeypatch.setenv('TREG_PLATFORM_KEY_CONTACTOUT','SYNTHETIC-VERIFICATION-KEY')
+    get_settings.cache_clear()
+    seen=[]
+    monkeypatch.setattr(service,'relay',_relay_by_provider({
+        'tomba':[(200,TOMBA_HIT)], 'contactout':[first_response],
+        'leadmagic':[(200,{'email_status':verdict})]},seen))
+    before=await _balance(clients)
+    final=await finish(clients,await plan(clients,mode='waterfall',providers=['tomba'],auto_verify=automatic))
+    if not automatic:
+        path='/arena/runs/'+final['id']+'/attempts/'+final['results'][0]['id']+'/verification'
+        q=(await clients.post(path+'/plan')).json()
+        assert q['provider']=='treg' and q['estimate_micro']>0
+        assert (await clients.post(path+'/start',json={'quote_id':q['id']})).status_code==200
+        await asyncio.wait_for(asyncio.shield(arena._owners[final['id']]),15)
+        final=(await clients.get('/arena/runs/'+final['id'])).json()
+    v=final['results'][0]['verification']
+    assert v['state']=='hit' and v['provider']=='leadmagic'
+    assert v['served_by']=='leadmagic.people.email.verify'
+    assert v['output']['status']==verdict
+    assert [t['provider'] for t in v['tried']]==['contactout','leadmagic']
+    assert [c[0] for c in seen]==['tomba','contactout','leadmagic']
+    assert before-await _balance(clients)==final['charged_micro']
+    assert v['charged_micro']>0
+    assert bool(final['results'][0].get('report'))==(verdict=='invalid')
+    async with session_maker() as db:
+        assert not (await db.execute(select(Hold))).scalars().all()
+
+
+def test_every_task_input_type_has_two_valid_public_examples():
+    tasks=arena.public_tasks()
+    for task in tasks:
+        assert len(task['examples'])==len(task['variants'])
+        for variant,entries in zip(task['variants'],task['examples']):
+            assert len(entries)==2
+            assert all(set(row)==set(variant) for row in entries)
+            assert len(rules.validate_entries(task['id'],None,entries))==2
+        if task['id']=='companies.enrich':
+            linked=next(entries for variant,entries in zip(task['variants'],task['examples']) if variant==('linkedin_url',))
+            assert all('/company/' in row['linkedin_url'] for row in linked)
+
+
+async def test_tracking_counts_one_batch_run_and_keeps_inputs_out(clients, enrichment_on, monkeypatch):
+    from treg import analytics
+    events = []
+    monkeypatch.setattr(analytics, "capture", lambda *a, **k: events.append((a, k)))
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "hunter": [(200, HUNTER_HIT)] * 2, "tomba": [(200, TOMBA_HIT)] * 2}, []))
+    q = await batch_plan(clients)
+    assert not [a for a, k in events if a[1].startswith("arena_run_")]
+    await finish(clients, q)
+    await finish(clients, q)
+    logical = [(a, k) for a, k in events if a[1].startswith("arena_run_")]
+    assert [a[1] for a, k in logical] == ["arena_run_started", "arena_run_completed"]
+    assert all(a[2]["entry_count"] == 2 and a[2]["run_id"] == q["id"] for a, k in logical)
+    assert logical[-1][0][2]["successful_call"] is True
+    assert logical[-1][0][2]["returned_data"] is True
+    assert all(k["groups"]["team"] for a, k in logical)
+    calls = [a for a, k in events if a[1] == "tool_called"]
+    assert len(calls) == 4
+    assert all(a[2]["client"] == "enrich-arena" for a in calls)
+    # Event identity is the account email; search inputs and returned contact data are absent.
+    props = json.dumps([a[2] for a, k in events])
+    assert IDENTITY["domain"] not in props and SECOND_IDENTITY["domain"] not in props

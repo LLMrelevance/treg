@@ -388,6 +388,16 @@ strands those events behind a cancelled flusher. The engine adds Postgres pool
 hygiene (`pool_pre_ping`/`pool_recycle`/sizing) for non-SQLite URLs, and `verify_db` refuses to start with
 no `TREG_SECRET_KEY` on a real DB (an ephemeral key would lose every stored secret on restart).
 
+Arena adds `arena_run_started` / `arena_run_completed` after its claim/final save; ordinary
+`tool_called.client=enrich-arena` still attributes each lookup, Try and verification. Browser
+`TregTracking.identify` joins those email identities to anonymous Arena pageviews and the active
+team group. Email OTP and social auth emit `signup_completed` only after committing a newly
+created user. `treg_entry_surface` is a first-observed, 90-day product-surface cookie; server
+`funnel_surface` accepts only fixed surface names, never URLs or search data. Manual top-up events
+include this acquisition surface and a separate `checkout_source`, also copied through Stripe
+metadata into the durable top-up ledger metadata. See [Arena conversion tracking](../interface/enrich-arena.md#conversion-tracking)
+for event definitions, conversion denominators and the person-to-team payment join.
+
 Infrastructure faults use the same DB-independent queue through `capture_fault`: PostHog `$exception`
 events have the fixed `treg-server` identity and carry only the exception class, at most 500 characters
 of its string, an unhandled mechanism, and component/logger labels. URL query strings in the exception

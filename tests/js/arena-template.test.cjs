@@ -23,3 +23,13 @@ test('The actual Vue runtime compiles the shared Arena page and every component 
 test('Template compilation catches nested interpolation inside an expression',()=>{
  assert.throws(()=>compiler()(`<span>{{true?'ok':'{{false?'nested':'bad'}}'}}</span>`),/missing|Unexpected|Syntax/);
 });
+
+test('Batch outcome badges render in the root Arena context',()=>{
+ const html=fs.readFileSync(path.join(web,'enrich-arena.html'),'utf8');
+ const matrix=html.slice(html.indexOf('class="results-table batch-matrix"'),html.indexOf('<template id="arena-result-table-template">'));
+ const badge=matrix.match(/<span class="outcome"[^>]*>[\s\S]*?<\/span>/)[0];
+ const result={state:'hit'};
+ const vnode=compiler()(badge)({r:result,outcomeClass:r=>r.state==='hit'?'hit':'miss',outcomeLabel:()=> 'Found'},[]);
+ assert.equal(vnode.props.class,'outcome hit');
+ assert.equal(vnode.children,'Found');
+});

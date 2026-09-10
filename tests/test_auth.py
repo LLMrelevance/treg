@@ -308,3 +308,18 @@ async def test_google_bad_state_rejected(goog):
 
 async def test_meta_exposes_google_flag(goog):
     assert (await goog.get("/meta")).json()["google"] is True
+
+
+async def test_oauth_callback_carries_arena_acquisition_and_counts_signup_once(gc, monkeypatch):
+    from treg import analytics
+    events = []
+    monkeypatch.setattr(analytics, "capture", lambda *a, **k: events.append(a))
+    gc.cookies.set("treg_entry_surface", "arena")
+    for _ in range(2):
+        await gc.get("/auth/github", params={"return_to": "/enrich-arena"})
+        state = gc.cookies.get("treg_oauth_state")
+        r = await gc.get("/auth/github/callback", params={"code": "test", "state": state})
+        assert r.status_code == 302 and r.headers["location"] == "/enrich-arena"
+    signups = [a for a in events if a[1] == "signup_completed"]
+    assert len(signups) == 1
+    assert signups[0][2] == {"signup_method": "github", "entry_surface": "arena"}

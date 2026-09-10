@@ -36,7 +36,7 @@ h3 { font-size:19px; letter-spacing:0; }
 .brand-divider { color:#BDB9B1; margin:0 4px; font-weight:400; }
 .brand-sub { font:500 14px var(--text); color:var(--muted); }
 .masthead nav { display:flex; align-items:center; gap:20px; font-size:13px; }
-.team-switcher { display:flex; align-items:center; gap:4px; }
+.team-switcher { display:flex; align-items:center; gap:4px; min-width:0; overflow:clip; padding:4px; }
 .team-switcher>span { color:var(--muted); }
 .masthead select { max-width:150px; background:transparent; border:0; padding:6px; }
 .text-button { padding:6px 0; border:0; border-radius:0; background:transparent; font-size:13px; }
@@ -106,12 +106,7 @@ main { width:100%; max-width:1080px; margin:0 auto; padding:0 28px; flex:1; }
 .matrix-value { display:block; font-size:12px; margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .award-badge.coverage { color:#85681B; background:#FFF8DB; }
 @media(max-width:600px) {
-  .multiple-entries .input-row { display:grid; grid-template-columns:16px minmax(0,1fr) 28px; column-gap:6px; row-gap:0; }
-  .multiple-entries .entry-number { grid-column:1; grid-row:1 / span 2; }
-  .multiple-entries .query-field { grid-column:2; }
-  .multiple-entries .remove-entry { grid-column:3; grid-row:1 / span 2; }
   .multiple-entries .query-field input { font-size:13px; }
-  .multiple-entries .query-field+.query-field { border-left:0; border-top:1px solid var(--line); padding-left:0; }
   .entry-tools { gap:10px; }
   .batch-matrix,.batch-matrix>tbody { display:block; min-width:0; }
   .batch-matrix>thead { display:none; }
@@ -228,7 +223,7 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:350px; overflow:a
   .results-table .detail-row>td { padding:0; }
   .row-detail .field-list { grid-template-columns:1fr; }
 }
-dialog { border:1px solid var(--line); border-radius:22px; background:var(--bg); color:var(--ink); padding:38px; width:min(94vw,470px); max-height:88vh; overflow:auto; box-shadow:0 30px 90px -20px #14120C40; }
+dialog { border:1px solid var(--line); border-radius:22px; background:var(--bg); color:var(--ink); padding:38px; width:min(94vw,470px); max-height:calc(100dvh - 24px); overscroll-behavior:contain; overflow:auto; box-shadow:0 30px 90px -20px #14120C40; }
 dialog::backdrop { background:#10101066; backdrop-filter:blur(4px); }
 dialog h2 { font-size:36px; margin-bottom:18px; }
 dialog>p:not(.eyebrow) { color:var(--muted); font-size:14px; margin-bottom:22px; }
@@ -290,7 +285,7 @@ dialog form>.primary { width:100%; margin-top:5px; }
 
 /* Tiny logo-headed fighters: the animation follows real attempt states. */
 .pixel-arena { margin:0 0 12px; background:#FFFFFFD9; border:.5px solid var(--line); border-radius:24px; overflow:hidden; }
-.fighter-roster { display:flex; justify-content:safe center; gap:30px; padding:4px 18px 10px; overflow-x:auto; scrollbar-width:thin; }
+.fighter-roster { position:relative; display:flex; justify-content:safe center; gap:30px; padding:4px 18px 10px; overflow-x:auto; scrollbar-width:thin; }
 .fighter-roster:focus-visible { outline-offset:-3px; }
 .fighter { position:relative; flex:0 0 92px; text-align:center; color:var(--ink); }
 .fighter-scene { height:85px; position:relative; isolation:isolate; }
@@ -672,7 +667,10 @@ dialog form>.primary { width:100%; margin-top:5px; }
 .price-amount { text-align:right; font:12px var(--mono); font-variant-numeric:tabular-nums; }
 .price-scale-note { text-align:right; font-size:10px; color:var(--muted); padding:8px; }
 @media(max-width:600px) {
-  .price-comparison-row { grid-template-columns:minmax(110px,1fr) minmax(30px,.65fr) 72px; gap:10px; padding-inline:0; }
+  .price-comparison-row { grid-template-columns:minmax(0,1fr) 72px; gap:8px 10px; padding:12px 0; }
+  .price-comparison-row .price-vendor { grid-column:1; grid-row:1; }
+  .price-comparison-row .price-amount { grid-column:2; grid-row:1; }
+  .price-comparison-row .price-track { grid-column:1/-1; grid-row:2; height:8px; }
   .price-vendor { font-size:11px; gap:7px; }
   .price-amount { font-size:11px; }
 }
@@ -806,7 +804,78 @@ dialog form>.primary { width:100%; margin-top:5px; }
   .masthead .arena-page-tabs { grid-column:1/-1; grid-row:2; }
   .masthead>nav[aria-label="Arena account"] { grid-column:2; grid-row:1; }
 }
+
+/* Mobile layouts keep wide data inside their own scroll regions. */
+body:has(dialog[open]) { overflow:hidden; }
+@media(max-width:760px) {
+  .leaderboard-filters .stats-views { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+  .leaderboard-filters .stats-views button { min-height:44px; font-size:13px; justify-content:flex-start; }
+  .leaderboard-filters .stats-views button:last-child:nth-child(odd) { grid-column:1/-1; }
+  .leaderboard-inputs label { min-height:44px; font-size:13px; }
+}
 @media(max-width:600px) {
-  .masthead>nav[aria-label="Arena account"] { max-width:calc(100vw - 130px); }
-  .arena-community { gap:12px; }
+  .masthead { grid-template-columns:minmax(0,1fr) auto auto; gap:8px; padding:12px 16px; }
+  .masthead>nav[aria-label="Arena account"] { display:contents; }
+  .masthead .brand { grid-column:1; grid-row:1; min-height:44px; }
+  .masthead .sign-in-button,.masthead .balance { grid-column:3; grid-row:1; justify-self:end; }
+  .masthead .arena-community { grid-column:2; grid-row:1; }
+  .masthead nav>.text-button { grid-column:3; grid-row:2; justify-self:end; }
+  .masthead .team-switcher { grid-column:1/3; grid-row:2; }
+  .masthead:has(nav>.text-button) .arena-page-tabs { grid-row:3; }
+  .masthead .arena-page-tabs { grid-column:1/-1; grid-row:2; width:100%; gap:2px; margin-top:0; }
+  .masthead .arena-page-tabs a { flex:1; min-height:44px; justify-content:center; padding:10px 6px; font-size:12px; }
+  .arena-community { gap:0; }
+  .arena-community a { min-width:44px; min-height:44px; }
+  .masthead .balance { display:flex; min-height:44px; }
+  .masthead .text-button,.masthead .sign-in-button { min-height:44px; }
+  .masthead select { width:160px; max-width:100%; min-height:44px; font-size:16px; }
+  .masthead select,.input-method select,dialog select,.report-form select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='m3 5 4 4 4-4' fill='none' stroke='%23737373' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 6px center; background-size:14px; padding-right:26px; }
+  .composer-tabs button { min-height:44px; }
+  .tab-overflow { width:50px; }
+  .tab-overflow button { width:44px; height:44px; }
+  .entry-inputs { overflow-x:auto; scrollbar-width:thin; overscroll-behavior-x:contain; padding-bottom:4px; }
+  .entry-labels,.multiple-entries .input-row { min-width:calc(108px + var(--input-columns)*112px); grid-template-columns:16px repeat(var(--input-columns),minmax(0,1fr)) 44px; }
+  .query-field input,.multiple-entries .query-field input { height:44px; font-size:16px; }
+  .remove-entry { width:44px; height:44px; }
+  .entry-actions { width:100%; flex-wrap:wrap; gap:4px 16px; }
+  .entry-tools .text-button { min-height:44px; }
+  .input-method { min-width:0; max-width:100%; }
+  .input-method select { min-height:44px; font-size:16px; }
+  .verification-switch { min-height:44px; font-size:13px; }
+  .entry-submit { width:100%; justify-content:space-between; margin-top:4px; }
+  .spreadsheet-hint { min-width:0; max-width:160px; font-size:12px; }
+  .run-button { min-height:44px; min-width:120px; font-size:13px; flex-shrink:0; }
+  .battle-modes button { min-height:44px; font-size:13px; }
+  .battle-explainer { font-size:12px; }
+  .setup-trigger { min-height:44px; }
+  .results-table-wrap { overscroll-behavior-x:contain; }
+  .matrix-overview.picked,.vendor-summary.picked { transform:none; }
+  .entry-detail-panel { position:static; width:100%; }
+  .result-detail-table .vendor-row>.row-actions { grid-column:1/-1; grid-row:auto; }
+  .rating-button,.details-button,.try-vendor { min-width:44px; min-height:44px; }
+  .matrix-entry,.matrix-result { min-height:44px; }
+  .batch-controls select,.report-form select,.report-form textarea { font-size:16px; }
+  .after-actions .text-button { min-height:44px; }
+  .fighter-request { min-width:44px; min-height:44px; }
+  .bench-category-tabs button { min-height:44px; }
+  .pricing-table th:first-child,.pricing-table td:first-child { position:sticky; left:0; z-index:1; background:var(--surface); }
+  dialog,.setup-dialog,.vendor-request-dialog { padding:24px 18px; border-radius:22px; }
+  dialog>h2 { padding-right:36px; }
+  .dialog-close { width:44px; height:44px; right:6px; top:6px; }
+  dialog input,dialog select,dialog textarea { font-size:16px; }
+  dialog button { min-height:44px; }
+  .setup-dialog .agent-card { min-width:0; padding:10px 8px; overflow-wrap:anywhere; }
+  .setup-dialog .lc-codewrap { padding-inline:12px; }
+}
+@media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+
+@container(max-width:400px) {
+  .result-detail-table .field-list>div { grid-template-columns:minmax(0,1fr); gap:4px; }
+}
+
+/* Keep community links in the top row without shrinking their touch targets. */
+@media(max-width:440px) { .masthead .arena-community a>span { display:none; } }
+@media(max-width:360px) {
+  .masthead .brand-name { display:none; }
+  .masthead .sign-in-button { padding-inline:14px; }
 }

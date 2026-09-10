@@ -53,6 +53,29 @@ TASKS = {
     )
 }
 
+# Public demo inputs only, never sampled customer queries or enrichment results.
+# Contact sources: patrickcollison.com/about; hubspot.com/company-news/author/dharmesh-shah.
+# Business phones: apple.com/contact; news.microsoft.com/ja-jp/cp/corpdata/.
+_EXAMPLE_INPUTS = (
+    {"full_name":"Patrick Collison", "domain":"stripe.com", "company_domain":"stripe.com",
+     "name":"Stripe", "linkedin_url":"https://www.linkedin.com/in/patrickcollison",
+     "email":"patrick@collison.ie", "phone":"+18006927753",
+     "q":"Software engineers at Stripe in the United States", "title":"Software Engineer", "country":"US"},
+    {"full_name":"Dharmesh Shah", "domain":"hubspot.com", "company_domain":"hubspot.com",
+     "name":"HubSpot", "linkedin_url":"https://www.linkedin.com/in/dharmesh",
+     "email":"dshah@hubspot.com", "phone":"+14258828080",
+     "q":"Sales leaders at HubSpot in the United States", "title":"Sales Director", "country":"US"},
+)
+
+
+def example_inputs(task: Task) -> list[list[dict[str, str]]]:
+    rows = [dict(row) for row in _EXAMPLE_INPUTS]
+    if task.capability == "companies.enrich":
+        for row, slug in zip(rows, ("stripe", "hubspot")):
+            row["linkedin_url"] = "https://www.linkedin.com/company/" + slug
+    return [[{key: row[key] for key in variant} for row in rows] for variant in task.variants]
+
+
 # A personal mailbox is a different task; bulk and asynchronous jobs are excluded by the planner.
 VERIFICATION_TASKS = {"people.email.find": ("people.email.verify", "email"),
                       "people.phone.find": ("people.phone.verify", "phone")}
@@ -287,7 +310,7 @@ def present(payload: dict, *, mode: str, state: str, capability: str = "") -> di
         v = a.get("verification")
         row["can_verify"] = capability in VERIFICATION_TASKS and a["state"] == "hit" and not v and (not payload.get("auto_verify") or state in TERMINAL)
         if v:
-            row["verification"] = {k:v.get(k) for k in ("id", "capability", "state", "provider", "endpoint_id", "charged_micro", "duration_ms", "detail", "raw", "call_ref")}
+            row["verification"] = {k:v.get(k) for k in ("id", "capability", "state", "provider", "endpoint_id", "charged_micro", "duration_ms", "detail", "raw", "call_ref", "tried", "served_by")}
             row["verification"]["output"] = safe_output(v.get("output", {}), capability=v.get("capability", ""))
             row["lookup_charged_micro"] = row["charged_micro"]
             row["charged_micro"] = None if row["charged_micro"] is None or v.get("charged_micro") is None else row["charged_micro"] + v["charged_micro"]

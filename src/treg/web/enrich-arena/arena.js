@@ -2,9 +2,10 @@
 (() => {
   'use strict';
   if (!window.Vue) return;
+  const SIGNUP_SETUP = 'treg.arena.signup-setup.v1';
   const DRAFT = 'treg.arena.draft.v1';
   const ACTIVE = 'treg.arena.active.v1'; // Cleanup only: saved runs now reopen through their URL.
-  const NAMES = {'millionverifier':'MillionVerifier','contactout':'ContactOut','trykitt':'Kitt','fiber-ai':'Fiber','pdl':'People Data Labs','branddev':'Brand.dev',
+  const NAMES = {'treg':'Email verification waterfall','millionverifier':'MillionVerifier','contactout':'ContactOut','trykitt':'Kitt','fiber-ai':'Fiber','pdl':'People Data Labs','branddev':'Brand.dev',
     'thecompaniesapi':'TheCompaniesAPI','companyenrich':'CompanyEnrich','leadmagic':'LeadMagic',
     'findymail':'Findymail','leadsforge':'Leadsforge','icypeas':'Icypeas','predictleads':'PredictLeads',
     'apollo':'Apollo','exa':'Exa','aviato':'Aviato','hunter':'Hunter','tomba':'Tomba','lusha':'Lusha'};
@@ -25,6 +26,12 @@
       const update=()=>{
         frame=0;
         const head=table.tHead;if(!head)return;
+        // Mobile results become cards; pinning their overview covers the expanded answer.
+        if(window.matchMedia?.('(max-width:600px)').matches){
+          head.style.setProperty('--header-offset','0px');
+          pinnedRow?.style.removeProperty('--entry-offset');pinnedRow=null;pinnedOffset=0;
+          return;
+        }
         const parent=table.closest('.entry-detail-panel')?.closest('.batch-matrix')||table.closest('.vendor-detail-panel')?.closest('.batch-scoreboard')?.querySelector(':scope > table');
         const selectedRow=':scope > tbody > .matrix-overview.picked, :scope > tbody > .vendor-summary.picked';
         const top=(parent?.tHead?.getBoundingClientRect().height||0)+(parent?.querySelector(selectedRow)?.getBoundingClientRect().height||0);
@@ -146,11 +153,11 @@
     directives:{stickyHeader:StickyHeader},
     components:{ArenaTaskTabs,TregTryItOut:TregAgentSetup.TryItOut,TregAgentPicker:TregAgentSetup.AgentPicker,TregSetupInstructions:TregAgentSetup.SetupInstructions,ArenaFighters,ArenaResultTable:{directives:{stickyHeader:StickyHeader},inject:['arena'],props:{rows:{type:Array,required:true},entryView:Boolean},methods:{resultLabel(r){return this.arena.providerName(r.provider)+(this.entryView?' · '+this.arena.entryLabel(this.arena.runEntries[r.entry_index||0]):'');}},template:'#arena-result-table-template'}},
     provide(){return {arena:this};},
-    data:()=>({benchmark:(location.pathname||'').endsWith('/people-search-bench'),benchCategories:[],benchCategory:'',benchLoading:false,benchError:'',leaderboard:(location.pathname||'').endsWith('/leaderboard'),setupStep:1,setupExampleCopied:'',setupAgentId:'claude-code',setupToken:null,setupShowToken:false,setupCopied:false,setupError:'',setupLoading:false,setupSequence:0,tasks:[],taskId:'people.email.find',variant:0,inputs:{},extraInputs:[],showAllEntries:false,selectedEntry:null,selectedVendor:'',resultFilter:'all',mode:'waterfall',autoVerify:true,verificationHintHidden:false,verificationQuotes:{},verificationPending:{},
+    data:()=>({benchmark:(location.pathname||'').endsWith('/people-search-bench'),benchCategories:[],benchCategory:'',benchLoading:false,benchError:'',leaderboard:(location.pathname||'').endsWith('/leaderboard'),setupStep:1,setupTeamName:'',setupExampleCopied:'',setupAgentId:'claude-code',setupToken:null,setupShowToken:false,setupCopied:false,setupError:'',setupLoading:false,setupSequence:0,tasks:[],taskId:'people.email.find',variant:0,inputs:{},extraInputs:[],showAllEntries:false,selectedEntry:null,selectedVendor:'',resultFilter:'all',mode:'waterfall',autoVerify:true,verificationHintHidden:false,verificationQuotes:{},verificationPending:{},
       user:null,teams:[],team:'',balance:null,meta:{},busy:false,error:'',run:null,quote:null,history:[],customServices:false,services:[],
       insights:null,insightsState:'idle',insightsTimer:null,statsView:'rate',chartFocus:null,metricTooltip:null,requestDone:false,requestBusy:false,vendorPromptCopied:false,vendorPromptError:'',requestError:'',requestQuery:'',requestForm:{capability:'',note:'',contact:''},
       manualQuotes:{},manualPending:{},reporting:'',reportDrafts:{},pricing:false,quoteTimer:null,quoteSequence:0,pricedKey:'',expandedResults:[],email:'',code:'',emailStep:'email',devCode:'',authBusy:false,authError:'',
-      newTeamName:'',pendingSubmit:false,pollTimer:null,pollFailures:0,runTeam:'',booted:false,historySequence:0,historyLoading:false,historyHasMore:false,linkedRunPending:false,urlPopHandler:null}),
+      newTeamName:'',pendingSubmit:false,pollTimer:null,pollFailures:0,runTeam:'',booted:false,draftRestored:false,historySequence:0,historyLoading:false,historyHasMore:false,linkedRunPending:false,urlPopHandler:null}),
     watch:{
       'run.id'(){this.selectedVendor='';},
       quoteKey(){this.scheduleQuote();},
@@ -451,9 +458,13 @@
       identity(){return Object.fromEntries(this.inputKeys.map(k=>[k,(this.inputs[k]||'').trim()]));},
       identities(){return this.inputRows.map(row=>Object.fromEntries(this.inputKeys.map(k=>[k,(row[k]||'').trim()])));},
       saveDraft(pending=false){if(this.leaderboard||this.benchmark)return;write(DRAFT,{taskId:this.taskId,variant:this.variant,inputs:this.inputs,extraInputs:this.extraInputs,mode:this.mode,autoVerify:this.autoVerify,customServices:this.customServices,services:this.services,pending,at:Date.now()});},
-      restoreDraft(){const d=read(DRAFT);if(!d||Date.now()-d.at>600000){remove(DRAFT);return false;}if(!this.tasks.some(t=>t.id===d.taskId))return false;this.taskId=d.taskId;this.autoVerify=typeof d.autoVerify==='boolean'?d.autoVerify:['people.email.find','people.phone.find'].includes(d.taskId);this.variant=d.variant;this.inputs=d.inputs||{};this.extraInputs=Array.isArray(d.extraInputs)?d.extraInputs.slice(0,49):[];this.mode=d.mode==='compare'?'compare':'waterfall';this.customServices=!!d.customServices;this.services=d.services||[];return !!d.pending;},
+      restoreDraft(){const d=read(DRAFT);if(!d||Date.now()-d.at>600000){remove(DRAFT);return false;}if(!this.tasks.some(t=>t.id===d.taskId))return false;this.draftRestored=true;this.taskId=d.taskId;this.autoVerify=typeof d.autoVerify==='boolean'?d.autoVerify:['people.email.find','people.phone.find'].includes(d.taskId);this.variant=d.variant;this.inputs=d.inputs||{};this.extraInputs=Array.isArray(d.extraInputs)?d.extraInputs.slice(0,49):[];this.mode=d.mode==='compare'?'compare':'waterfall';this.customServices=!!d.customServices;this.services=d.services||[];return !!d.pending;},
+      fillExampleInputs(){
+        const rows=this.leaderboard||this.benchmark?[]:(this.currentTask.examples?.[this.variant]||[]);
+        this.inputs={...(rows[0]||{})};this.extraInputs=rows.slice(1,2).map(row=>({...row}));
+      },
       resetTaskInputs(){
-        this.inputs={};this.extraInputs=[];this.quote=null;this.customServices=false;this.services=[];
+        this.fillExampleInputs();this.quote=null;this.customServices=false;this.services=[];
         if(this.booted){this.run=null;this.linkedRunPending=false;clearTimeout(this.pollTimer);if(!this.leaderboard)remove(ACTIVE);this.saveDraft(false);this.syncUrl();}
       },
       chooseTask(id){
@@ -471,24 +482,41 @@
         this.services=selected.includes(provider)?selected.filter(p=>p!==provider):[...selected,provider];
         this.customServices=true;this.quote=null;this.error='';this.saveDraft(false);
       },
+      track(event,props={}){window.TregTracking?.capture(event,props);},
+      identify(){window.TregTracking?.identify(this.user?.email||'',this.team);},
       async loadIdentity(){
-        try{this.user=await this.api('/auth/me',{},'');}catch(e){if(e.status!==401)throw e;this.user=null;this.teams=[];this.team='';this.balance=null;this.history=[];this.historySequence++;return;}
+        try{this.user=await this.api('/auth/me',{},'');}catch(e){if(e.status!==401)throw e;this.user=null;this.teams=[];this.team='';this.balance=null;this.history=[];this.historySequence++;this.identify();return;}
+        this.identify();
         const orgs=await this.api('/orgs');this.teams=orgs.filter(t=>!t.demo);
         let saved='';try{saved=localStorage.getItem('treg.arena.team')||'';}catch{}
         this.team=this.teams.find(t=>t.slug===this.team)?.slug||this.teams.find(t=>t.slug===saved)?.slug||this.teams[0]?.slug||'';
+        this.identify();
         if(this.team){await this.loadBalance();if(!this.leaderboard&&!this.benchmark)await this.refreshHistory();}
       },
       async loadBalance(){const t=this.teams.find(t=>t.slug===this.team);if(!t)return;const b=await this.api('/orgs/'+t.org_id+'/balance?limit=1');this.balance=b.balance_micro;},
-      async changeTeam(){this.quote=null;this.run=null;this.history=[];this.historySequence++;clearTimeout(this.pollTimer);remove(ACTIVE);this.linkedRunPending=false;this.syncUrl();try{localStorage.setItem('treg.arena.team',this.team);await this.loadBalance();await this.refreshHistory();}catch(e){this.error=e.message;}},
+      async changeTeam(){this.quote=null;this.run=null;this.history=[];this.historySequence++;clearTimeout(this.pollTimer);remove(ACTIVE);this.linkedRunPending=false;this.syncUrl();try{localStorage.setItem('treg.arena.team',this.team);this.identify();await this.loadBalance();await this.refreshHistory();}catch(e){this.error=e.message;}},
       setupIcon(icon){return TregAgentSetup.iconUrl(icon);},
       async openSetup(){
-        this.setupStep=1;this.setupToken=null;this.setupShowToken=false;this.setupCopied=false;this.setupError='';this.setupLoading=false;this.setupSequence++;
+        this.setupStep=this.user&&!this.team?0:1;this.setupTeamName='';this.setupToken=null;this.setupShowToken=false;this.setupCopied=false;this.setupError='';this.setupLoading=false;this.setupSequence++;
         try{const saved=localStorage.getItem('treg-agent');if([...TregAgentSetup.agents,...TregAgentSetup.moreAgents].some(a=>a.id===saved))this.setupAgentId=saved;}catch{}
         await this.$nextTick();this.$refs.setupDialog.showModal();
       },
-      closeSetup(){this.setupSequence++;this.setupToken=null;this.setupShowToken=false;this.setupCopied=false;this.setupLoading=false;this.$refs.setupDialog.close();},
+      closeSetup(){if(this.setupStep===0&&this.setupLoading)return;this.setupSequence++;this.setupToken=null;this.setupShowToken=false;this.setupCopied=false;this.setupLoading=false;this.$refs.setupDialog.close();},
+      async createSetupTeam(){
+        if(this.setupLoading||!this.user)return;
+        const name=this.setupTeamName.trim();
+        if(!name){this.setupError='Give your team a name.';return;}
+        this.setupLoading=true;this.setupError='';
+        try{
+          const created=await this.api('/orgs',{method:'POST',body:JSON.stringify({name})},'');
+          this.team=created.org;this.setupStep=1;
+          await this.loadIdentity();
+        }catch(e){this.setupError=e.message;}
+        finally{this.setupLoading=false;}
+      },
       async prepareSetup(){
         if(this.setupLoading)return;
+        if(this.user&&!this.team){this.setupStep=0;return;}
         const sequence=++this.setupSequence,team=this.team,user=this.user;
         this.setupLoading=true;this.setupError='';this.setupToken=null;this.setupShowToken=false;this.setupCopied=false;
         try{
@@ -510,11 +538,19 @@
         try{await navigator.clipboard.writeText(text);if(sequence!==this.setupSequence)return;this.setupCopied=!exampleKey;this.setupExampleCopied=exampleKey;setTimeout(()=>{if(sequence===this.setupSequence){this.setupCopied=false;this.setupExampleCopied='';}},1400);}
         catch{if(sequence===this.setupSequence)this.setupError='Could not copy. Select the setup text and copy it manually.';}
       },
-      async openLogin(pending){this.pendingSubmit=pending;this.authError='';this.emailStep='email';this.code='';this.devCode='';this.saveDraft(pending);await this.$nextTick();this.$refs.loginDialog.showModal();},
-      closeLogin(){this.pendingSubmit=false;this.saveDraft(false);this.$refs.loginDialog.close();},
-      socialLogin(provider){this.saveDraft(this.pendingSubmit);const target=this.linkedRunPending?(location.pathname+location.search):'/enrich-arena';location.assign('/auth/'+provider+'?return_to='+encodeURIComponent(target));},
+      async openLogin(pending){this.track('arena_signup_opened');this.pendingSubmit=pending;this.authError='';this.emailStep='email';this.code='';this.devCode='';this.saveDraft(pending);await this.$nextTick();this.$refs.loginDialog.showModal();},
+      closeLogin(){remove(SIGNUP_SETUP);this.pendingSubmit=false;this.saveDraft(false);this.$refs.loginDialog.close();},
+      socialLogin(provider){this.saveDraft(this.pendingSubmit);write(SIGNUP_SETUP,{at:Date.now()});const target=(location.pathname||'/enrich-arena')+(location.search||'');location.assign('/auth/'+provider+'?return_to='+encodeURIComponent(target));},
+      async finishSignup(){remove(SIGNUP_SETUP);this.pendingSubmit=false;this.saveDraft(false);await this.openSetup();},
+      async resumeSignupSetup(){
+        const pending=read(SIGNUP_SETUP);
+        if(!pending)return false;
+        if(!Number.isFinite(pending.at)||Date.now()-pending.at>600000||pending.at>Date.now()){remove(SIGNUP_SETUP);return false;}
+        if(!this.user)return false;
+        await this.finishSignup();return true;
+      },
       async sendCode(){this.authBusy=true;this.authError='';try{const r=await this.api('/auth/email/start',{method:'POST',body:JSON.stringify({email:this.email})},'');this.emailStep='code';this.devCode=r.dev_code||'';}catch(e){this.authError=e.message;}finally{this.authBusy=false;}},
-      async verifyEmail(){this.authBusy=true;this.authError='';try{await this.api('/auth/email/verify',{method:'POST',body:JSON.stringify({email:this.email,code:this.code})},'');this.$refs.loginDialog.close();await this.loadIdentity();if(await this.restoreLinkedRun())return;const resume=this.pendingSubmit;this.pendingSubmit=false;this.saveDraft(false);if(resume){if(this.team)await this.prepare();else this.$refs.teamDialog.showModal();}}catch(e){this.authError=e.message;this.error=e.message;}finally{this.authBusy=false;}},
+      async verifyEmail(){this.authBusy=true;this.authError='';try{await this.api('/auth/email/verify',{method:'POST',body:JSON.stringify({email:this.email,code:this.code})},'');this.$refs.loginDialog.close();await this.loadIdentity();await this.restoreLinkedRun();await this.finishSignup();}catch(e){this.authError=e.message;this.error=e.message;}finally{this.authBusy=false;}},
       async createTeam(){this.authBusy=true;this.authError='';try{await this.api('/orgs',{method:'POST',body:JSON.stringify({name:this.newTeamName})},'');this.$refs.teamDialog.close();await this.loadIdentity();await this.prepare();}catch(e){this.authError=e.message;}finally{this.authBusy=false;}},
       inputError(){
         if(this.inputRows.length>this.maxEntries)return 'Use at most '+this.maxEntries+' entries for this task.';
@@ -561,7 +597,7 @@
         }catch(e){if(sequence!==this.quoteSequence||key!==this.quoteKey)return;if(e.status===401){this.user=null;this.quote=null;if(!quiet)await this.openLogin(true);}else this.error=e.message;}
         finally{if(sequence===this.quoteSequence)this.pricing=false;}
       },
-      topUp(){this.saveDraft(false);try{localStorage.setItem('treg-active',this.team);}catch{}location.assign('/app#billing');},
+      topUp(){this.saveDraft(false);try{localStorage.setItem('treg-active',this.team);}catch{}this.track('arena_topup_clicked');location.assign('/app?from=enrich-arena#billing');},
       async startRun(){
         if(this.busy||this.running||!this.readyQuote)return;
         const id=this.readyQuote.id;this.busy=true;this.error='';this.selectedEntry=null;this.resultFilter='all';this.expandedResults=[];this.runTeam=this.team;clearTimeout(this.quoteTimer);
@@ -676,7 +712,7 @@
       },
       async newSession(){
         if(this.busy||this.running)return;
-        this.inputs={};this.extraInputs=[];this.selectedEntry=null;this.variant=0;this.customServices=false;this.services=[];this.error='';
+        this.selectedEntry=null;this.variant=0;this.fillExampleInputs();this.customServices=false;this.services=[];this.error='';
         await this.newQuery();this.saveDraft(false);document.querySelector('#composer input')?.focus();
       },
       async newQuery(){this.manualQuotes={};this.reporting='';this.expandedResults=[];this.run=null;this.quote=null;this.linkedRunPending=false;clearTimeout(this.pollTimer);remove(ACTIVE);this.syncUrl();this.scheduleQuote();await this.$nextTick();document.querySelector('#composer')?.scrollIntoView({behavior:'smooth'});},
@@ -685,11 +721,12 @@
       async logout(){try{await this.api('/auth/logout',{method:'POST'});this.user=null;this.teams=[];this.team='';this.balance=null;this.run=null;this.quote=null;this.history=[];this.historySequence++;remove(ACTIVE);remove(DRAFT);}catch(e){this.error=e.message;}}
     },
     async mounted(){
+      this.track('arena_page_viewed');
       this.booted=false;this.urlPopHandler=()=>location.reload();window.addEventListener?.('popstate',this.urlPopHandler);
       if(this.benchmark){
         document.title='People Search Bench — treg';
         await this.loadBenchmark();
-        try{this.meta=await this.api('/meta',{},'');await this.loadIdentity();}catch(e){this.error=e.message;}
+        try{this.meta=await this.api('/meta',{},'');await this.loadIdentity();await this.resumeSignupSetup();}catch(e){this.error=e.message;}
         this.booted=true;return;
       }
       this.loadInsights();
@@ -700,10 +737,12 @@
         const preset=params.get('capability');if(this.tasks.some(t=>t.id===preset)&&this.taskId!==preset)this.chooseTask(preset);
         if(explicitTask&&!params.has('variant')&&this.variant!==0)this.chooseVariant(0);
         const variant=Number(params.get('variant'));if(params.has('variant')&&Number.isInteger(variant)&&variant>=0&&variant<this.currentTask.variants.length&&this.variant!==variant)this.chooseVariant(variant);
+        if(!this.leaderboard&&!linkedRun&&!this.draftRestored)this.fillExampleInputs();
         const presetMode=params.get('mode');if(['compare','waterfall'].includes(presetMode))this.mode=presetMode;
         await this.loadIdentity();this.booted=true;
-        if(this.leaderboard){document.title='Enrichment Leaderboard — treg';return;}
-        if(await this.restoreLinkedRun())return;
+        if(this.leaderboard){document.title='Enrichment Leaderboard — treg';await this.resumeSignupSetup();return;}
+        const restored=await this.restoreLinkedRun();
+        if(await this.resumeSignupSetup()||restored)return;
         if(pending&&this.user&&!explicitTask){this.saveDraft(false);if(this.team)await this.prepare();else this.$refs.teamDialog.showModal();}
         if(!pending||explicitTask)this.scheduleQuote();
       }catch(e){this.error=e.message;}
