@@ -328,21 +328,16 @@ def record(
         observation.finish(reason="db_queue_full" if len(_pending) >= _MAX_PENDING else "db_bytes_full")
         return kh, ch
     _pending_bytes += body_len
-    task = asyncio.create_task(asyncio.wait_for(_store(
+    task = asyncio.create_task(_store(
         method=method, endpoint_id=endpoint_id, provider=provider, url=url,
         caller_body=caller_body, headers=headers, status_code=status_code,
         media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
-        observation=observation, upload_rejection=upload_rejection),
-        timeout=_STORE_TIMEOUT_S))
+        observation=observation, upload_rejection=upload_rejection))
     _pending.add(task)
     # Release bytes AND task when done. NOT redundant with drain()'s own removal: on a running
     # server drain() never fires, and this callback is the only exit from `_pending` — without it
     # the set fills to _MAX_PENDING and record() sheds every recording from then on.
-    def done(task):
-        _task_done(task, body_len)
-        observation.finish(reason="record_timeout" if not task.cancelled() and
-                           isinstance(task.exception(), TimeoutError) else "record_failed")
-    task.add_done_callback(done)
+    task.add_done_callback(lambda task: _task_done(task, body_len))
     return kh, ch
 
 
@@ -353,15 +348,34 @@ def _task_done(task: asyncio.Task, body_len: int) -> None:
     _pending_bytes -= body_len
 
 
+_TERMINAL_TOTAL_S = 28.0
+_TERMINAL_UPLOAD_S = 8.0
+_TERMINAL_DB_S = 20.0
+
+
 async def store_terminal_response(
     call_id: str, provider: str, endpoint_id: str, status_code: int, body: bytes,
 ) -> None:
     """Archive terminal task JSON under the originating call id without fetching linked media."""
-    await _store(
-        method="GET", endpoint_id=endpoint_id, provider=provider,
-        url=f"treg://asynctasks/{call_id}", caller_body=b"", headers={},
-        status_code=status_code, media_type="application/json", body=body,
-        origin="async_terminal")
+    async def persist():
+        try:
+            async with asyncio.timeout(_TERMINAL_TOTAL_S):
+                await _store(
+                    method="GET", endpoint_id=endpoint_id, provider=provider,
+                    url=f"treg://asynctasks/{call_id}", caller_body=b"", headers={},
+                    status_code=status_code, media_type="application/json", body=body,
+                    origin="async_terminal")
+        except TimeoutError:
+            _log.error("terminal archive total deadline exceeded for %s", call_id)
+    task = asyncio.create_task(persist())
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # Settlement is already committed. Finish this bounded evidence operation even when
+        # the polling request/worker deadline cancels its waiter, then preserve cancellation.
+        _log.warning("terminal archive waiter cancelled; finishing bounded evidence for %s", call_id)
+        await asyncio.shield(task)
+        raise
 
 
 async def load_terminal_responses(tasks: list[tuple[str, str]]) -> dict[str, bytes]:
@@ -491,17 +505,30 @@ async def _store(
     keep = ((origin == "async_terminal" or storable(catalog_store.load().by_id.get(endpoint_id)))
             and len(body) <= get_settings().archive_max_body_bytes)
     try:
-        plan = (archive_bodies.WritePlan("db" if keep else None, keep, reason=upload_rejection)
-                if upload_rejection else
-                await archive_bodies.prepare(body, ch, keep=keep, observation=observation,
-                                             terminal=origin == "async_terminal"))
+        async def prepare():
+            return (archive_bodies.WritePlan("db" if keep else None, keep, reason=upload_rejection)
+                    if upload_rejection else
+                    await archive_bodies.prepare(body, ch, keep=keep, observation=observation,
+                                                 terminal=origin == "async_terminal"))
+        if origin == "async_terminal":
+            try:
+                async with asyncio.timeout(_TERMINAL_UPLOAD_S):
+                    plan = await prepare()
+            except TimeoutError:
+                observation.props["archive_body_upload_status"] = "failed"
+                plan = archive_bodies.WritePlan("db" if keep else None, keep, reason="upload_timeout")
+                _log.error("terminal archive upload deadline exceeded; saving DB evidence")
+            if not plan.publish:
+                plan = archive_bodies.WritePlan("db" if keep else None, keep, reason=plan.reason)
+        else:
+            plan = await prepare()
         if not plan.publish:
             observation.finish(reason=plan.reason)
             return
 
         # Same-key waiters must queue before taking a scarce database-write slot. Otherwise four
         # duplicate recordings can occupy the whole semaphore while only one touches the database.
-        async with asyncio.timeout(_STORE_TIMEOUT_S), _get_key_lock(kh):
+        async with asyncio.timeout(_TERMINAL_DB_S if origin == "async_terminal" else _STORE_TIMEOUT_S), _get_key_lock(kh):
             async with _get_sem():
                 # Postgres row locking handles other processes. A retry also covers the narrow
                 # first-key race and multi-process SQLite, where SELECT FOR UPDATE is ignored.
@@ -521,9 +548,12 @@ async def _store(
     except asyncio.CancelledError:
         observation.finish(reason="cancelled")
         raise
+    except TimeoutError:
+        observation.finish(reason="record_timeout")
+        _log.error("archive record_timeout for %s", endpoint_id)
     except Exception:
         observation.finish(reason="record_failed")
-        _log.error("archive recording dropped for %s", endpoint_id)
+        _log.error("archive recording dropped for %s", endpoint_id, exc_info=True)
     finally:
         observation.finish(reason="record_failed")
 

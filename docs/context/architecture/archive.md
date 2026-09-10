@@ -102,7 +102,10 @@ failure in `both` falls back to the separately bounded original DB queue; `r2` s
 GET including materializing bytes. The shared SDK transport uses the larger timeout so it cannot
 prematurely cut off either operation; application deadlines enforce the separate budgets.
 Terminal evidence bypasses best-effort queue admission and synchronously retries uploads up to
-`ARCHIVE_R2_TERMINAL_ATTEMPTS` (3), with bounded backoff, before the DB write. Its settlement has
+`ARCHIVE_R2_TERMINAL_ATTEMPTS` (3), with bounded backoff, before the DB write. Terminal evidence has an 8-second total upload budget (including queue
+wait and retries), at most 20 seconds for DB, and a 28-second total deadline. Upload exhaustion
+falls back to DB even for terminal evidence in R2-only mode. A cancelled waiter drains that
+bounded evidence operation before propagating cancellation; failures and deadlines log explicitly. Its settlement has
 already committed and cannot be undone by storage failure. Terminal failures also log a bounded
 error because a worker completion has no pending caller event to annotate.
 
@@ -141,7 +144,7 @@ window and switching new writes to `r2`.
 `archive_bodies.Observation` completes the existing `tool_called` event after the background write,
 without delaying the response or inserting another call row/event. Fields are
 `archive_body_write`, `archive_body_storage`, `archive_body_upload_status`,
-`archive_body_upload_ms` (including upload-slot wait and terminal retries when applicable),
+`archive_body_upload_ms` (transfer time only; queue wait is `archive_body_queue_wait_ms`),
 `archive_body_dropped` and `archive_body_drop_reason`; queue rejection also records
 `archive_body_upload_drop_reason`. Bounded reason codes distinguish upload queue/byte limits,
 upload failure/timeout, DB queue/byte limits, cancellation, record failure and policy/size gates.

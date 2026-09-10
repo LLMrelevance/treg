@@ -56,6 +56,7 @@ class Observation:
             "archive_body_write": get_settings().archive_body_write,
             "archive_body_upload_status": "not_requested",
             "archive_body_upload_ms": 0.0,
+            "archive_body_queue_wait_ms": 0.0,
         }
 
     def finish(self, *, storage: str | None = None, reason: str | None = None) -> None:
@@ -106,13 +107,19 @@ async def prepare(body: bytes, content_hash: str, *, keep: bool, observation: Ob
             try:
                 if hashlib.sha256(body).hexdigest() != content_hash:
                     raise ValueError("archive content hash mismatch")
-                async with asyncio.timeout(get_settings().archive_r2_timeout_s):
-                    async with _upload_sem():
-                        if _store is None:
-                            raise RuntimeError("archive object store unavailable")
-                        info = await _store.put(body)
-                        if info != ObjectInfo(content_hash, len(body)):
-                            raise ValueError("archive uploaded object mismatch")
+                queued = time.monotonic()
+                async with _upload_sem():
+                    observation.props["archive_body_queue_wait_ms"] += (time.monotonic() - queued) * 1000
+                    transfer = time.monotonic()
+                    try:
+                        async with asyncio.timeout(get_settings().archive_r2_timeout_s):
+                            if _store is None:
+                                raise RuntimeError("archive object store unavailable")
+                            info = await _store.put(body)
+                            if info != ObjectInfo(content_hash, len(body)):
+                                raise ValueError("archive uploaded object mismatch")
+                    finally:
+                        observation.props["archive_body_upload_ms"] += (time.monotonic() - transfer) * 1000
                 observation.props["archive_body_upload_status"] = "uploaded"
                 return WritePlan(mode, mode == "both")
             except TimeoutError:
@@ -127,7 +134,7 @@ async def prepare(body: bytes, content_hash: str, *, keep: bool, observation: Ob
         return WritePlan("db" if mode == "both" else None, mode == "both",
                          publish=mode == "both", reason=reason)
     finally:
-        observation.props["archive_body_upload_ms"] = round((time.monotonic() - started) * 1000, 3)
+        observation.props["archive_body_upload_ms"] = round(observation.props["archive_body_upload_ms"], 3)
 
 
 def submit(factory, body_len: int, observation: Observation) -> str | None:

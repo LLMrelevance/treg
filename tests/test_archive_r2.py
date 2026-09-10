@@ -536,3 +536,26 @@ def test_r2_endpoint_jurisdictions(jurisdiction):
     from treg.infra.object_store import R2_ENDPOINT_RE
     assert R2_ENDPOINT_RE.fullmatch('https://' + 'a'*32 + jurisdiction + '.r2.cloudflarestorage.com')
     assert not R2_ENDPOINT_RE.fullmatch('https://' + 'a'*32 + '.evil.r2.cloudflarestorage.com')
+
+
+async def test_terminal_upload_budget_leaves_time_for_db(clients, r2, monkeypatch, caplog):
+    monkeypatch.setattr(archive, '_TERMINAL_UPLOAD_S', 0.02)
+    r2.gate = asyncio.Event()
+    await archive.store_terminal_response('bounded', 'tikhub', EP, 200, RAW)
+    assert (await snapshots())[0].body_storage == 'db'
+    assert 'upload deadline exceeded' in caplog.text
+
+
+async def test_upload_wait_is_not_transfer_timeout(r2, monkeypatch):
+    monkeypatch.setattr(get_settings(), 'archive_r2_timeout_s', 0.01)
+    sem = archive_bodies._upload_sem()
+    for _ in range(get_settings().archive_r2_upload_concurrency):
+        await sem.acquire()
+    observation = archive_bodies.Observation()
+    task = asyncio.create_task(archive_bodies.prepare(RAW, archive.content_hash(RAW), keep=True, observation=observation))
+    await asyncio.sleep(0.03)
+    assert not task.done()
+    for _ in range(get_settings().archive_r2_upload_concurrency):
+        sem.release()
+    assert (await task).storage == 'both'
+    assert observation.props['archive_body_queue_wait_ms'] >= 20
