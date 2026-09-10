@@ -186,7 +186,12 @@ def _free_port() -> int:
 def _boot_raw_asgi(env: dict[str, str], tmp_path: Path) -> tuple[bool, str]:
     port = _free_port()
     base_url = f"http://127.0.0.1:{port}"
-    env = {**env, "PORT": str(port), "TREG_PUBLIC_URL": base_url}
+    env = {**env, "PORT": str(port), "TREG_PUBLIC_URL": base_url, "NO_COLOR": "1"}
+    # The assertions read the server's log text. Rich honours FORCE_COLOR even into a file and
+    # then highlights numbers with escape codes ("Database revision \x1b[1;36m9999"), so a shell
+    # that forces colour (agent harnesses do) would fail the revision checks for no reason.
+    for forcing in ("FORCE_COLOR", "CLICOLOR_FORCE", "TTY_COMPATIBLE"):
+        env.pop(forcing, None)
     stdout_path = tmp_path / "raw-asgi.stdout"
     stderr_path = tmp_path / "raw-asgi.stderr"
     ready = False
