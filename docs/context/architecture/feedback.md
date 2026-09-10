@@ -9,6 +9,8 @@ sources:
   - src/treg/hints.py
   - src/treg/config.py
   - src/treg/routers/call.py
+  - src/treg/application/call/invite.py
+  - src/treg/infra/kv.py
   - src/treg/application/feedback.py
   - src/treg/routers/feedback.py
   - src/treg/alembic/versions/0025_feedback.py
@@ -17,6 +19,7 @@ sources:
   - tests/test_feedback.py
   - tests/test_reviews.py
   - tests/test_hints.py
+  - tests/test_kv.py
 related:
   - architecture/data-model.md
   - architecture/mcp-oauth.md
@@ -93,6 +96,11 @@ is `domain.feedback.reviews`; the moved `reports` module preserves feedback beha
 `hints.sampled(kind, sample_id)` hashes `kind:sample_id` with SHA-256 into the same 64-bit bucket
 construction for both kinds. `TREG_REVIEW_SAMPLE_RATE` and `TREG_FEEDBACK_HINT_RATE` are bounded
 0..1 floats, default 0. Sampling is local and deterministic under the current configuration.
+Sampling decides which calls *qualify*; a per-team budget decides how many of them a team is
+actually asked about (next section). `invited` on a review row therefore means "sampled, so
+eligible", recomputed at submission; the few eligible calls a full budget withheld are counted as
+invited when their agent volunteers a review. That imprecision is accepted on purpose: it keeps
+the invitation fact stateless, and the true count of invitations sent is the `hint_attached` event.
 
 `POST /reviews` uses `require_member` and returns 201 (`review_id`, `status: received`) on
 insertion or 200 on retry. `ReviewIn` rejects extra fields, requires a bounded `CallReference`
@@ -102,28 +110,55 @@ pagination with optional `endpoint_id`. It is excluded from OpenAPI; there is no
 
 ## Optional review and feedback invitations
 
-`routers.call.call_tool` sets `X-Treg-Review: requested` after constructing the streaming response,
-before streaming starts. Phase 1 invites only direct catalog calls served on treg's own platform
-key (`context.marketplace` exists and its `tier` is `platform`). These calls qualify only with a
-2xx status, no idempotent-replay header, `context.cached == False`, and a sampled call reference.
-The service sets `context.cached` from `served_hit` when the archive answers; the hook does not
-depend on cache response headers. Routed parents and own-key catalog calls can still be reviewed
-uninvited. An own tool never qualifies, even if its name matches a catalog endpoint. The whole hook
-is best-effort, has no database or body access, and does not change call service exits or writes.
-Plain HTTP gets only the header. Both MCP transports retain `call_id` and use their single hint
-slot with priority replay > 402 > review > feedback. Each surface's server `instructions` field
-also tells agents, in one sentence, to rate an invited call with `review(call_id, usefulness,
-reason?)` after using it and then continue, one review per invitation. The MCP server
-description, the `catalog_search` description, `skill.md` and `llms.txt` quote the catalog's size
-through `catalog_store.headline_counts` (`{ENDPOINTS}` / `{PROVIDERS}` filled at serve time, and at
-generation time for plugin copies), never a typed number: six hand-written copies had drifted apart. Feedback remains the existing proactive-friction text. The upstream body is unchanged.
+One decision, server-side: `application.call.invite.invitation(context, status, replayed)` runs
+in `routers.call.call_tool` after the streaming response is constructed and before it streams,
+and returns `review`, `feedback` or nothing. The router writes it as `X-Treg-Hint: review|feedback`
+(plus the older `X-Treg-Review: requested` on a review, which CLI releases up to 0.18 read) and
+emits one `hint_attached` analytics event per invitation actually sent, with `kind`, `call_id`,
+`endpoint_id`, the caller's `X-Treg-Client` and the team group. Every surface only translates the
+header: plain HTTP callers read it themselves, the CLI prints one stderr line per kind next to the
+charge line, and both MCP transports render it into their single hint slot with priority
+replay > 402 > review > feedback. Neither MCP transport samples or records anything of its own.
+
+A **review** invitation needs a direct catalog call served on treg's own platform key
+(`context.marketplace` exists and its `tier` is `platform`), a 2xx status, no idempotent replay,
+`context.cached == False` (the service sets it from `served_hit` when the archive answers), a
+sampled call reference, and **budget**: `kv.store().take("review-budget:<org_id>",
+review_budget_per_hour, 3600)` counts invitations per team in a window that starts at the team's
+first invitation and lasts an hour. `TREG_REVIEW_BUDGET_PER_HOUR` defaults to 5. The budget exists
+because per-call sampling scales with call volume: one team's 2,213 calls in twenty minutes drew
+93 invitations at 5% on launch week, and the agent answered every one. Low-volume teams never
+reach the cap, so the sampling rate alone sets their odds; high-volume teams are asked at most
+`review_budget_per_hour` times however many endpoints they hit. There is deliberately no
+per-endpoint cooldown: five ratings of one endpoint from one team are a phase-2 weighting problem,
+not a collection problem. Routed parents and own-key catalog calls can still be reviewed
+uninvited; an own tool never qualifies, even if its name matches a catalog endpoint.
+
+A **feedback** hint rides any other successful, non-replayed, non-cached call (own tools included)
+that samples in, at `TREG_FEEDBACK_HINT_RATE`. It asks for nothing, so it has no budget; a team
+whose review budget is spent still receives it when sampled.
+
+The whole hook is best-effort: no database or body access, no change to the call service's exits
+or writes, and a fault anywhere (the store included) can only lose the header, never the answer.
+The store is `infra/kv.py`: Render Key Value (Redis protocol) at `TREG_KV_URL`, or a bounded
+in-process dictionary when unset; both answer through one `take(key, limit, ttl_s)` that is one
+atomic `INCR` + `EXPIRE NX`. Reads and writes are capped at 100 ms and **fail closed**: a store
+that cannot answer is a spent budget, so an outage silently withholds review invitations rather
+than flooding a team, and `hint_attached` events dropping to zero is the signal. `/admin/kv`
+(superadmin) reports `configured` and `reachable`; startup logs a warning when the configured
+store does not answer. The store is the invitation budget's tenant only; a new tenant is one
+more narrow method, not a generic get/set surface.
+
+Each surface's server `instructions` field also tells agents, in one sentence, to rate an
+invited call with `review(call_id, usefulness, reason?)` after using it and then continue, one
+review per invitation. The MCP server description, the `catalog_search` description, `skill.md`
+and `llms.txt` quote the catalog's size through `catalog_store.headline_counts` (`{ENDPOINTS}` /
+`{PROVIDERS}` filled at serve time, and at generation time for plugin copies), never a typed
+number: six hand-written copies had drifted apart. The upstream body is unchanged.
 
 The config-driven sampler replaces the PostHog flag poller completely; both MCP lifespans only
-own their transport lifecycle. Feedback hints remain limited to successful calls without a higher
-priority hint; missing call references use a fresh sampling ID without inventing a public call ID.
-`mcp_hint_attached` is a best-effort analytics event with `kind`, `surface` and available `call_id`,
-never upstream contents or credentials. Attachment does not prove display or reading. No session
-reminder cap or adaptive sampling is implemented.
+own their transport lifecycle. Attachment does not prove display or reading. No session reminder
+cap or adaptive sampling is implemented.
 
 ## Known biases
 
@@ -133,6 +168,12 @@ endpoints of one capability. Phase 1 collects only: no aggregation, catalog scor
 team-side read route, dashboard, or adaptive per-endpoint sampling.
 
 ## Response-rate query
+
+The denominator that counts is the `hint_attached` event with `kind = review`: one per invitation
+sent, on every surface, after the budget. The SQL below replays sampling over `callrecord` instead
+and therefore counts *eligible* calls; for a team that hit its budget it overstates invitations
+and understates the response rate. Use it when PostHog is unavailable or for a window before the
+budget shipped, and read its result as a floor.
 
 For PostgreSQL, bind `:window_start`, `:window_end`, `:as_of` as naive UTC timestamps and
 `:review_rate` to the configured rate for that window. Split windows when the rate changes:

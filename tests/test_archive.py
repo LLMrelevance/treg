@@ -424,11 +424,12 @@ async def test_archive_hit_never_invites_review(clients: AsyncClient, serve, mon
 
     monkeypatch.setattr(call_service, "_served_response", stored_response)
     live = await clients.get(f"/call/{EP}?aweme_id=7&count=5")
+    assert live.headers["X-Treg-Hint"] == "review"
     assert live.headers["X-Treg-Review"] == "requested"
     await archive.drain()
     hit = await clients.get(f"/call/{EP}?aweme_id=7&count=5")
     assert hit.status_code == 200 and hit.content == live.content
-    assert "X-Treg-Review" not in hit.headers
+    assert "X-Treg-Hint" not in hit.headers and "X-Treg-Review" not in hit.headers
     await audit.drain()
     assert (await clients.get("/calls")).json()[0]["cached"] is True
 
