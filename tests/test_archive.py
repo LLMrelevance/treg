@@ -547,7 +547,7 @@ async def test_repeated_business_change_is_strict_by_default(clients: AsyncClien
     assert len(snaps) == 3 and all(s.body is not None for s in snaps)
 
 
-async def test_repeated_noise_counts_as_stable(clients: AsyncClient, shadow, monkeypatch):
+async def test_removed_noise_mode_cannot_weaken_strict_comparison(clients: AsyncClient, shadow, monkeypatch):
     monkeypatch.setattr(get_settings(), "archive_comparison_mode", "legacy_noise")
     monkeypatch.setitem(catalog_store.load().by_id[EP], "cache", "transient")
     from tests.test_marketplace_call import _fake_relay
@@ -558,10 +558,9 @@ async def test_repeated_noise_counts_as_stable(clients: AsyncClient, shadow, mon
         await clients.get(f"/call/{EP}?aweme_id=7")
         await archive.drain()                          # recordings must land in call order
     keys, _ = await _rows()
-    # fetch 2 differs (first diff: counts changed, remembers the set); fetch 3 repeats the SAME
-    # small diff-set ⇒ noise ⇒ stable.
-    assert keys[0].change_seen == 1 and keys[0].stable_seen == 1
-    assert keys[0].volatile_paths == ["$.req_id", "$.ts"]
+    # A legacy configuration value cannot restore heuristic comparisons. Both changes count.
+    assert keys[0].change_seen == 2 and keys[0].stable_seen == 0
+    assert keys[0].volatile_paths == []
 
 
 async def test_always_changing_key_marks_itself_never_cache(clients: AsyncClient, serve, monkeypatch):

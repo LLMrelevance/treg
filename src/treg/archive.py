@@ -46,8 +46,8 @@ def serving() -> bool:
 
 
 def comparison_mode() -> str:
-    return ("legacy_noise" if get_settings().archive_comparison_mode.strip().lower()
-            == "legacy_noise" else "strict")
+    # Retain the settings name for deploy compatibility; the legacy heuristic is retired.
+    return "strict"
 
 
 def serve_endpoints() -> set[str]:
@@ -623,9 +623,6 @@ async def _store_locked(
         decisive = next_state in ("found", "empty") and origin != "async_terminal"
         if decisive and baseline is not None and (previous_state, next_state) != ("empty", "empty"):
             stable = previous_state == next_state == "found" and baseline.content_hash == ch
-            if (not stable and previous_state == next_state == "found"
-                    and comparison_mode() == "legacy_noise"):
-                stable = _noise_only(await _snapshot_body(s, baseline), body, key)
             if stable:
                 key.stable_seen += 1
             else:
@@ -1002,74 +999,13 @@ TTL_FLOOR_S = 60
 TTL_CEILING_S = 30 * 86400
 TTL_NEVER = -1          # the key marked itself never-cache: changes on every fetch
 _NEVER_AFTER = 4        # consecutive changed refetches (no stables) before self-marking
-_NOISE_MAX_LEAF_SHARE = 0.4   # a repeated identical diff-set is noise only if it is a MINOR
-_NOISE_MIN_LEAVES = 5         # corner of a body with at least this many leaves — a tiny body
-#                               whose one value moves (a price) must stay "changed", never noise.
 
 
-def _leaf_paths(node: Any, prefix: str = "$", *, depth: int = 0, out: list | None = None) -> list[str]:
-    """Dotted leaf paths of a JSON tree; list items collapse to `[]` so per-row ids do not
-    explode one logical path into hundreds. Bounded by depth and count — comparison machinery
-    must never be the expensive part of a recording."""
-    if out is None:
-        out = []
-    if len(out) >= 400 or depth > 6:
-        return out
-    if isinstance(node, dict):
-        for k, v in node.items():
-            _leaf_paths(v, f"{prefix}.{k}", depth=depth + 1, out=out)
-    elif isinstance(node, list):
-        for v in node[:50]:
-            _leaf_paths(v, f"{prefix}[]", depth=depth + 1, out=out)
-    else:
-        out.append(prefix)
-    return out
 
 
-def _changed_paths(old: Any, new: Any, prefix: str = "$", *, depth: int = 0,
-                   out: set | None = None) -> set[str]:
-    """Leaf paths whose values differ between two JSON trees (same collapse rules as above)."""
-    if out is None:
-        out = set()
-    if len(out) >= 400 or depth > 6:
-        return out
-    if isinstance(old, dict) and isinstance(new, dict):
-        for k in set(old) | set(new):
-            _changed_paths(old.get(k), new.get(k), f"{prefix}.{k}", depth=depth + 1, out=out)
-    elif isinstance(old, list) and isinstance(new, list):
-        for a, b in zip(old[:50], new[:50]):
-            _changed_paths(a, b, f"{prefix}[]", depth=depth + 1, out=out)
-        if len(old) != len(new):
-            out.add(f"{prefix}[]")
-    elif old != new:
-        out.add(prefix)
-    return out
 
 
-def _noise_only(old_body: bytes | None, new_body: bytes, key) -> bool:
-    """True when this refetch's difference is the SAME small diff-set as last time — learned
-    request ids and server timestamps, not data. Two guards keep a real signal out of the noise
-    bin: the identical set must repeat (first occurrence always counts as changed, and gets
-    remembered as the candidate), and it must be a minor share (< 40%) of a body with at least
-    5 leaves — a tiny body whose one value moves every fetch is a PRICE, not noise."""
-    if not old_body:
-        return False
-    try:
-        old_json, new_json = json.loads(old_body), json.loads(new_body)
-    except (ValueError, UnicodeDecodeError):
-        return False
-    changed = _changed_paths(old_json, new_json)
-    if not changed:
-        return False
-    known = set(key.volatile_paths or [])
-    leaves = len(_leaf_paths(new_json))
-    is_noise = (changed <= known
-                and leaves >= _NOISE_MIN_LEAVES
-                and len(changed) / leaves < _NOISE_MAX_LEAF_SHARE)
-    # Remember this diff-set as the next candidate either way (bounded), so the SAME noise
-    # repeating is recognized from its second occurrence on.
-    key.volatile_paths = sorted(changed)[:50]
-    return is_noise
+
 
 
 def learn(key, *, stable: bool, entry: dict[str, Any] | None) -> None:

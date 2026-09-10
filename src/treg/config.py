@@ -309,7 +309,7 @@ class Settings(BaseSettings):
     archive_mode: str = "off"
     # Strict compares raw bytes. The old heuristic is an explicit diagnostic opt-in only;
     # unknown values also select strict. It never changes stored response bytes.
-    archive_comparison_mode: str = "strict"  # strict | legacy_noise
+    archive_comparison_mode: Literal["strict"] = "strict"  # compatibility setting; comparison is always strict
     # Exact endpoint IDs, comma-separated. Empty means no serving, even in serve mode.
     archive_serve_endpoints: str = ""
     # Stable team/endpoint cohorts; 0 disables serving, 100 includes every team.

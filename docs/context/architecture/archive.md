@@ -122,12 +122,10 @@ by min(30 d, the judged `cache.max_age_s`); changed ⇒ ×0.5, floored at 60 s. 
 until a stable refetch resets it. The lookup prefers the learned timer (`ttl_s > 0`) over the
 fixed phase-1 guesses.
 
-**Noise vs change (opt-in `legacy_noise` only).** When a found-to-found refetch differs, the diff's leaf paths (lists collapse to `[]`,
-bounded depth 6 / 400 paths) are compared to the previous diff-set (`volatile_paths`, kept per
-key). The SAME set repeating counts as noise ⇒ stable, under two guards: it must be a minor
-share (< 40%) of a body with ≥ 5 leaves — a tiny body whose one value moves every fetch is a
-price and stays "changed". First occurrence always counts as changed. Stored bytes are never
-touched; stripping exists only in comparison.
+**Strict comparison.** Result admission still selects the decisive baseline and controls which
+transitions train TTL. Among found-to-found observations, identical raw hashes count stable and
+differing hashes count changed. The legacy field-noise heuristic is removed; hash comparison
+never fetches an old R2 body.
 
 ## The refresh worker (PR 5)
 
@@ -235,12 +233,10 @@ enable. Rollback in production is a dashboard env edit, no deploy.
 
 ## Conservative comparison and controlled serving (2026-09-08)
 
-`TREG_ARCHIVE_COMPARISON_MODE` defaults to `strict`: only identical raw-byte SHA-256 hashes
-count as stable among found-to-found observations. Every differing positive response counts as changed, including whitespace, JSON field
-order and timestamps. `legacy_noise` explicitly restores `_noise_only`; unknown values select
-strict. The legacy heuristic can misclassify recurring business-field changes as noise and is
-not recommended for serving. Strict mode does not load or decompress the previous carrier to
-compare differing hashes. Stored bodies and exact-byte dedup are unchanged.
+`TREG_ARCHIVE_COMPARISON_MODE` accepts only `strict` (the default). `comparison_mode()` always
+returns strict. The legacy noise implementation is removed, including its JSON path traversal.
+Every differing found-to-found raw-byte hash counts changed, including whitespace, field order
+and timestamps; hash comparison needs no previous-body GET. Stored bodies and exact-byte dedup are unchanged.
 
 TTL learning and lookup retain the original behavior: stable observations grow the timer by
 1.5, changed observations halve it, and TTL_NEVER remains respected. The fixed capability timer
