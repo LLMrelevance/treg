@@ -188,6 +188,13 @@ EP = "tikhub.tiktok.video.comments"   # tier-4 eligible in the test allow-list, 
 @pytest.fixture
 def platform_on(monkeypatch):
     """Tier 4 the way a deploy turns it on (mirrors test_marketplace_call)."""
+    # These are archive mechanics tests with synthetic Tikhub response bodies. Real result
+    # classification is exercised through /call in test_cache_result_admission.py.
+    from treg.domain.catalog import results
+    classify = results.classify
+    monkeypatch.setattr(results, "classify", lambda ep, status, body:
+                        results.Result("found", "fixture") if ep == EP and 200 <= status < 300
+                        else classify(ep, status, body))
     monkeypatch.setenv("TREG_PLATFORM_KEY_TIKHUB", "PLATFORM-TIKHUB-KEY")
     monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "tikhub")
     get_settings.cache_clear()

@@ -256,8 +256,12 @@ def _burst_retry_after(provider: str, response: UpstreamResponse, body: bytes) -
 
 
 def _hit_verdict(mk: MarketplaceCall, status: int, body: bytes) -> bool | None:
-    """Found or not, read off a 2xx body by the endpoint's fixture-verified routing adapter; None
-    when nothing can tell. The verdict is all that is kept — never the body."""
+    """Use explicit result rules where available, then the verified-adapter fallback.
+    Undecidable responses yield None; no provider bytes are rewritten."""
+    from ...domain.catalog.results import SUPPORTED, classify
+
+    if mk.endpoint_id in SUPPORTED:
+        return classify(mk.endpoint_id, status, body).hit
     if not 200 <= status < 300:
         return None
     adapter = catalog_store.load().adapters.get(mk.endpoint_id)
@@ -1103,6 +1107,11 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
                 err_response = _error_response_evidence(
                     response.raw_headers, body, _renderings)
         may_overflow = response.status >= 400 and mk.tier == "platform"
+        from ...domain.catalog.results import classify
+
+        result = classify(mk.endpoint_id, response.status, body)
+        cache_diagnostics.update(result_state=result.state, result_reason=result.reason,
+                                 cache_admission="eligible" if result.state == "found" else result.state)
         pending = _audit(response.status, observed_micro=observed,
                          charged_micro=None if deferred else charged,
                          duration_ms=duration_ms, response_bytes=len(body), hit=_hit_verdict(mk, response.status, body),

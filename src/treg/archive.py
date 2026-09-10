@@ -1,29 +1,17 @@
-"""The archive — every platform answer, kept and versioned. (PR 1: skeleton, no behavior.)
+"""Versioned platform responses, result admission, adaptive TTL and cache serving.
 
-Two concepts, one word each (charter discipline):
+History and cache share exact provider bytes but have different eligibility rules. Only a
+confirmed useful result can be served; explicit empty results invalidate it. Errors and unknown
+results preserve the previous decisive observation without renewing its freshness. Response
+history and byte deduplication remain independent of result usefulness.
 
-- **cache**: the newest stored answer for a key, served instead of a vendor call while it is
-  fresh. Serving arrives in a later PR and only when `TREG_ARCHIVE_MODE=serve`.
-- **archive**: every version of every answer, forever, each with its timestamp. The cache is the
-  archive's newest layer. History is deliberately kept — it is the future data product, not waste.
+Recording observes already-buffered metered platform calls under the catalog retention policy.
+Own-key and own-tool streams are untouched. Async terminal JSON is mandatory settlement evidence,
+not cache evidence. This module never changes balances or the upstream response.
 
-What this module owns: the mode gate, the per-endpoint eligibility policy, and the cache key.
-What it will NEVER own: money. A cached hit tags records "cached" and nothing else — billing of a
-cached hit is an explicitly deferred product decision, and no code here may touch ledger/billing.
-
-The mode is a three-position switch, staged like a rollout and reversible without a deploy:
-  off    → the archive does not exist at runtime (default).
-  shadow → record + learn from responses we already relay; serve nothing (phase 0).
-  serve  → shadow, plus eligible fresh hits are answered from the store (phase 1+).
-
-Eligibility is three gates, in order, all of which must pass:
-  1. Kind — actions (submit/send/write) are never stored; only data reads pass.
-  2. License — per catalog entry: `cache: forbidden | transient | archive`, carried with the
-     license quote and source URL exactly like `cost` provenance. Absent field ⇒ forbidden:
-     a provider nobody has judged must not be stored by default.
-  3. Tier — only METERED PLATFORM calls (treg's own vendor key) are recorded; those responses are
-     already fully buffered for the settle, so recording adds no latency and no new data path.
-     Own-key and own-tool calls stream and are never touched.
+Modes: off disables recording and serving; shadow records and learns; serve additionally permits
+fresh eligible answers behind the endpoint allowlist and team cohort gate. Background recording
+is bounded and best-effort. Cache hits do not create new observations or learning evidence.
 """
 
 from __future__ import annotations
@@ -512,6 +500,17 @@ async def _lock_archive_key(s, key_id: int):
     )).scalars().one()
 
 
+async def _snapshot_body(session, snapshot):
+    from .models import ArchiveSnapshot
+
+    body = _unpack(snapshot.body, snapshot.enc)
+    if body is None and snapshot.body_of is not None:
+        carrier = await session.get(ArchiveSnapshot, snapshot.body_of)
+        if carrier is not None and carrier.key_id == snapshot.key_id:
+            body = _unpack(carrier.body, carrier.enc)
+    return body
+
+
 async def _store_locked(
     *,
     method: str,
@@ -531,9 +530,11 @@ async def _store_locked(
     from sqlalchemy.exc import IntegrityError
 
     from .domain.catalog import store as catalog_store
+    from .domain.catalog.results import classify
     from .infra.db import background_session_maker
     from .models import ArchiveKey, ArchiveSnapshot
 
+    result = classify(endpoint_id, status_code, body)
     entry = catalog_store.load().by_id.get(endpoint_id)
     pol = policy(entry)
     # `record()` hands both hashes in, computed once on the call path; the fallback keeps
@@ -587,29 +588,43 @@ async def _store_locked(
             status_code=status_code, media_type=media_type, content_hash=ch,
             body=stored, enc=enc, size_bytes=len(body),
             fetched_at=now, origin=origin)
-        if newest is not None:
-            if newest.content_hash == ch:
+        # Byte deduplication is independent of usefulness, including empty history.
+        if newest is not None and newest.content_hash == ch:
+            carrier = newest.body_of or (newest.id if newest.body is not None else None)
+            if carrier is not None:
+                snap.body, snap.body_of = None, carrier
+
+        baseline = None
+        if (key.result_state is None or
+                (newest is not None and key.result_observed_version != newest.version)):
+            # Upgrade lazily from the latest version only. Never search past an empty result.
+            key.result_state = "unknown"
+            key.result_snapshot_id = None
+            if newest is not None:
+                previous_body = await _snapshot_body(s, newest)
+                if previous_body is not None:
+                    previous = classify(endpoint_id, newest.status_code, previous_body)
+                    if previous.state in ("found", "empty"):
+                        key.result_state = previous.state
+                        key.result_snapshot_id = newest.id
+                        baseline = newest
+        elif key.result_snapshot_id is not None:
+            baseline = await s.get(ArchiveSnapshot, key.result_snapshot_id)
+            if baseline is not None and baseline.key_id != key.id:
+                baseline = None
+
+        decisive = result.state in ("found", "empty") and origin != "async_terminal"
+        if decisive and baseline is not None and (key.result_state, result.state) != ("empty", "empty"):
+            stable = key.result_state == result.state == "found" and baseline.content_hash == ch
+            if (not stable and key.result_state == result.state == "found"
+                    and comparison_mode() == "legacy_noise"):
+                stable = _noise_only(await _snapshot_body(s, baseline), body, key)
+            if stable:
                 key.stable_seen += 1
-                learn(key, stable=True, entry=entry)
-                carrier = newest.body_of or (newest.id if newest.body is not None else None)
-                if carrier is not None:      # bytes already on file — reference, don't repeat
-                    snap.body, snap.body_of = None, carrier
             else:
-                noise = False
-                if comparison_mode() == "legacy_noise":
-                    old_body = _unpack(newest.body, newest.enc)
-                    if old_body is None and newest.body_of is not None:
-                        old = await s.get(ArchiveSnapshot, newest.body_of)
-                        old_body = _unpack(old.body, old.enc) if old is not None else None
-                    noise = _noise_only(old_body, body, key)
-                if noise:
-                    # Legacy heuristic only: repeated fields can also be real business data.
-                    key.stable_seen += 1
-                    learn(key, stable=True, entry=entry)
-                else:
-                    key.change_seen += 1
-                    key.last_changed_at = now
-                    learn(key, stable=False, entry=entry)
+                key.change_seen += 1
+                key.last_changed_at = now
+            learn(key, stable=stable, entry=entry)
         key.fetched_at, key.policy = now, pol
         if origin == "caller":     # a refresh is treg asking itself — never demand
             key.last_requested_at = now
@@ -618,6 +633,11 @@ async def _store_locked(
         # Make version conflicts explicit here, before any stats query or commit handling. The
         # IntegrityError leaves this function and the outer loop retries the whole transaction.
         await s.flush()
+        key.result_observed_version = snap.version
+        if decisive:
+            key.result_state = result.state
+            key.result_snapshot_id = snap.id
+            s.add(key)
         await _bump_stats(
             s, endpoint_id=endpoint_id, provider=provider, pol=pol, new_key=new_key,
             stable_d=key.stable_seen - seen_before[0], changed_d=key.change_seen - seen_before[1],
@@ -700,7 +720,7 @@ async def prune_once() -> int:
             # a surviving version may reference a body on an older row (dedup), and stripping the
             # carrier would silently orphan it.
             candidates = [v for v in versions[budget:]
-                          if v.body is not None
+                          if v.id != key.result_snapshot_id and v.body is not None
                           and (key.ttl_s == TTL_NEVER or v.fetched_at <= min_age)]
             surviving = [v for v in versions if v not in candidates]
             protected = ({v.id for v in surviving}
@@ -898,6 +918,16 @@ async def lookup(
             newest = (await s.execute(
                 select(ArchiveSnapshot).where(ArchiveSnapshot.key_id == key.id)
                 .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
+            # Older writers can still append during a rolling deploy. A version they wrote
+            # invalidates our saved decision; classify that newest body as legacy evidence.
+            assessed = (newest is not None and key.result_state is not None
+                        and key.result_observed_version == newest.version)
+            if assessed:
+                if key.result_state != "found":
+                    return miss("result_" + key.result_state)
+                newest = await s.get(ArchiveSnapshot, key.result_snapshot_id)
+                if newest is not None and newest.key_id != key.id:
+                    return miss("snapshot_unavailable")
             if newest is None or not (200 <= newest.status_code < 300):
                 return miss("snapshot_unavailable")
             age_s = int((_utcnow() - newest.fetched_at).total_seconds())
@@ -905,12 +935,14 @@ async def lookup(
                 diagnostics.update(cache_age_s=age_s, cache_window_s=window)
             if age_s < 0 or age_s > window:
                 return miss("stale")
-            body = _unpack(newest.body, newest.enc)
-            if body is None and newest.body_of is not None:  # deduplicated — follow the carrier
-                carrier = await s.get(ArchiveSnapshot, newest.body_of)
-                body = _unpack(carrier.body, carrier.enc) if carrier is not None else None
-            if body is None:  # hash-only history (policy or size cap at record time)
+            body = await _snapshot_body(s, newest)
+            if body is None:
                 return miss("body_missing")
+            from .domain.catalog.results import classify
+
+            result = classify(endpoint_id, newest.status_code, body)
+            if result.state != "found":
+                return miss("result_" + result.state)
         if diagnostics is not None:
             diagnostics["cache_outcome"] = "hit"
         _touch(kh)
@@ -1120,6 +1152,8 @@ async def refresh_once(client) -> int:
     for key in candidates:
         if refreshed >= _REFRESH_PER_PASS:
             break
+        if key.result_state != "found":
+            continue
         entry = cat.by_id.get(key.endpoint_id)
         if not storable(entry):
             continue  # judgment changed since recording — never refresh what may not be kept

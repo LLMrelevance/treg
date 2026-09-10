@@ -242,6 +242,14 @@ After credential refresh and relay, `_audit` records the attempt and mirrors it 
 own tool's upstream host. Analytics includes outcome, status, timing, cost, call reference,
 capacity/cache/smoothing signals and user-agent attribution, never params or bodies.
 
+For Hunter company emails, LeadMagic employee finder, and SE Ranking keyword volume,
+`_hit_verdict` uses the same conservative result classifier as cache admission. Found means
+`hit=true`, explicit empty means false, and errors/unknown shapes mean null. It only inspects
+already-buffered bodies and never changes the faithful relay or settlement. Existing
+`tool_called` events expose `result_state`, `result_reason` and `cache_admission`, separately
+from cache reuse. Other endpoint business-hit metrics retain the verified-adapter fallback.
+See [archive result admission](archive.md#result-admission).
+
 Overflow retains both attempt rows under the same call reference, but emits one product event for
 the final answer. `defer_analytics` holds the parent's event until the child succeeds or the
 parent's answer stands. Failed-request redaction and retention belong to

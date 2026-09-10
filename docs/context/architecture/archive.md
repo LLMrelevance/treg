@@ -1,8 +1,11 @@
 ---
-title: Archive - every platform answer, kept and versioned (cache = the newest layer)
+title: Archive - versioned history and cache admission
 status: building
 sources:
   - src/treg/archive.py
+  - src/treg/domain/catalog/results.py
+  - src/treg/alembic/versions/0027_archive_result_admission.py
+  - tests/test_cache_result_admission.py
   - src/treg/alembic/versions/0002_archive_tables.py
   - src/treg/alembic/versions/0003_callrecord_cached.py
   - src/treg/alembic/versions/0004_archivekey_request_shape.py
@@ -35,8 +38,8 @@ the deliberate exception: only the winning caller/worker finalizer stores it und
 call id, independent of replay policy; generated media bytes are never downloaded.
 
 Two concepts, one word each — the vocabulary is deliberate and mirrors the charter's discipline:
-**cache** is the newest stored answer for a key, served instead of a vendor call while it is
-fresh; **archive** is every version of every answer, kept with its timestamp. The cache is the
+**cache** is the last confirmed useful answer for a key, served instead of a vendor call while
+it is fresh and no later decisive observation invalidates it; **archive** is every version of every answer, kept with its timestamp. The cache is the
 archive's top layer. History is kept on purpose: it is the future data product (per-key
 time-series — backlink profiles over time, price history), not waste.
 
@@ -66,15 +69,51 @@ and body the audit row never kept); `scripts/backfill_call_archive_links.py` lin
 effort — same endpoint, same byte size, fetch within ±10 s, unambiguous in both directions —
 dry run by default, `--apply` to write, `--render` for the prod allowlist dance.
 
+## Result admission
+
+`domain.catalog.results.classify` inspects the already-buffered provider bytes without rewriting
+any response. It recognizes three endpoints: `hunter.companies.emails`,
+`leadmagic.x.employee-finder`, and `seranking.google.keywords.volume`. Results are `found`,
+`empty`, `error`, or `unknown`, with bounded reason codes. Hunter needs actual email values;
+LeadMagic needs person identity fields, not an email address; SE Ranking needs boolean
+`is_data_found` and a valid nonnegative volume for found rows. Zero volume is useful data. A
+mixed SE Ranking batch is useful if at least one row has data and every row has a valid shape.
+Explicit empty arrays/no-data flags are empty. HTTP errors and explicit provider error envelopes
+are errors; missing rules, invalid JSON and malformed shapes are unknown. Unsupported endpoints
+continue to archive under existing policies, but cannot serve or teach the cache timer.
+
+`ArchiveKey.result_state` and `result_snapshot_id` track the last decisive found/empty observation,
+separately from the latest historical snapshot. `result_observed_version` identifies the newest
+version assessed by this code. Migration `0027` adds nullable columns without rewriting history
+or resetting TTL/counters. Legacy keys are classified lazily from their newest body; a version
+appended by an older binary during rollout similarly invalidates the saved decision. Lookup
+rechecks the candidate's body against current rules and never searches behind an explicit empty.
+The pointer is owned by the archive writer and key ownership is checked on reads; snapshots are
+never deleted, so no cyclic foreign key is introduced.
+
+Only found-to-found observations can count stable. Strict mode compares exact raw-byte hashes.
+Found-to-empty counts one change and invalidates serving; repeated empty results neither grow
+nor shrink TTL. Empty-to-found counts a change and restores eligibility. Errors and unknowns add
+history under the existing capture policy but do not replace decisive evidence or update learning.
+A retained positive result still expires at its own timestamp, not the timestamp of a later error.
+Cache hits remain reads, never fresh learning evidence. Existing stable/change rollups receive
+only these eligible deltas; historical counters remain mixed-policy lifetime totals.
+
+Byte retention and exact-byte dedup remain independent of usefulness. Empty 2xx answers still
+link to the caller's history. Non-2xx capture scope is unchanged. Async terminal evidence remains
+mandatory history and is never learning evidence. Recording and invalidation still use the
+existing bounded, best-effort background writer, so they take effect after that transaction
+commits; this is not a synchronous invalidation guarantee.
+
 ## The learner (PR 5)
 
-Runs inside the recorder on every refetch of a known key. AIMD on `ttl_s`: stable ⇒ ×1.5, capped
+Runs inside the recorder on decisive refetches of a known key, subject to result admission above. AIMD on `ttl_s`: stable ⇒ ×1.5, capped
 by min(30 d, the judged `cache.max_age_s`); changed ⇒ ×0.5, floored at 60 s. A key whose first
 `_NEVER_AFTER` (4) refetches ALL changed marks itself `ttl_s = TTL_NEVER (-1)` — never served
 until a stable refetch resets it. The lookup prefers the learned timer (`ttl_s > 0`) over the
 fixed phase-1 guesses.
 
-**Noise vs change.** When a refetch differs, the diff's leaf paths (lists collapse to `[]`,
+**Noise vs change (opt-in `legacy_noise` only).** When a found-to-found refetch differs, the diff's leaf paths (lists collapse to `[]`,
 bounded depth 6 / 400 paths) are compared to the previous diff-set (`volatile_paths`, kept per
 key). The SAME set repeating counts as noise ⇒ stable, under two guards: it must be a minor
 share (< 40%) of a body with ≥ 5 leaves — a tiny body whose one value moves every fetch is a
@@ -85,7 +124,8 @@ touched; stripping exists only in comparison.
 
 `archive.refresh_worker` runs in-process from lifespan (adsconv's discipline), gated by
 `worker_enabled()` = serve mode AND `archive_refresh_daily_cap > 0`; interval
-`archive_refresh_interval_s` (300 s). A key EARNS refreshing: window ≥ 80% consumed AND
+`archive_refresh_interval_s` (300 s). Only keys with a confirmed `found` decision can earn refreshing; legacy/empty/unknown keys wait
+for caller observations. A key EARNS refreshing: window ≥ 80% consumed AND
 `last_requested_at > fetched_at` (a caller asked since the last fetch — a refresh itself never
 counts as demand). Brakes: per-provider daily call cap (counted from `origin="refresh"`
 snapshots — no bookkeeping table to drift) and 10 per pass. The call replays the stored
@@ -186,7 +226,7 @@ enable. Rollback in production is a dashboard env edit, no deploy.
 ## Conservative comparison and controlled serving (2026-09-08)
 
 `TREG_ARCHIVE_COMPARISON_MODE` defaults to `strict`: only identical raw-byte SHA-256 hashes
-count as stable. Every differing response counts as changed, including whitespace, JSON field
+count as stable among found-to-found observations. Every differing positive response counts as changed, including whitespace, JSON field
 order and timestamps. `legacy_noise` explicitly restores `_noise_only`; unknown values select
 strict. The legacy heuristic can misclassify recurring business-field changes as noise and is
 not recommended for serving. Strict mode does not load or decompress the previous carrier to
@@ -221,7 +261,13 @@ The existing `tool_called` PostHog event carries `cache_outcome`, `cache_mode`,
 `cache_lookup_ms`. Snapshot lookups additionally expose `cache_age_s` and `cache_window_s`.
 Outcomes distinguish hit, key_missing, stale, snapshot_unavailable, body_missing, ttl_disabled,
 policy_excluded, caller_bypass, endpoint_disabled, rollout_disabled, missing_cohort, control,
-lookup_error and not_attempted (or mode_disabled for direct disabled lookups).
+lookup_error, result_empty, result_error, result_unknown and not_attempted (or mode_disabled for
+direct disabled lookups). Buffered call telemetry also includes `result_state`, `result_reason`,
+and `cache_admission` (`eligible`, `empty`, `error`, `unknown`). Admission describes the result
+gate, not persistence success or permission to serve. Business `hit` is true/false/null for the
+three supported endpoints; other endpoints retain their existing adapter-based business metric.
+`cached` and `cache_outcome=hit` describe cache reuse, a different fact. A rejected stored body
+appears in `cache_outcome`; the final live answer appears in `result_state`.
 No request key, body, ignored field paths or headers are added to analytics. The existing
 bounded, lossy analytics sink is reused; no new per-hit DB row or extra network request is added.
 `cache_lookup_ms` includes gate/DB/decompression time, not just SQL; `duration_ms` on the parent
@@ -326,7 +372,7 @@ rebuilding JSON from stored values risks the byte-verbatim promise the hashes de
 Profit-shaped shelf clearing: a served hit is revenue with no vendor cost, so a body's right to
 disk is its earning potential. `prune_once` strips BYTES only — every version row keeps its hash,
 size and timestamp, the newest version of every key stays whole (serving and change-detection
-need it), and the strip set is decided before carrier protection so a surviving dedup reference
+need it), the decisive snapshot and its carrier remain protected even after later errors, and the strip set is decided before carrier protection so a surviving dedup reference
 never loses its carrier. Rank of removal: never-servable keys (TTL_NEVER) keep exactly one body,
 age no defense; then old (`archive_prune_min_age_days`, 7) versions beyond the newest
 `archive_prune_keep_versions` (2) on keys undemanded for 14 days. Archive-policy endpoints are
