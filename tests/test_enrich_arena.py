@@ -383,7 +383,6 @@ def test_false_mailbox_verdict_is_not_a_miss():
 
 async def test_oauth_return_only_allows_arena(clients,monkeypatch):
     from types import SimpleNamespace
-    from urllib.parse import quote
     from starlette.requests import Request
     from treg.routers.auth import _finish_oauth_login
     u=SimpleNamespace(id=1,token_version=0)
@@ -399,12 +398,17 @@ async def test_oauth_return_only_allows_arena(clients,monkeypatch):
         ('/enrich-arena\r\nSet-Cookie: injected=1', '/app'),
     ]:
         req=Request({'type':'http','scheme':'http','server':('registry',80),'path':'/auth/google/callback',
-                     'headers':[(b'cookie',('treg_arena_return='+quote(value, safe='')).encode())]})
+                     'headers':[(b'cookie',('treg_arena_return='+crypto.encrypt(value)).encode())]})
         response=_finish_oauth_login(req,u,None)
         assert response.headers['location']==expected
         from treg.routers.auth import _arena_return_target
         assert (_arena_return_target(value) or '/app') == expected
         assert _finish_oauth_login(req,u,('cli-id',)).headers['location']=='/login?cli=cli-id'
+    for invalid_cookie in ('', '/enrich-arena', crypto.encrypt('/enrich-arena')[:-4] + 'xxxx'):
+        req = Request({'type': 'http', 'scheme': 'http', 'server': ('registry', 80),
+                       'path': '/auth/google/callback',
+                       'headers': [(b'cookie', ('treg_arena_return=' + invalid_cookie).encode())]})
+        assert _finish_oauth_login(req, u, None).headers['location'] == '/app'
 
 
 async def test_cancel_releases_reserved_credit_once(clients, enrichment_on, monkeypatch):

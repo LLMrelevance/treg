@@ -325,14 +325,16 @@ async def test_oauth_callback_carries_arena_acquisition_and_counts_signup_once(g
     assert signups[0][2] == {"signup_method": "github", "entry_surface": "arena"}
 
 
-async def test_oauth_arena_return_cookie_encodes_and_restores_query(gc):
-    from urllib.parse import quote, urlencode
+async def test_oauth_arena_return_cookie_encrypts_and_restores_query(gc):
+    from urllib.parse import urlencode
 
     target = "/enrich-arena?" + urlencode({
         "run": "saved-run", "team": "sales; Secure\r\nSet-Cookie: injected=1",
     })
     started = await gc.get("/auth/github", params={"return_to": target})
-    assert gc.cookies.get("treg_arena_return") == quote(target, safe="")
+    cookie = gc.cookies.get("treg_arena_return")
+    assert cookie != target
+    assert crypto.decrypt(cookie) == target
     assert set(gc.cookies.keys()) == {"treg_oauth_state", "treg_arena_return"}
     return_header = next(h for h in started.headers.get_list("set-cookie")
                          if h.startswith("treg_arena_return="))
