@@ -112,6 +112,8 @@ related:
 
 # Endpoint catalog — platform-grouped operations per provider
 
+Sumble adds the full v9 surface with verified platform operations and explicit BYOK restrictions. See [Sumble](sumble.md) for schemas, pricing rules, routing and live evidence.
+
 The computed cost view uses a `cost.table` fallback as its scalar validated upper bound for
 eligibility and compact displays. Runtime charging evaluates the first matching row against request
 values plus catalog defaults and freezes that settlement basis. Terminal usage or the recorded table
@@ -1819,6 +1821,13 @@ People lookup/search entries are `untestable:` without test requests or stored e
 PII rule. Their routing adapters are omitted; company search/enrichment and email verification
 retain verified adapters. Profile-only LinkedIn enrichment costs $0.02 when found.
 See [ContactOut](contactout.md) for request limitations, derived settlement and live evidence.
+
+`Catalog.cost_view` reads optional provider-neutral `cost.display` metadata. `unit` names the
+shown unit; `grouped` displays the price for `cost.per` units; `round_up` labels a started block;
+`variable` adds a plus sign for selected additions. It returns computed display USD/unit/suffix
+fields without changing `usd` or settlement. The CLI and web formatters consume those fields.
+The validator checks flags and requires grouped prices to declare a positive integer `per`.
+Sumble keeps its billing rules in the existing provider-module pattern, separate from display rules.
 
 
 ### Similar-company routing
