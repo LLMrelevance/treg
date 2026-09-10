@@ -107,15 +107,21 @@ async def test_r2_queue_has_independent_concurrency_and_sheds_observably(clients
     monkeypatch.setattr(get_settings(), 'archive_r2_max_pending', 3)
     r2.gate = asyncio.Event()
     events = []
-    monkeypatch.setattr(service.analytics, 'capture', lambda who, name, props, **kw: events.append((name, props)))
-    for i in range(4):
-        await clients.get(URL + '&count=' + str(i))
-    await asyncio.sleep(0.05)
-    # More than the two DB write slots can upload; no DB transaction has started yet.
-    assert r2.put_calls == 3
-    assert all(row.body_storage == 'db' for row in await snapshots())
-    assert any(p.get('archive_body_drop_reason') == 'upload_queue_full' for _, p in events)
-    r2.gate.set()
+    dropped = asyncio.Event()
+    def capture(who, name, props, **kw):
+        events.append((name, props))
+        if props.get('archive_body_drop_reason') == 'upload_queue_full':
+            dropped.set()
+    monkeypatch.setattr(service.analytics, 'capture', capture)
+    try:
+        for i in range(4):
+            await clients.get(URL + '&count=' + str(i))
+        # Wait for the DB fallback's completion event, not an arbitrary scheduling delay.
+        await asyncio.wait_for(dropped.wait(), 5)
+        assert r2.put_calls == 3  # more uploads than the two DB write slots
+        assert all(row.body_storage == 'db' for row in await snapshots())
+    finally:
+        r2.gate.set()
     await archive.drain()
     assert len(await snapshots()) == 4 and len(r2.objects) == 1
     assert len([p for name, p in events if name == 'tool_called']) == 4
@@ -284,12 +290,12 @@ async def test_obstore_client_uses_one_request_and_checks_hash_and_size():
     small = R2ObjectStore(sdk, len(RAW) - 1, FileNotFoundError)
     with pytest.raises(ValueError, match='too large'):
         await small.put(RAW)
-    with pytest.raises(ValueError, match='too large'):
+    with pytest.raises(ValueError, match='too_large'):
         await small.get(digest)
     with pytest.raises(ValueError, match='content hash'):
         await store.get('../caller-controlled')
     sdk.body = b'corrupt'
-    with pytest.raises(ValueError, match='checksum'):
+    with pytest.raises(ValueError, match='hash_mismatch'):
         await store.get(digest)
 
 
@@ -373,7 +379,8 @@ async def test_result_admission_retains_decisive_r2_snapshot(clients, r2, monkey
         assert all(row.body_of is None for row in await snapshots())
 
 
-async def test_obstore_factory_configuration_and_missing_objects(monkeypatch):
+@pytest.mark.parametrize('write_timeout,read_timeout', [(10.0, 2.0), (0.01, 2.0), (30.0, 0.01)])
+async def test_obstore_factory_configuration_and_missing_objects(monkeypatch, write_timeout, read_timeout):
     from treg.infra.object_store import open_r2
     from tests.fake_object_store import MemoryObstoreSDK
     from obstore.store import S3Store
@@ -394,10 +401,115 @@ async def test_obstore_factory_configuration_and_missing_objects(monkeypatch):
     settings = Settings(_env_file=None, archive_object_store_bucket='treg-dev',
                         archive_object_store_endpoint='https://' + 'a' * 32 + '.r2.cloudflarestorage.com',
                         archive_object_store_access_key_id='fake', archive_object_store_secret_access_key='fake')
+    settings.archive_r2_timeout_s = write_timeout
+    settings.archive_r2_read_timeout_s = read_timeout
     async with open_r2(settings) as store:
         assert await store.head('0' * 64) is None
         assert await store.get('0' * 64) is None
     assert captured['config']['checksum_algorithm'] == 'SHA256'
     assert captured['config']['region'] == 'auto'
     assert captured['retry_config'] == {'max_retries': 0}
-    assert captured['client_options'] == {'timeout': '10.0s', 'connect_timeout': '10.0s'}
+    transport_timeout = f'{max(write_timeout, read_timeout)}s'
+    assert captured['client_options'] == {'timeout': transport_timeout, 'connect_timeout': transport_timeout}
+
+
+@pytest.mark.parametrize('path', ['lookup', 'result', 'terminal'])
+@pytest.mark.parametrize('reason,level', [('not_found', 'WARNING'), ('timeout', 'WARNING'),
+                                         ('permission_denied', 'ERROR'), ('hash_mismatch', 'ERROR')])
+async def test_read_fallback_reason_level_and_diagnostics(r2, monkeypatch, caplog, path, reason, level):
+    from treg.infra.object_store import ObjectReadError
+    monkeypatch.setattr(get_settings(), 'archive_body_read_' + path, 'r2-first')
+    monkeypatch.setattr(get_settings(), 'archive_r2_read_timeout_s', 0.01)
+    monkeypatch.setattr(get_settings(), 'archive_r2_timeout_s', 30.0)
+    async def fail(key):
+        if reason == 'timeout':
+            await asyncio.sleep(1)
+        elif reason == 'not_found':
+            return None
+        else:
+            raise ObjectReadError(reason)
+    monkeypatch.setattr(r2, 'get', fail)
+    p = archive_bodies.BodyPointer(archive.content_hash(RAW), 'both', RAW, None)
+    diagnostics = {}
+    before = archive_bodies.outcomes['read_fallback_' + path]
+    assert await archive_bodies.read(p, path, diagnostics=diagnostics) == RAW
+    assert diagnostics['cache_body_source'] == 'db'
+    assert diagnostics['cache_body_fallback_reason'] == reason
+    assert 0 <= diagnostics['cache_r2_read_ms'] < 500
+    assert archive_bodies.outcomes['read_fallback_' + path] == before + 1
+    record = [r for r in caplog.records if 'archive R2 read fallback' in r.message][-1]
+    assert record.levelname == level and f'path={path}' in record.message
+    assert reason in record.message and RAW.decode() not in record.message
+    assert p.content_hash not in record.message
+
+
+@pytest.mark.parametrize('fallback', [False, True])
+async def test_lookup_read_diagnostics_use_existing_tool_called(clients, r2, monkeypatch, fallback):
+    monkeypatch.setattr(get_settings(), 'archive_body_read_lookup', 'r2-first')
+    await clients.get(URL)
+    await archive.drain()
+    if fallback:
+        r2.objects.clear()
+    events = []
+    monkeypatch.setattr(service.analytics, 'capture', lambda who, event, props, **kw: events.append((event, props)))
+    response = await clients.get(URL)
+    await archive.drain()
+    assert response.headers['x-treg-cache'] == 'hit'
+    called = [props for name, props in events if name == 'tool_called']
+    assert len(called) == 1
+    assert called[0]['cache_body_source'] == ('db' if fallback else 'r2')
+    assert called[0]['cache_body_fallback_reason'] == ('not_found' if fallback else 'none')
+    assert called[0]['cache_r2_read_ms'] >= 0
+
+
+async def test_upload_does_not_use_read_timeout(clients, r2, monkeypatch):
+    monkeypatch.setattr(get_settings(), 'archive_r2_read_timeout_s', 0.001)
+    monkeypatch.setattr(get_settings(), 'archive_r2_timeout_s', 1.0)
+    put = r2.put
+    async def slow(body):
+        await asyncio.sleep(0.02)
+        return await put(body)
+    monkeypatch.setattr(r2, 'put', slow)
+    await clients.get(URL)
+    await archive.drain()
+    assert (await snapshots())[0].body_storage == 'both'
+
+
+@pytest.mark.parametrize('failure,expected', [(PermissionError('secret-body'), 'permission_denied'),
+    (RuntimeError('SignatureDoesNotMatch secret-body'), 'permission_denied'),
+    (RuntimeError('request timed out secret-body'), 'timeout'),
+    (RuntimeError('503 secret-body'), 'store_error')])
+async def test_sdk_read_errors_are_sanitized(failure, expected):
+    from treg.infra.object_store import R2ObjectStore, ObjectReadError
+    class SDK:
+        async def get_async(self, path):
+            raise failure
+    store = R2ObjectStore(SDK(), 1000, FileNotFoundError)
+    with pytest.raises(ObjectReadError) as exc:
+        await store.get('0' * 64)
+    assert exc.value.reason == expected and str(exc.value) == expected
+
+
+@pytest.mark.parametrize('path', ['lookup', 'result', 'terminal'])
+async def test_r2_only_missing_body_has_no_db_fallback(clients, r2, monkeypatch, path):
+    monkeypatch.setattr(get_settings(), 'archive_body_write', 'r2')
+    monkeypatch.setattr(get_settings(), 'archive_body_read_' + path, 'r2-first')
+    if path == 'terminal':
+        await archive.store_terminal_response('terminal-test', 'tikhub', EP, 200, RAW)
+    else:
+        await clients.get(URL)
+        await archive.drain()
+        await audit.drain()
+    r2.objects.clear()
+    if path == 'lookup':
+        calls = r2.put_calls
+        response = await clients.get(URL)
+        await archive.drain()
+        assert 'x-treg-cache' not in response.headers and response.content == RAW
+        assert r2.put_calls == calls + 1
+    elif path == 'result':
+        call = (await clients.get('/calls')).json()[0]
+        result = (await clients.get(f"/calls/{call['id']}/result")).json()
+        assert result['stored'] is False and result['response']['body_text'] is None
+    else:
+        assert await archive.load_terminal_responses([('terminal-test', EP)]) == {}

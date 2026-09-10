@@ -185,18 +185,47 @@ async def pointer(session, snapshot) -> BodyPointer:
     return BodyPointer(snapshot.content_hash, snapshot.body_storage, body, enc)
 
 
-async def read(pointer: BodyPointer, path: str) -> bytes | None:
+async def read(pointer: BodyPointer, path: str, *, diagnostics: dict | None = None) -> bytes | None:
     """Call only after closing every DB session owned by the request."""
+    from .infra.object_store import ObjectReadError
+    from .archive import _unpack
+
+    reason, elapsed = "none", 0.0
+    def observed(body, source):
+        if diagnostics is not None:
+            diagnostics.update(cache_body_source=source, cache_body_fallback_reason=reason,
+                               cache_r2_read_ms=elapsed)
+        return body
+
     if (getattr(get_settings(), f"archive_body_read_{path}") == "r2-first"
             and pointer.storage in ("both", "r2")):
+        started = time.monotonic()
         try:
-            async with asyncio.timeout(get_settings().archive_r2_timeout_s):
-                if _store is not None:
-                    body = await _store.get(pointer.content_hash)
-                    if body is not None and hashlib.sha256(body).hexdigest() == pointer.content_hash:
-                        return body
+            async with asyncio.timeout(get_settings().archive_r2_read_timeout_s):
+                if _store is None:
+                    raise ObjectReadError("store_unavailable")
+                body = await _store.get(pointer.content_hash)
+                if body is None:
+                    reason = "not_found"
+                elif hashlib.sha256(body).hexdigest() != pointer.content_hash:
+                    raise ObjectReadError("hash_mismatch")
+                else:
+                    elapsed = round((time.monotonic() - started) * 1000, 3)
+                    return observed(body, "r2")
+        except TimeoutError:
+            reason = "timeout"
+        except PermissionError:
+            reason = "permission_denied"
+        except ObjectReadError as exc:
+            reason = exc.reason if exc.reason in {
+                "not_found", "timeout", "permission_denied", "hash_mismatch", "too_large",
+                "store_unavailable", "store_error"} else "store_error"
         except Exception:
-            pass  # R2 faults fall back without leaking SDK exceptions or credentials
+            reason = "store_error"
+        elapsed = round((time.monotonic() - started) * 1000, 3)
         outcomes["read_fallback_" + path] += 1
-    from .archive import _unpack
-    return _unpack(pointer.body, pointer.enc)
+        outcomes["read_fallback_" + path + "_" + reason] += 1
+        level = logging.ERROR if reason in {"permission_denied", "hash_mismatch", "too_large"} else logging.WARNING
+        _log.log(level, "archive R2 read fallback path=%s reason=%s elapsed_ms=%s", path, reason, elapsed)
+    body = _unpack(pointer.body, pointer.enc)
+    return observed(body, "db" if body is not None else "none")

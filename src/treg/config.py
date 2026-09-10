@@ -320,6 +320,7 @@ class Settings(BaseSettings):
     archive_r2_max_pending: int = Field(default=256, ge=1, le=4096)
     archive_r2_max_pending_bytes: int = Field(default=128 * 1024 * 1024, ge=1)
     archive_r2_timeout_s: float = Field(default=10.0, gt=0, le=120)
+    archive_r2_read_timeout_s: float = Field(default=2.0, gt=0, le=120)
     archive_r2_terminal_attempts: int = Field(default=3, ge=1, le=5)
 
     # Strict compares raw bytes; the compatibility setting rejects other modes.

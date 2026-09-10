@@ -97,7 +97,10 @@ R2 has independent `ARCHIVE_R2_UPLOAD_CONCURRENCY` (8), `ARCHIVE_R2_MAX_PENDING`
 `ARCHIVE_R2_MAX_PENDING_BYTES` (128 MiB) budgets. Only PUT holds an
 upload slot. The DB stage keeps its original two slots and 30-second deadline. Upload admission
 failure in `both` falls back to the separately bounded original DB queue; `r2` sheds the recording.
-`ARCHIVE_R2_TIMEOUT_S` (10 seconds) bounds upload-slot wait plus PUT, and each GET.
+`ARCHIVE_R2_TIMEOUT_S` (10 seconds) continues to bound upload-slot wait plus PUT.
+`ARCHIVE_R2_READ_TIMEOUT_S` (2 seconds, configurable) separately bounds each lookup/result/terminal
+GET including materializing bytes. The shared SDK transport uses the larger timeout so it cannot
+prematurely cut off either operation; application deadlines enforce the separate budgets.
 Terminal evidence bypasses best-effort queue admission and synchronously retries uploads up to
 `ARCHIVE_R2_TERMINAL_ATTEMPTS` (3), with bounded backoff, before the DB write. Its settlement has
 already committed and cannot be undone by storage failure. Terminal failures also log a bounded
@@ -114,6 +117,26 @@ Pruning protects both that decisive snapshot and all R2-backed rows and their DB
 viewer remains a DB-only diagnostic in this first delivery. Read switches should be enabled
 before any future R2-only write rollout. No serving allowlist, cohort or production setting is
 changed here.
+
+Read diagnostics are in place before enabling any `r2-first` switch. Lookup adds
+`cache_body_source` (`db`, `r2`, or `none` when no bytes are available),
+`cache_body_fallback_reason` (`none` without fallback), and `cache_r2_read_ms` to the existing
+`cache_diagnostics` / `tool_called`. No extra call event or per-call DB write is added.
+All paths log bounded reasons without exception text, keys, bodies or credentials:
+`not_found` and `timeout` are WARNING; `permission_denied` (including signature failures) and
+`hash_mismatch` are ERROR. Oversized objects are also ERROR (`too_large`); other transport errors
+and an unavailable client are WARNING (`store_error`, `store_unavailable`). Result and terminal
+reads use these logs because they have no `tool_called`. Existing per-path process counters remain;
+additional bounded per-path/reason counters distinguish the failure classes.
+
+DB fallback requires a snapshot that still has DB bytes or a DB carrier, normally written during
+`db` or `both`. New `r2`-only writes have no DB copy: an R2 read failure becomes a cache miss and
+calls upstream for lookup; history returns `stored=false` with no response body, and terminal
+views have no archived terminal body. An old `both` snapshot can still fall back after the global
+write switch changes. A failed read does not mean the object was never archived or has been deleted.
+Read timeout and fallback observability must precede `r2-first`, so the entire double-write window
+has visible fallback rates. Observing those rates is a prerequisite for closing the double-write
+window and switching new writes to `r2`.
 
 `archive_bodies.Observation` completes the existing `tool_called` event after the background write,
 without delaying the response or inserting another call row/event. Fields are

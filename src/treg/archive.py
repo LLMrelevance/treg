@@ -989,7 +989,7 @@ async def lookup(
             if age_s < 0 or age_s > window:
                 return miss("stale")
             pointer = await archive_bodies.pointer(s, newest)
-        body = await archive_bodies.read(pointer, "lookup")
+        body = await archive_bodies.read(pointer, "lookup", diagnostics=diagnostics)
         if body is None:
             return miss("body_missing")
         if result_aware:

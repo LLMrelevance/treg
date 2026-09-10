@@ -25,9 +25,17 @@ def _key(content_hash: str) -> str:
     return content_hash
 
 
+class ObjectReadError(ValueError):
+    """A bounded, credential-free reason at the SDK boundary."""
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
 class R2ObjectStore:
-    def __init__(self, client, max_body_bytes: int, not_found: type[Exception]):
+    def __init__(self, client, max_body_bytes: int, not_found: type[Exception], *, auth_errors=()):
         self._client, self._max_bytes, self._not_found = client, max_body_bytes, not_found
+        self._auth_errors = (PermissionError, *auth_errors)
 
     async def put(self, body: bytes) -> ObjectInfo:
         if len(body) > self._max_bytes:
@@ -50,21 +58,40 @@ class R2ObjectStore:
         key = _key(content_hash)
         try:
             result = await self._client.get_async(key)
+            if result.meta["size"] > self._max_bytes:
+                raise ObjectReadError("too_large")
+            body = bytes(await result.bytes_async())
+            if len(body) > self._max_bytes:
+                raise ObjectReadError("too_large")
+            if hashlib.sha256(body).hexdigest() != key:
+                raise ObjectReadError("hash_mismatch")
+            return body
         except (self._not_found, FileNotFoundError):
             return None
-        if result.meta["size"] > self._max_bytes:
-            raise ValueError("archive object too large")
-        body = bytes(await result.bytes_async())
-        if len(body) > self._max_bytes or hashlib.sha256(body).hexdigest() != key:
-            raise ValueError("archive download checksum mismatch")
-        return body
+        except ObjectReadError:
+            raise
+        except self._auth_errors:
+            raise ObjectReadError("permission_denied") from None
+        except TimeoutError:
+            raise ObjectReadError("timeout") from None
+        except Exception as exc:
+            # Some S3-compatible signature errors arrive as GenericError (HTTP 400). Inspect
+            # only for classification; never return/log the SDK's text, body or signed URL.
+            detail = str(exc)
+            if any(code in detail for code in ("SignatureDoesNotMatch", "InvalidAccessKeyId",
+                                               "ExpiredToken", "InvalidToken", "AccessDenied")):
+                raise ObjectReadError("permission_denied") from None
+            if "timed out" in detail.lower() or "timeout" in detail.lower():
+                raise ObjectReadError("timeout") from None
+            raise ObjectReadError("store_error") from None
 
 
 @asynccontextmanager
 async def open_r2(settings):
-    from obstore.exceptions import NotFoundError
+    from obstore.exceptions import NotFoundError, PermissionDeniedError, UnauthenticatedError
     from obstore.store import S3Store
 
+    transport_timeout = max(settings.archive_r2_timeout_s, settings.archive_r2_read_timeout_s)
     client = S3Store(
         settings.archive_object_store_bucket,
         config={
@@ -73,9 +100,10 @@ async def open_r2(settings):
             "secret_access_key": settings.archive_object_store_secret_access_key,
             "checksum_algorithm": "SHA256",
         },
-        client_options={"timeout": f"{settings.archive_r2_timeout_s}s",
-                        "connect_timeout": f"{settings.archive_r2_timeout_s}s"},
+        client_options={"timeout": f"{transport_timeout}s",
+                        "connect_timeout": f"{transport_timeout}s"},
         retry_config={"max_retries": 0})
     # One shared Rust HTTP pool for the lifespan. S3Store has no explicit close operation;
     # dropping the store after archive drains releases its client and pool.
-    yield R2ObjectStore(client, settings.archive_max_body_bytes, NotFoundError)
+    yield R2ObjectStore(client, settings.archive_max_body_bytes, NotFoundError,
+                        auth_errors=(PermissionDeniedError, UnauthenticatedError))
