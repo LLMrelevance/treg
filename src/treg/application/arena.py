@@ -748,9 +748,15 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
                 payload["stop_reason"] = (stopped.get(0, "No remaining service within the run budget returned the required data.") if count == 1 else
                     f"{hits} of {count} entries found. Each entry stops at its first result; later vendors receive unresolved entries.")
 
+    stop_watching = asyncio.Event()
+
     async def watch_cancel():
         while True:
-            await asyncio.sleep(0.75)
+            try:
+                await asyncio.wait_for(stop_watching.wait(), 0.75)
+                return
+            except TimeoutError:
+                pass
             async with session_maker() as db:
                 row = await db.get(ArenaRun, run_id)
                 if row is None or row.cancel_requested:
@@ -774,7 +780,9 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
         log.exception("Arena run failed: %s", run_id)
     finally:
         worker.cancel()
-        watcher.cancel()
+        # Finish an in-flight poll before saving. Cancelling SQLite cursor execution can leave
+        # a read lock alive after session cleanup, blocking this commit and later schema resets.
+        stop_watching.set()
         await asyncio.gather(worker, watcher, return_exceptions=True)
         for a in payload["attempts"]:
             v = a.get("verification")

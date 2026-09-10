@@ -452,6 +452,13 @@ Automatic price previews do not count toward that limit. Quote creation retires 
 quotes to retain at most 100 per user, preserving completed/running sessions. Start admission
 serializes on the user row across drafts and teams; hitting the execution limit still allows pricing.
 
+Run completion signals the cancellation poll to stop and waits for its current read/session to
+close before the final save. It never cancels that poll inside database I/O: under SQLite's
+rollback journal, cancellation during cursor execution can retain a read lock, blocking the
+final commit and subsequent test schema resets. `test_run_finishes_while_cancel_poll_is_reading`
+forces that overlap through a real Arena run; repeated xdist tests with CPU pressure cover the
+original intermittent failure. Audit/archive drains alone cannot release this reader's lock.
+
 Waterfall uses ascending quoted prices, retaining planner order for ties, and the bounded error fallback policy. It stops
 at the first structural hit: the adapter supplies the contract's required fields. Found work email
 does not mean verified deliverability; phone found does not mean a live line. A negative mailbox

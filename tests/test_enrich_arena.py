@@ -1429,3 +1429,51 @@ def test_phone_verification_context_does_not_override_explicit_calling_code():
     assert rules.validate_identity('people.phone.verify', {'phone':'020 7946 0958','country_code':'gb'}) == {'phone':'02079460958','country_code':'GB'}
     with pytest.raises(rules.ArenaError):
         rules.validate_identity('people.phone.verify', {'phone':'4155550100','country_code':'USA'})
+
+
+async def test_run_finishes_while_cancel_poll_is_reading(clients, enrichment_on, monkeypatch):
+    """Finish a real run while the cancellation poll is materializing a SQLite SELECT."""
+    from aiosqlite import Cursor
+    from treg.infra import db as database
+
+    if not database._is_sqlite:
+        pytest.skip("SQLite cursor cancellation regression")
+    queried = asyncio.Event()
+    release = asyncio.Event()
+    interrupted = []
+    execute = Cursor.execute
+    save = arena._save
+
+    async def slow_poll(cursor, sql, parameters=None):
+        result = await execute(cursor, sql, parameters)
+        if ("watch_cancel" in asyncio.current_task().get_coro().__qualname__
+                and sql.startswith("SELECT") and not queried.is_set()):
+            queried.set()
+            asyncio.get_running_loop().call_later(0.05, release.set)
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                interrupted.append(True)
+                raise
+        return result
+
+    async def last_save(run_id, payload, state=None, **kwargs):
+        await save(run_id, payload, state, **kwargs)
+        if state is None and all(a["state"] in {"hit", "miss"} for a in payload["attempts"]):
+            await asyncio.wait_for(queried.wait(), 5)
+
+    monkeypatch.setattr(Cursor, "execute", slow_poll)
+    monkeypatch.setattr(arena, "_save", last_save)
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "hunter": [(200, HUNTER_HIT)], "tomba": [(200, TOMBA_HIT)]}, []))
+    try:
+        result = await finish(clients, await plan(clients))
+        assert result["state"] == "completed"
+        assert not interrupted, "run completion cancelled the poll inside SQLite cursor execution"
+        # Match the next fixture boundary: drain the writes, then rebuild the schema.
+        from treg import archive, audit
+        await audit.drain()
+        await archive.drain()
+        await database.reset_db()
+    finally:
+        release.set()
