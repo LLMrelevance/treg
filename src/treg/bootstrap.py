@@ -495,7 +495,7 @@ async def _archive_object_store(app):
     from . import archive_bodies
     from .infra.object_store import open_r2
 
-    archive_bodies.validate_configuration()
+    enabled = archive_bodies.validate_configuration()
     injected = getattr(app.state, "archive_object_store", None)
     if injected is not None:
         configure_archive_object_store(injected)
@@ -503,7 +503,7 @@ async def _archive_object_store(app):
             yield
         finally:
             configure_archive_object_store(None)
-    elif archive.mode() != "off" and archive_bodies.uses_r2():
+    elif enabled:
         async with open_r2(get_settings()) as store:
             configure_archive_object_store(store)
             try:

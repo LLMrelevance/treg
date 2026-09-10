@@ -532,7 +532,7 @@ async def test_changed_refetch_shrinks_the_timer(clients: AsyncClient, shadow, m
 @pytest.mark.parametrize("comparison", ["strict", "typo"])
 async def test_repeated_business_change_is_strict_by_default(clients: AsyncClient, shadow, monkeypatch,
                                                             comparison):
-    monkeypatch.setattr(get_settings(), "archive_comparison_mode", comparison)
+    assert not hasattr(get_settings(), "archive_comparison_mode")
     from tests.test_marketplace_call import _fake_relay
     for revenue in (100, 200, 300):
         body = json.dumps({"company": "A", "country": "US", "currency": "USD",
@@ -548,7 +548,7 @@ async def test_repeated_business_change_is_strict_by_default(clients: AsyncClien
 
 
 async def test_removed_noise_mode_cannot_weaken_strict_comparison(clients: AsyncClient, shadow, monkeypatch):
-    monkeypatch.setattr(get_settings(), "archive_comparison_mode", "legacy_noise")
+    assert not hasattr(get_settings(), "archive_comparison_mode")
     monkeypatch.setitem(catalog_store.load().by_id[EP], "cache", "transient")
     from tests.test_marketplace_call import _fake_relay
     bodies = [json.dumps({"req_id": i, "ts": i * 10,

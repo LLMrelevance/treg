@@ -2,19 +2,17 @@
 """Opt-in dev-bucket smoke: PUT, HEAD, GET. Leaves one tiny content-addressed object.
 
 TREG_ARCHIVE_OBJECT_STORE_* credentials must refer to the explicitly named dev/test bucket.
-Run with: uv run --extra server python scripts/smoke_archive_r2.py --dev-bucket treg-archive-dev
+Run with: uv run --extra server python scripts/smoke_archive_r2.py
 This is never part of CI and never creates buckets or changes cloud configuration.
 """
-import argparse
 import asyncio
 import hashlib
 import os
-import re
 
 
-async def run(bucket: str):
+async def run():
     from treg.config import Settings
-    from treg.infra.object_store import open_r2
+    from treg.infra.object_store import open_r2, R2_ENDPOINT_RE
 
     settings = Settings(_env_file=None)
     required = ("endpoint", "bucket", "access_key_id", "secret_access_key")
@@ -23,10 +21,9 @@ async def run(bucket: str):
     if missing:
         print("SKIP: missing dev object-store configuration: " + ", ".join(missing))
         return
-    if (os.environ.get('CI') or bucket != settings.archive_object_store_bucket
-            or bucket != 'treg-archive-dev'):
+    if os.environ.get('CI') or settings.archive_object_store_bucket != 'treg-archive-dev':
         raise SystemExit('Refusing: requires a matching explicit dev/test bucket outside CI')
-    if not re.fullmatch(r'https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com', settings.archive_object_store_endpoint):
+    if not R2_ENDPOINT_RE.fullmatch(settings.archive_object_store_endpoint):
         raise SystemExit('Invalid R2 endpoint')
     body = b'treg archive R2 dev smoke v1\n'
     digest = hashlib.sha256(body).hexdigest()
@@ -39,10 +36,7 @@ async def run(bucket: str):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--dev-bucket', default='treg-archive-dev')
-    args = parser.parse_args()
     try:
-        asyncio.run(run(args.dev_bucket))
+        asyncio.run(run())
     except Exception:
         raise SystemExit('R2 smoke failed; check the dev configuration and bucket access') from None

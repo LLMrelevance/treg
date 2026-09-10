@@ -304,7 +304,7 @@ async def test_dev_smoke_skips_missing_credentials(monkeypatch, capsys):
     for name in ('ENDPOINT', 'BUCKET', 'ACCESS_KEY_ID', 'SECRET_ACCESS_KEY'):
         monkeypatch.setenv('TREG_ARCHIVE_OBJECT_STORE_' + name, '')
     smoke = runpy.run_path('scripts/smoke_archive_r2.py')
-    await smoke['run']('treg-archive-dev')
+    await smoke['run']()
     output = capsys.readouterr().out
     assert output.startswith('SKIP:')
     assert 'TREG_ARCHIVE_OBJECT_STORE_ACCESS_KEY_ID' in output
@@ -318,7 +318,7 @@ async def test_dev_smoke_refuses_production_bucket(monkeypatch):
         monkeypatch.setenv('TREG_ARCHIVE_OBJECT_STORE_' + name, value)
     smoke = runpy.run_path('scripts/smoke_archive_r2.py')
     with pytest.raises(SystemExit, match='Refusing'):
-        await smoke['run']('treg-archive')
+        await smoke['run']()
 
 
 async def test_pruner_keeps_legacy_carrier_referenced_by_both_row(clients, r2, monkeypatch):
@@ -513,3 +513,26 @@ async def test_r2_only_missing_body_has_no_db_fallback(clients, r2, monkeypatch,
         assert result['stored'] is False and result['response']['body_text'] is None
     else:
         assert await archive.load_terminal_responses([('terminal-test', EP)]) == {}
+
+
+def test_retired_comparison_env_is_ignored(monkeypatch):
+    from treg.config import Settings
+    monkeypatch.setenv('TREG_ARCHIVE_COMPARISON_MODE', 'legacy_noise')
+    assert not hasattr(Settings(_env_file=None), 'archive_comparison_mode')
+
+
+def test_normalized_mode_and_r2_read_guard(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, 'archive_mode', 'typo')
+    monkeypatch.setattr(s, 'archive_body_write', 'r2')
+    assert archive_bodies.validate_configuration() is False
+    monkeypatch.setattr(s, 'archive_mode', 'serve')
+    with pytest.raises(RuntimeError, match='all read paths'):
+        archive_bodies.validate_configuration()
+
+
+@pytest.mark.parametrize('jurisdiction', ['', '.eu', '.fedramp'])
+def test_r2_endpoint_jurisdictions(jurisdiction):
+    from treg.infra.object_store import R2_ENDPOINT_RE
+    assert R2_ENDPOINT_RE.fullmatch('https://' + 'a'*32 + jurisdiction + '.r2.cloudflarestorage.com')
+    assert not R2_ENDPOINT_RE.fullmatch('https://' + 'a'*32 + '.evil.r2.cloudflarestorage.com')

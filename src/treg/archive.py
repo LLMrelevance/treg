@@ -46,10 +46,6 @@ def serving() -> bool:
     return mode() == "serve"
 
 
-def comparison_mode() -> str:
-    # Retain the settings name for deploy compatibility; the legacy heuristic is retired.
-    return "strict"
-
 
 def serve_endpoints() -> set[str]:
     return {value.strip() for value in get_settings().archive_serve_endpoints.split(",")

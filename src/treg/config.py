@@ -323,8 +323,6 @@ class Settings(BaseSettings):
     archive_r2_read_timeout_s: float = Field(default=2.0, gt=0, le=120)
     archive_r2_terminal_attempts: int = Field(default=3, ge=1, le=5)
 
-    # Strict compares raw bytes; the compatibility setting rejects other modes.
-    archive_comparison_mode: Literal["strict"] = "strict"  # compatibility setting; comparison is always strict
     # Exact endpoint IDs, comma-separated. Empty means no serving, even in serve mode.
     archive_serve_endpoints: str = ""
     # Stable team/endpoint cohorts; 0 disables serving, 100 includes every team.

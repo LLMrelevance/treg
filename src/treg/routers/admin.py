@@ -420,7 +420,7 @@ async def admin_archive(
             "kept_bytes": st.kept_bytes,
         })
     report = {"mode": archive_mod.mode(),
-              "comparison_mode": archive_mod.comparison_mode(),
+              "comparison_mode": "strict",
               "ttl_policy": "adaptive",
               "serve_endpoints": sorted(archive_mod.serve_endpoints()),
               "serve_percent": get_settings().archive_serve_percent,

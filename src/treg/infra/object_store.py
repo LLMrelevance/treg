@@ -12,6 +12,9 @@ class ObjectInfo:
     size: int
 
 
+R2_ENDPOINT_RE = re.compile(r"https://[0-9a-f]{32}(?:\.(?:eu|fedramp))?\.r2\.cloudflarestorage\.com")
+
+
 class ObjectStore(Protocol):
     async def put(self, body: bytes) -> ObjectInfo: ...
     async def get(self, content_hash: str) -> bytes | None: ...

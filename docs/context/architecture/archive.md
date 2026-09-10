@@ -152,7 +152,7 @@ writes have counters/logs rather than inventing a second `tool_called` event.
 
 When archive mode is enabled, any R2 switch requires `ARCHIVE_OBJECT_STORE_ENDPOINT`, `ARCHIVE_OBJECT_STORE_BUCKET`,
 `ARCHIVE_OBJECT_STORE_ACCESS_KEY_ID` and `ARCHIVE_OBJECT_STORE_SECRET_ACCESS_KEY`; bootstrap refuses incomplete config
-before opening DB connections. See SECURITY.md. `scripts/smoke_archive_r2.py --dev-bucket NAME`
+before opening DB connections. See SECURITY.md. `scripts/smoke_archive_r2.py`
 performs a real PUT/HEAD/GET only on `treg-archive-dev`, outside CI; it leaves
 one tiny test object. It reads environment variables only and prints SKIP with missing variable
 names when configuration/credentials are absent. `.env.example` contains blank placeholders. No real smoke runs as part of unit tests. Production values are managed
@@ -342,10 +342,9 @@ enable. Rollback in production is a dashboard env edit, no deploy.
 
 ## Conservative comparison and controlled serving (2026-09-08)
 
-`TREG_ARCHIVE_COMPARISON_MODE` accepts only `strict` (the default). `comparison_mode()` always
-returns strict. The legacy noise implementation is removed, including its JSON path traversal.
-Every differing found-to-found raw-byte hash counts changed, including whitespace, field order
-and timestamps; hash comparison needs no previous-body GET. Stored bodies and exact-byte dedup are unchanged.
+The comparison setting and helper are removed. Old `TREG_ARCHIVE_COMPARISON_MODE` environment
+values are ignored, including `legacy_noise`; events and admin props report `strict`. Only exact
+found-to-found hashes count stable.
 
 TTL learning and lookup retain the original behavior: stable observations grow the timer by
 1.5, changed observations halve it, and TTL_NEVER remains respected. The fixed capability timer
@@ -534,3 +533,7 @@ database just to report whether one exists — and the panel fired it once per e
 versions come from ONE columns-only query (`body IS NOT NULL` reads the header, never the
 bytes), and the panel fills a TTL cell only for the endpoint the operator clicks, from the
 inspector's own load. A dash in the TTL column means "click to learn".
+
+Startup uses the normalized archive mode (unknown values disable it). R2-only writes require
+all three reads to be `r2-first`; default, EU and FedRAMP R2 endpoints are accepted. The dev smoke
+script has no bucket argument and accepts only `treg-archive-dev`.
