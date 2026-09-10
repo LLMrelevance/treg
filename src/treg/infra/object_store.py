@@ -1,7 +1,6 @@
 """Private, content-addressed object storage. SDK imports stay inside the server factory."""
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-import base64
 import hashlib
 import re
 from typing import Protocol
@@ -26,62 +25,36 @@ def _key(content_hash: str) -> str:
     return content_hash
 
 
-def _missing(exc: Exception) -> bool:
-    return getattr(exc, "response", {}).get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound")
-
-
 class R2ObjectStore:
-    def __init__(self, client, bucket: str, max_body_bytes: int):
-        self._client, self._bucket, self._max_bytes = client, bucket, max_body_bytes
+    def __init__(self, client, max_body_bytes: int, not_found: type[Exception]):
+        self._client, self._max_bytes, self._not_found = client, max_body_bytes, not_found
 
     async def put(self, body: bytes) -> ObjectInfo:
         if len(body) > self._max_bytes:
             raise ValueError("archive body too large")
-        digest = hashlib.sha256(body).digest()
-        key = digest.hex()
-        # A single PUT with an explicit SHA-256 checksum validates bytes in transit. No multipart
-        # ETag assumptions, remote paths, or response-specific metadata under a shared hash.
-        checksum = base64.b64encode(digest).decode("ascii")
-        reply = await self._client.put_object(
-            Bucket=self._bucket, Key=key, Body=body, ContentType="application/octet-stream",
-            ChecksumSHA256=checksum, Metadata={"sha256": key})
-        if reply.get("ChecksumSHA256", checksum) != checksum:
-            raise ValueError("archive upload checksum mismatch")
-        info = await self.head(key)
-        if info != ObjectInfo(key, len(body)):
-            raise ValueError("archive object verification failed")
-        return info
+        key = hashlib.sha256(body).hexdigest()
+        await self._client.put_async(
+            key, body, attributes={"Content-Type": "application/octet-stream"},
+            use_multipart=False)
+        return ObjectInfo(key, len(body))
 
     async def head(self, content_hash: str) -> ObjectInfo | None:
         key = _key(content_hash)
         try:
-            reply = await self._client.head_object(Bucket=self._bucket, Key=key)
-        except Exception as exc:
-            if _missing(exc):
-                return None
-            raise
-        if reply.get("Metadata", {}).get("sha256") != key:
-            raise ValueError("archive object metadata mismatch")
-        return ObjectInfo(key, int(reply["ContentLength"]))
+            meta = await self._client.head_async(key)
+        except (self._not_found, FileNotFoundError):
+            return None
+        return ObjectInfo(key, int(meta["size"]))
 
     async def get(self, content_hash: str) -> bytes | None:
         key = _key(content_hash)
         try:
-            reply = await self._client.get_object(Bucket=self._bucket, Key=key)
-        except Exception as exc:
-            if _missing(exc):
-                return None
-            raise
-        async with reply["Body"] as stream:
-            if int(reply["ContentLength"]) > self._max_bytes:
-                raise ValueError("archive object too large")
-            chunks, size = [], 0
-            while chunk := await stream.read(min(65536, self._max_bytes + 1 - size)):
-                chunks.append(chunk)
-                size += len(chunk)
-                if size > self._max_bytes:
-                    raise ValueError("archive object too large")
-            body = b"".join(chunks)
+            result = await self._client.get_async(key)
+        except (self._not_found, FileNotFoundError):
+            return None
+        if result.meta["size"] > self._max_bytes:
+            raise ValueError("archive object too large")
+        body = bytes(await result.bytes_async())
         if len(body) > self._max_bytes or hashlib.sha256(body).hexdigest() != key:
             raise ValueError("archive download checksum mismatch")
         return body
@@ -89,20 +62,20 @@ class R2ObjectStore:
 
 @asynccontextmanager
 async def open_r2(settings):
-    from aiobotocore.config import AioConfig
-    from aiobotocore.session import get_session
+    from obstore.exceptions import NotFoundError
+    from obstore.store import S3Store
 
-    config = AioConfig(
-        connect_timeout=settings.archive_r2_timeout_s,
-        read_timeout=settings.archive_r2_timeout_s,
-        retries={"total_max_attempts": 1},
-        max_pool_connections=max(16, settings.archive_r2_upload_concurrency),
-        request_checksum_calculation="when_required",
-        response_checksum_validation="when_required")
-    async with get_session().create_client(
-        "s3", region_name="auto", config=config,
-        endpoint_url=settings.archive_object_store_endpoint,
-        aws_access_key_id=settings.archive_object_store_access_key_id,
-        aws_secret_access_key=settings.archive_object_store_secret_access_key,
-    ) as client:
-        yield R2ObjectStore(client, settings.archive_object_store_bucket, settings.archive_max_body_bytes)
+    client = S3Store(
+        settings.archive_object_store_bucket,
+        config={
+            "endpoint": settings.archive_object_store_endpoint, "region": "auto",
+            "access_key_id": settings.archive_object_store_access_key_id,
+            "secret_access_key": settings.archive_object_store_secret_access_key,
+            "checksum_algorithm": "SHA256",
+        },
+        client_options={"timeout": f"{settings.archive_r2_timeout_s}s",
+                        "connect_timeout": f"{settings.archive_r2_timeout_s}s"},
+        retry_config={"max_retries": 0})
+    # One shared Rust HTTP pool for the lifespan. S3Store has no explicit close operation;
+    # dropping the store after archive drains releases its client and pool.
+    yield R2ObjectStore(client, settings.archive_max_body_bytes, NotFoundError)

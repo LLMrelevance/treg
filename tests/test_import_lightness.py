@@ -23,9 +23,7 @@ _LIGHTWEIGHT_MODULES = (
     "treg.domain.asynctasks",
 )
 _SERVER_DEPENDENCY_ROOTS = (
-    "aiobotocore",
-    "botocore",
-    "aiohttp",
+    "obstore",
     "aiosqlite",
     "alembic",
     "asyncpg",

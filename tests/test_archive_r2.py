@@ -268,36 +268,27 @@ async def test_upload_timeout_and_byte_shedding_are_observable(clients, r2, monk
     assert any(p.get('archive_body_drop_reason') == 'upload_bytes_full' for _, p in events)
 
 
-async def test_s3_client_checks_hash_and_supports_partial_reads():
+async def test_obstore_client_uses_one_request_and_checks_hash_and_size():
     from treg.infra.object_store import R2ObjectStore, ObjectInfo
-    class Stream:
-        def __init__(self, body):
-            self.body = body
-        async def __aenter__(self):
-            return self
-        async def __aexit__(self, *args):
-            pass
-        async def read(self, size):
-            # Network reads may return fewer bytes than requested.
-            piece, self.body = self.body[:3], self.body[3:]
-            return piece
-    class S3:
-        async def put_object(self, **kw):
-            self.args = kw
-            return {'ChecksumSHA256': kw['ChecksumSHA256']}
-        async def head_object(self, **kw):
-            return {'Metadata': self.args['Metadata'], 'ContentLength': len(self.args['Body'])}
-        async def get_object(self, **kw):
-            return {'ContentLength': len(self.args['Body']), 'Body': Stream(self.args['Body'])}
-    sdk = S3()
-    store = R2ObjectStore(sdk, 'treg-dev', 1000)
+    from tests.fake_object_store import MemoryObstoreSDK
+    sdk = MemoryObstoreSDK()
+    store = R2ObjectStore(sdk, 1000, FileNotFoundError)
     digest = hashlib.sha256(RAW).hexdigest()
     assert await store.put(RAW) == ObjectInfo(digest, len(RAW))
-    assert sdk.args['Key'] == digest and 'ChecksumSHA256' in sdk.args
+    assert sdk.path == digest and 'sha256' not in sdk.attributes
+    assert sdk.calls == ['put']
+    assert await store.head(digest) == ObjectInfo(digest, len(RAW))
+    assert sdk.calls == ['put', 'head']
     assert await store.get(digest) == RAW
+    assert sdk.calls == ['put', 'head', 'get']
+    small = R2ObjectStore(sdk, len(RAW) - 1, FileNotFoundError)
+    with pytest.raises(ValueError, match='too large'):
+        await small.put(RAW)
+    with pytest.raises(ValueError, match='too large'):
+        await small.get(digest)
     with pytest.raises(ValueError, match='content hash'):
         await store.get('../caller-controlled')
-    sdk.args['Body'] = b'corrupt'
+    sdk.body = b'corrupt'
     with pytest.raises(ValueError, match='checksum'):
         await store.get(digest)
 
@@ -380,3 +371,33 @@ async def test_result_admission_retains_decisive_r2_snapshot(clients, r2, monkey
     assert (recovered.result_state, recovered.stable_seen, recovered.change_seen) == ('found', 1, 2)
     if write_mode == 'r2':
         assert all(row.body_of is None for row in await snapshots())
+
+
+async def test_obstore_factory_configuration_and_missing_objects(monkeypatch):
+    from treg.infra.object_store import open_r2
+    from tests.fake_object_store import MemoryObstoreSDK
+    from obstore.store import S3Store
+    import obstore.store
+    from treg.config import Settings
+    captured = {}
+    class Missing(MemoryObstoreSDK):
+        async def head_async(self, path):
+            raise FileNotFoundError('absent')
+        async def get_async(self, path, **kwargs):
+            raise FileNotFoundError('absent')
+    def factory(bucket, **kwargs):
+        captured.update(kwargs)
+        # Parse config with the real wheel, but perform no network I/O.
+        S3Store(bucket, **kwargs)
+        return Missing()
+    monkeypatch.setattr(obstore.store, 'S3Store', factory)
+    settings = Settings(_env_file=None, archive_object_store_bucket='treg-dev',
+                        archive_object_store_endpoint='https://' + 'a' * 32 + '.r2.cloudflarestorage.com',
+                        archive_object_store_access_key_id='fake', archive_object_store_secret_access_key='fake')
+    async with open_r2(settings) as store:
+        assert await store.head('0' * 64) is None
+        assert await store.get('0' * 64) is None
+    assert captured['config']['checksum_algorithm'] == 'SHA256'
+    assert captured['config']['region'] == 'auto'
+    assert captured['retry_config'] == {'max_retries': 0}
+    assert captured['client_options'] == {'timeout': '10.0s', 'connect_timeout': '10.0s'}

@@ -40,3 +40,30 @@ class MemoryObjectStore:
         self.check_io()
         body = self.objects.get(content_hash)
         return ObjectInfo(content_hash, len(body)) if body is not None else None
+
+
+class MemoryObstoreSDK:
+    """The obstore methods used by our adapter, without Rust or network I/O."""
+    def __init__(self):
+        self.calls = []
+
+    class Result:
+        def __init__(self, body):
+            self.body = body
+            self.meta = {'size': len(body)}
+
+        async def bytes_async(self):
+            return self.body
+
+    async def put_async(self, path, body, *, attributes, use_multipart):
+        self.calls.append("put")
+        self.path, self.body, self.attributes = path, body, attributes
+        assert use_multipart is False
+
+    async def head_async(self, path):
+        self.calls.append('head')
+        return {'size': len(self.body)}
+
+    async def get_async(self, path):
+        self.calls.append('get')
+        return self.Result(self.body)

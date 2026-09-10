@@ -61,12 +61,14 @@ exist since 2026-09-03 is the per-call read below: a team can see the answer ITS
 `archive_bodies` owns body preparation, object reads, the independent upload queue and completed
 storage observations. `archive.py` retains request keys, snapshots, transactions, TTL learning
 and pruning. `infra.object_store.ObjectStore` exposes only put/get/head; `open_r2` imports
-aiobotocore lazily and bootstrap owns its lifecycle. Tests inject `MemoryObjectStore` through
+obstore lazily and bootstrap owns its lifecycle. Tests inject `MemoryObjectStore` through
 `bootstrap.configure_archive_object_store` or `create_app(archive_object_store=...)`.
 
-Every object name is the raw body's SHA-256, with no prefix. PUT computes the name internally,
-transmits `ChecksumSHA256`, then HEAD verifies the digest metadata and size. Same-body concurrent
-uploads are harmless. R2 stores raw bytes, independent of the media type of any particular call.
+Every object name is the raw body's SHA-256, with no prefix. PUT computes the name internally and
+uses `checksum_algorithm=SHA256` so R2 verifies the upload checksum. A successful single PUT
+returns its hash and byte size, with no follow-up HEAD. HEAD makes one request for size. No custom
+sha256 attribute is stored or checked; GET enforces size limits and verifies the downloaded hash.
+Same-body concurrent uploads are harmless. R2 stores raw bytes, independent of the media type of any particular call.
 DB compression remains unchanged. GET verifies the full hash before returning data.
 
 Migration `0028` adds nullable `ArchiveSnapshot.body_storage`: `db`, `both`, or `r2`; NULL is
@@ -92,10 +94,10 @@ content-addressed object; no pointer names a failed upload. Existing policy and 
 before uploading. Hash-only history stays in DB when bytes are ineligible.
 
 R2 has independent `ARCHIVE_R2_UPLOAD_CONCURRENCY` (8), `ARCHIVE_R2_MAX_PENDING` (256), and
-`ARCHIVE_R2_MAX_PENDING_BYTES` (128 MiB) budgets. Only PUT plus its verification HEAD holds an
+`ARCHIVE_R2_MAX_PENDING_BYTES` (128 MiB) budgets. Only PUT holds an
 upload slot. The DB stage keeps its original two slots and 30-second deadline. Upload admission
 failure in `both` falls back to the separately bounded original DB queue; `r2` sheds the recording.
-`ARCHIVE_R2_TIMEOUT_S` (10 seconds) bounds upload-slot wait plus PUT/HEAD, and each GET.
+`ARCHIVE_R2_TIMEOUT_S` (10 seconds) bounds upload-slot wait plus PUT, and each GET.
 Terminal evidence bypasses best-effort queue admission and synchronously retries uploads up to
 `ARCHIVE_R2_TERMINAL_ATTEMPTS` (3), with bounded backoff, before the DB write. Its settlement has
 already committed and cannot be undone by storage failure. Terminal failures also log a bounded
