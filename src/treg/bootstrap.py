@@ -484,6 +484,36 @@ async def pool_gauge(*, sample_s: float = _POOL_GAUGE_SAMPLE_S,
         await asyncio.sleep(sample_s)
 
 
+def configure_archive_object_store(store) -> None:
+    """Composition seam shared by startup and in-memory tests."""
+    from . import archive_bodies
+    archive_bodies.configure(store)
+
+
+@asynccontextmanager
+async def _archive_object_store(app):
+    from . import archive_bodies
+    from .infra.object_store import open_r2
+
+    archive_bodies.validate_configuration()
+    injected = getattr(app.state, "archive_object_store", None)
+    if injected is not None:
+        configure_archive_object_store(injected)
+        try:
+            yield
+        finally:
+            configure_archive_object_store(None)
+    elif archive.mode() != "off" and archive_bodies.uses_r2():
+        async with open_r2(get_settings()) as store:
+            configure_archive_object_store(store)
+            try:
+                yield
+            finally:
+                configure_archive_object_store(None)
+    else:
+        yield
+
+
 def _lifespan(role: AppRole):
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -561,10 +591,16 @@ def _lifespan(role: AppRole):
             finally:
                 analytics.remove_fault_handler(fault_handler)
 
-    return lifespan
+    @asynccontextmanager
+    async def with_object_store(app):
+        async with _archive_object_store(app):
+            async with lifespan(app):
+                yield
+
+    return with_object_store
 
 
-def create_app(role: AppRole = "all") -> FastAPI:
+def create_app(role: AppRole = "all", *, archive_object_store=None) -> FastAPI:
     """Assemble one role from api.py's route definitions through an explicit factory."""
     if role not in ("all", "dataplane", "control"):
         raise ValueError(f"unknown app role: {role!r}")
@@ -617,4 +653,5 @@ def create_app(role: AppRole = "all") -> FastAPI:
         "background_tasks": list(ROLE_BACKGROUND_TASKS[role]),
         "startup_checks": startup_checks,
     }
+    app.state.archive_object_store = archive_object_store
     return app

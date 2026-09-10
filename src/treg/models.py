@@ -1458,6 +1458,9 @@ class ArchiveSnapshot(SQLModel, table=True):
     enc: str | None = Field(default=None)
 
 
+    # NULL is a legacy DB row. R2 objects are addressed directly by content_hash.
+    body_storage: str | None = Field(default=None)
+
 
 class ArenaRun(SQLModel, table=True):
     """Private, bounded Arena run. Encrypted payload owns the frozen plan and result snapshots."""

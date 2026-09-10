@@ -1238,6 +1238,7 @@ async def test_rollout_bypass_never_queries_cache(clients, serve, monkeypatch,
                         lambda who, event, props, **kw: events.append((event, props)))
     r = await clients.get(f"/call/{EP}?aweme_id=7")
     assert r.status_code == 200 and "x-treg-cache" not in r.headers
+    await archive.drain()  # storage outcomes complete the existing event asynchronously
     props = [p for e, p in events if e == "tool_called"][-1]
     assert props["cache_outcome"] == reason
     assert not archive.worker_enabled()
@@ -1269,6 +1270,7 @@ async def test_cache_reports_miss_hit_bypass_and_lookup_failure(clients, serve, 
     monkeypatch.setattr(archive, "lookup", broken)
     response = await clients.get(f"/call/{EP}?aweme_id=7")
     assert response.status_code == 200
+    await archive.drain()  # storage outcomes complete the existing event asynchronously
     props = [p for e, p in events if e == "tool_called"]
     assert [p["cache_outcome"] for p in props] == [
         "key_missing", "hit", "caller_bypass", "lookup_error"]
@@ -1302,6 +1304,7 @@ async def test_strict_comparison_preserves_existing_ttl(clients, serve, monkeypa
     r = await clients.get(f"/call/{EP}?aweme_id=7")
     assert r.status_code == 200
     assert (r.headers.get("x-treg-cache") == "hit") == (outcome == "hit")
+    await archive.drain()  # storage outcomes complete the existing event asynchronously
     props = [p for e, p in events if e == "tool_called"][-1]
     assert props["cache_outcome"] == outcome
     if timer > 0:

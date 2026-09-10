@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from .config import get_settings
+from . import archive_bodies
 
 # ---------------------------------------------------------------------------------------------
 # Mode
@@ -294,6 +295,7 @@ def record(
     media_type: str,
     body: bytes,
     origin: str = "caller",
+    observation: archive_bodies.Observation | None = None,
 ) -> tuple[str, str]:
     """Schedule one observation of a metered platform answer. Returns immediately; the write runs
     off-request on its own session. Call sites gate on `recording()` and 2xx — this function
@@ -307,23 +309,44 @@ def record(
     global _pending_bytes
     kh = cache_key(method, endpoint_id, url, caller_body, headers)
     ch = content_hash(body)
+    observation = observation or archive_bodies.Observation()
+    upload_rejection = None
+    if get_settings().archive_body_write != "db":
+        upload_rejection = archive_bodies.submit(lambda: _store(
+            method=method, endpoint_id=endpoint_id, provider=provider, url=url,
+            caller_body=caller_body, headers=headers, status_code=status_code,
+            media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
+            observation=observation), len(body), observation)
+        if upload_rejection is None:
+            return kh, ch
+        if get_settings().archive_body_write == "r2":
+            observation.finish(reason=upload_rejection)
+            return kh, ch
+        # Both mode preserves the old DB path even when the separate upload queue sheds.
+
     body_len = len(body)
     # Shed on EITHER count OR bytes — whichever bound bites first. The bytes bound prevents OOM
     # when a few large bodies queue while the semaphore is full; the count bound is the legacy
     # backstop for many small bodies (archive_max_body_bytes is 2 MB, so 512 × 2 MB = 1 GB).
     if len(_pending) >= _MAX_PENDING or _pending_bytes + body_len > _MAX_PENDING_BYTES:
+        observation.finish(reason="db_queue_full" if len(_pending) >= _MAX_PENDING else "db_bytes_full")
         return kh, ch
     _pending_bytes += body_len
     task = asyncio.create_task(asyncio.wait_for(_store(
         method=method, endpoint_id=endpoint_id, provider=provider, url=url,
         caller_body=caller_body, headers=headers, status_code=status_code,
-        media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch),
+        media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
+        observation=observation, upload_rejection=upload_rejection),
         timeout=_STORE_TIMEOUT_S))
     _pending.add(task)
     # Release bytes AND task when done. NOT redundant with drain()'s own removal: on a running
     # server drain() never fires, and this callback is the only exit from `_pending` — without it
     # the set fills to _MAX_PENDING and record() sheds every recording from then on.
-    task.add_done_callback(lambda t: _task_done(t, body_len))
+    def done(task):
+        _task_done(task, body_len)
+        observation.finish(reason="record_timeout" if not task.cancelled() and
+                           isinstance(task.exception(), TimeoutError) else "record_failed")
+    task.add_done_callback(done)
     return kh, ch
 
 
@@ -338,15 +361,11 @@ async def store_terminal_response(
     call_id: str, provider: str, endpoint_id: str, status_code: int, body: bytes,
 ) -> None:
     """Archive terminal task JSON under the originating call id without fetching linked media."""
-    try:
-        await asyncio.wait_for(_store(
+    await _store(
         method="GET", endpoint_id=endpoint_id, provider=provider,
         url=f"treg://asynctasks/{call_id}", caller_body=b"", headers={},
         status_code=status_code, media_type="application/json", body=body,
-        origin="async_terminal"), timeout=_STORE_TIMEOUT_S)
-    except (asyncio.TimeoutError, TimeoutError):
-        _log.warning("terminal archive recording dropped: database did not answer in %ss",
-                     _STORE_TIMEOUT_S)
+        origin="async_terminal")
 
 
 async def load_terminal_responses(tasks: list[tuple[str, str]]) -> dict[str, bytes]:
@@ -375,21 +394,19 @@ async def load_terminal_responses(tasks: list[tuple[str, str]]) -> dict[str, byt
         newest: dict[int, ArchiveSnapshot] = {}
         for snap in snaps:
             newest.setdefault(snap.key_id, snap)
-        for key_id, snap in newest.items():
-            body = snap.body
-            enc = snap.enc
-            if body is None and snap.body_of is not None:
-                carrier = await s.get(ArchiveSnapshot, snap.body_of)
-                body = carrier.body if carrier is not None else None
-                enc = carrier.enc if carrier is not None else None
-            if body is not None:
-                out[by_key[key_id]] = _unpack(body, enc)
+        pointers = {by_key[key_id]: await archive_bodies.pointer(s, snap)
+                    for key_id, snap in newest.items()}
+    for call_id, pointer in pointers.items():
+        body = await archive_bodies.read(pointer, "terminal")
+        if body is not None:
+            out[call_id] = body
     return out
 
 
 async def drain() -> None:
     """Flush in-flight recordings — shutdown and tests. Bounded: every task carries its own
     _STORE_TIMEOUT_S, so this cannot wait longer than the slowest permitted recording."""
+    await archive_bodies.drain()
     while _pending:
         tasks = list(_pending)
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -402,7 +419,9 @@ async def drain() -> None:
             if isinstance(r, asyncio.TimeoutError | TimeoutError):
                 _log.error("archive recording dropped: database did not answer in %ss",
                            _STORE_TIMEOUT_S)
-
+    # DB task completion can enqueue the observation callback after gather resumes. Flush it
+    # before shutdown drains analytics, including when R2 is disabled.
+    await asyncio.sleep(0)
 
 
 async def _bump_stats(s, *, endpoint_id: str, provider: str, pol: str, new_key: bool,
@@ -454,6 +473,8 @@ async def _store(
     origin: str = "caller",
     key_hash: str | None = None,
     body_hash: str | None = None,
+    observation: archive_bodies.Observation | None = None,
+    upload_rejection: str | None = None,
 ) -> None:
     """One recording: upsert the key, append a version, keep the change statistics honest.
 
@@ -466,27 +487,49 @@ async def _store(
     bytes are stored now, so a policy upgrade heals the store forward without a backfill."""
     from sqlalchemy.exc import IntegrityError
 
+    from .domain.catalog import store as catalog_store
+
+    observation = observation or archive_bodies.Observation()
     kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
+    ch = body_hash or content_hash(body)
+    keep = ((origin == "async_terminal" or storable(catalog_store.load().by_id.get(endpoint_id)))
+            and len(body) <= get_settings().archive_max_body_bytes)
     try:
+        plan = (archive_bodies.WritePlan("db" if keep else None, keep, reason=upload_rejection)
+                if upload_rejection else
+                await archive_bodies.prepare(body, ch, keep=keep, observation=observation,
+                                             terminal=origin == "async_terminal"))
+        if not plan.publish:
+            observation.finish(reason=plan.reason)
+            return
+
         # Same-key waiters must queue before taking a scarce database-write slot. Otherwise four
         # duplicate recordings can occupy the whole semaphore while only one touches the database.
-        async with _get_key_lock(kh):
+        async with asyncio.timeout(_STORE_TIMEOUT_S), _get_key_lock(kh):
             async with _get_sem():
                 # Postgres row locking handles other processes. A retry also covers the narrow
                 # first-key race and multi-process SQLite, where SELECT FOR UPDATE is ignored.
                 for attempt in range(4):
                     try:
-                        return await _store_locked(
+                        await _store_locked(
                             method=method, endpoint_id=endpoint_id, provider=provider, url=url,
                             caller_body=caller_body, headers=headers, status_code=status_code,
                             media_type=media_type, body=body, origin=origin,
-                            key_hash=kh, body_hash=body_hash)
+                            key_hash=kh, body_hash=ch, body_storage=plan.storage, keep_db=plan.keep_db)
+                        observation.finish(storage=plan.storage, reason=plan.reason)
+                        return
                     except IntegrityError:
                         if attempt == 3:
                             raise
                         await asyncio.sleep(0.01 * (attempt + 1))
-    except Exception:  # noqa: BLE001 — recording must never surface anywhere
-        _log.error("archive recording dropped for %s", endpoint_id, exc_info=True)
+    except asyncio.CancelledError:
+        observation.finish(reason="cancelled")
+        raise
+    except Exception:
+        observation.finish(reason="record_failed")
+        _log.error("archive recording dropped for %s", endpoint_id)
+    finally:
+        observation.finish(reason="record_failed")
 
 
 async def _lock_archive_key(s, key_id: int):
@@ -526,6 +569,8 @@ async def _store_locked(
     origin: str = "caller",
     key_hash: str | None = None,
     body_hash: str | None = None,
+    body_storage: str | None = "db",
+    keep_db: bool = True,
 ) -> None:
     from sqlalchemy import select
     from sqlalchemy.exc import IntegrityError
@@ -584,16 +629,16 @@ async def _store_locked(
         new_key = newest is None            # first version ⇒ this recording created the key
         seen_before = (key.stable_seen, key.change_seen)
 
-        stored, enc = _pack(body) if keep_bytes else (None, None)
+        stored, enc = _pack(body) if keep_bytes and keep_db else (None, None)
         snap = ArchiveSnapshot(
             key_id=key.id, version=1 if newest is None else newest.version + 1,
             status_code=status_code, media_type=media_type, content_hash=ch,
             body=stored, enc=enc, size_bytes=len(body),
-            fetched_at=now, origin=origin)
+            fetched_at=now, origin=origin, body_storage=body_storage if keep_bytes else None)
         # Byte deduplication is independent of usefulness, including empty history.
         if newest is not None and newest.content_hash == ch:
             carrier = newest.body_of or (newest.id if newest.body is not None else None)
-            if carrier is not None:
+            if keep_db and keep_bytes and carrier is not None:
                 snap.body, snap.body_of = None, carrier
 
         baseline = None
@@ -724,7 +769,8 @@ async def prune_once() -> int:
             # a surviving version may reference a body on an older row (dedup), and stripping the
             # carrier would silently orphan it.
             candidates = [v for v in versions[budget:]
-                          if v.id != key.result_snapshot_id and v.body is not None
+                          if v.id != key.result_snapshot_id and v.body_storage not in ("both", "r2")
+                          and v.body is not None
                           and (key.ttl_s == TTL_NEVER or v.fetched_at <= min_age)]
             surviving = [v for v in versions if v not in candidates]
             protected = ({v.id for v in surviving}
@@ -762,7 +808,7 @@ def _decode(body: bytes | None) -> str | None:
         return None
 
 
-async def resolve_result(session, key_hash: str, content_hash: str) -> dict[str, Any] | None:
+async def resolve_result(key_hash: str, content_hash: str) -> dict[str, Any] | None:
     """The request shape and the stored answer a call row points at, or None when the key or
     that exact answer is no longer on file.
 
@@ -774,20 +820,21 @@ async def resolve_result(session, key_hash: str, content_hash: str) -> dict[str,
 
     from .models import ArchiveKey, ArchiveSnapshot
 
-    key = (await session.execute(
-        select(ArchiveKey).where(ArchiveKey.key_hash == key_hash))).scalars().one_or_none()
-    if key is None:
-        return None
-    snap = (await session.execute(
-        select(ArchiveSnapshot)
-        .where(ArchiveSnapshot.key_id == key.id, ArchiveSnapshot.content_hash == content_hash)
-        .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
-    if snap is None:
-        return None
-    body = _unpack(snap.body, snap.enc)
-    if body is None and snap.body_of is not None:
-        carrier = await session.get(ArchiveSnapshot, snap.body_of)
-        body = _unpack(carrier.body, carrier.enc) if carrier is not None else None
+    from .infra.db import session_maker
+
+    async with session_maker() as session:
+        key = (await session.execute(
+            select(ArchiveKey).where(ArchiveKey.key_hash == key_hash))).scalars().one_or_none()
+        if key is None:
+            return None
+        snap = (await session.execute(
+            select(ArchiveSnapshot)
+            .where(ArchiveSnapshot.key_id == key.id, ArchiveSnapshot.content_hash == content_hash)
+            .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
+        if snap is None:
+            return None
+        pointer = await archive_bodies.pointer(session, snap)
+    body = await archive_bodies.read(pointer, "result")
     return {
         "stored": body is not None,
         "request": {"method": key.req_method or "", "url": key.req_url or "",
@@ -941,13 +988,14 @@ async def lookup(
                 diagnostics.update(cache_age_s=age_s, cache_window_s=window)
             if age_s < 0 or age_s > window:
                 return miss("stale")
-            body = await _snapshot_body(s, newest)
-            if body is None:
-                return miss("body_missing")
-            if result_aware:
-                result = classify(endpoint_id, newest.status_code, body)
-                if result.state != "found":
-                    return miss("result_" + result.state)
+            pointer = await archive_bodies.pointer(s, newest)
+        body = await archive_bodies.read(pointer, "lookup")
+        if body is None:
+            return miss("body_missing")
+        if result_aware:
+            result = classify(endpoint_id, newest.status_code, body)
+            if result.state != "found":
+                return miss("result_" + result.state)
         if diagnostics is not None:
             diagnostics["cache_outcome"] = "hit"
         _touch(kh)
@@ -993,19 +1041,12 @@ async def _touch_write(key_hash: str) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# The learner (PR 5) — AIMD timers and noise detection, applied inside the recorder.
+# The learner (PR 5): AIMD timers on admitted results, applied inside the recorder.
 
 TTL_FLOOR_S = 60
 TTL_CEILING_S = 30 * 86400
 TTL_NEVER = -1          # the key marked itself never-cache: changes on every fetch
 _NEVER_AFTER = 4        # consecutive changed refetches (no stables) before self-marking
-
-
-
-
-
-
-
 
 
 def learn(key, *, stable: bool, entry: dict[str, Any] | None) -> None:

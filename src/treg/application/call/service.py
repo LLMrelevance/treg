@@ -547,9 +547,17 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
                                "cache_ttl_policy": "adaptive",
                                "cache_rollout_percent": get_settings().archive_serve_percent}
 
+    body_observation = None
+
     def _capture(props: dict) -> None:
-        analytics.capture(audit_email, "tool_called", props | cache_diagnostics,
-                          groups={"team": audit_slug})
+        frozen = props | cache_diagnostics
+        def emit(storage_props):
+            analytics.capture(audit_email, "tool_called", frozen | storage_props,
+                              groups={"team": audit_slug})
+        if body_observation is not None:
+            body_observation.capture(emit)
+        else:
+            emit({})
 
     def _overflow_event(props: dict, outcome, charged: int) -> dict:
         """What a caller rescued by overflow actually experienced: the child's answer at the
@@ -917,6 +925,7 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
                 if mk.metered and archive.recording() and 200 <= response.status < 300:
                     _ct = next((v.decode("latin-1") for k, v in response.raw_headers
                                 if k.lower() == b"content-type"), "")
+                    body_observation = archive.archive_bodies.Observation()
                     archive_key_hash, archive_content_hash = archive.record(
                         method=request.method, endpoint_id=mk.endpoint_id, provider=mk.provider,
                         url=archive.key_url(upstream_url,
@@ -924,7 +933,8 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
                                             drop_params or set()),
                         caller_body=caller_body,
                         headers={k: request.headers.get(k, "") for k in ("accept", "accept-language")},
-                        status_code=response.status, media_type=_ct, body=body)
+                        status_code=response.status, media_type=_ct, body=body,
+                        observation=body_observation)
             elif response.status >= 400:
                 # Preserve streaming for own-key and own-tool calls while retaining only the small
                 # diagnostic head. The replacement response replays every consumed byte verbatim.

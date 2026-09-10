@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator
 from urllib.parse import urlsplit
@@ -307,8 +308,21 @@ class Settings(BaseSettings):
     # fresh hits from the store). Any other value degrades to "off" — a typo must disable, never
     # enable. Staged deliberately so production can sit in "shadow" while phase 0 measures.
     archive_mode: str = "off"
-    # Strict compares raw bytes. The old heuristic is an explicit diagnostic opt-in only;
-    # unknown values also select strict. It never changes stored response bytes.
+    archive_body_write: Literal["db", "both", "r2"] = "db"
+    archive_body_read_lookup: Literal["db", "r2-first"] = "db"
+    archive_body_read_result: Literal["db", "r2-first"] = "db"
+    archive_body_read_terminal: Literal["db", "r2-first"] = "db"
+    archive_object_store_endpoint: str = ""
+    archive_object_store_bucket: str = ""
+    archive_object_store_access_key_id: str = Field(default="", repr=False)
+    archive_object_store_secret_access_key: str = Field(default="", repr=False)
+    archive_r2_upload_concurrency: int = Field(default=8, ge=1, le=128)
+    archive_r2_max_pending: int = Field(default=256, ge=1, le=4096)
+    archive_r2_max_pending_bytes: int = Field(default=128 * 1024 * 1024, ge=1)
+    archive_r2_timeout_s: float = Field(default=10.0, gt=0, le=120)
+    archive_r2_terminal_attempts: int = Field(default=3, ge=1, le=5)
+
+    # Strict compares raw bytes; the compatibility setting rejects other modes.
     archive_comparison_mode: Literal["strict"] = "strict"  # compatibility setting; comparison is always strict
     # Exact endpoint IDs, comma-separated. Empty means no serving, even in serve mode.
     archive_serve_endpoints: str = ""

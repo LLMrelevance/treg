@@ -31,6 +31,7 @@ sources:
   - src/treg/web/sitetrack.js
   - src/treg/models.py
   - src/treg/alembic/versions/0031_archive_result_admission.py
+  - src/treg/alembic/versions/0028_archive_body_storage.py
   - src/treg/timeutil.py
   - src/treg/infra/db.py
   - src/treg/domain/referrals.py
@@ -74,6 +75,11 @@ Migration `0031` adds nullable `ArchiveKey.result_state`, `result_snapshot_id`, 
 `result_observed_version`. Archive owns them: the last decisive result is independent of the
 latest historical response. No backfill or TTL reset occurs; legacy observations are classified
 lazily. See [archive result admission](archive.md#result-admission).
+Migration `0028` adds nullable `ArchiveSnapshot.body_storage` (`db`, `both`, `r2`; NULL uses the
+legacy DB path). Archive remains the only writer. An R2 location is published only after a
+verified upload finishes outside any DB session; `content_hash` is the object name. No new index,
+backfill, body-column removal or destructive migration occurs. Double-write rows retain their DB
+body/carrier; R2-only rows require no carrier pointer. See [archive](archive.md#body-storage-and-r2-double-writing).
 
 ## Registry tables
 

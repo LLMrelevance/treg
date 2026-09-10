@@ -6,6 +6,13 @@ sources:
   - src/treg/domain/catalog/results.py
   - src/treg/alembic/versions/0031_archive_result_admission.py
   - tests/test_cache_result_admission.py
+  - src/treg/archive_bodies.py
+  - src/treg/config.py
+  - src/treg/infra/object_store.py
+  - src/treg/alembic/versions/0028_archive_body_storage.py
+  - tests/test_archive_r2.py
+  - tests/fake_object_store.py
+  - scripts/smoke_archive_r2.py
   - src/treg/alembic/versions/0002_archive_tables.py
   - src/treg/alembic/versions/0003_callrecord_cached.py
   - src/treg/alembic/versions/0004_archivekey_request_shape.py
@@ -49,6 +56,83 @@ What does NOT exist: any billing difference for a cached hit (deferred founder d
 phase-3 aggregator surfaces (history endpoints) — do not document either as existing. What DOES
 exist since 2026-09-03 is the per-call read below: a team can see the answer ITS OWN call got.
 
+## Body storage and R2 double writing
+
+`archive_bodies` owns body preparation, object reads, the independent upload queue and completed
+storage observations. `archive.py` retains request keys, snapshots, transactions, TTL learning
+and pruning. `infra.object_store.ObjectStore` exposes only put/get/head; `open_r2` imports
+aiobotocore lazily and bootstrap owns its lifecycle. Tests inject `MemoryObjectStore` through
+`bootstrap.configure_archive_object_store` or `create_app(archive_object_store=...)`.
+
+Every object name is the raw body's SHA-256, with no prefix. PUT computes the name internally,
+transmits `ChecksumSHA256`, then HEAD verifies the digest metadata and size. Same-body concurrent
+uploads are harmless. R2 stores raw bytes, independent of the media type of any particular call.
+DB compression remains unchanged. GET verifies the full hash before returning data.
+
+Migration `0028` adds nullable `ArchiveSnapshot.body_storage`: `db`, `both`, or `r2`; NULL is
+interpreted as the legacy DB path and does not promise that bytes were retained. The existing
+`content_hash` names the R2 object. R2-only snapshots have no `body_of`; DB and double-write
+snapshots keep existing carrier dedup. No historical rows, body columns or objects are migrated
+or deleted by this change.
+
+All switches are settings, with environment prefix `TREG_`:
+
+| Setting | Values | Default |
+|---|---|---|
+| `ARCHIVE_BODY_WRITE` | `db`, `both`, `r2` | `db` |
+| `ARCHIVE_BODY_READ_LOOKUP` | `db`, `r2-first` | `db` |
+| `ARCHIVE_BODY_READ_RESULT` | `db`, `r2-first` | `db` |
+| `ARCHIVE_BODY_READ_TERMINAL` | `db`, `r2-first` | `db` |
+
+`both` first uploads, then enters the existing per-key lock / DB semaphore and transaction to
+store the DB body and publish the R2 location. No PUT occurs under a row lock or with a checked-out
+DB connection. On upload failure, `both` retains the DB copy with location `db`; `r2` publishes
+no snapshot. A successful upload followed by a failed DB transaction can leave an unreferenced
+content-addressed object; no pointer names a failed upload. Existing policy and size gates apply
+before uploading. Hash-only history stays in DB when bytes are ineligible.
+
+R2 has independent `ARCHIVE_R2_UPLOAD_CONCURRENCY` (8), `ARCHIVE_R2_MAX_PENDING` (256), and
+`ARCHIVE_R2_MAX_PENDING_BYTES` (128 MiB) budgets. Only PUT plus its verification HEAD holds an
+upload slot. The DB stage keeps its original two slots and 30-second deadline. Upload admission
+failure in `both` falls back to the separately bounded original DB queue; `r2` sheds the recording.
+`ARCHIVE_R2_TIMEOUT_S` (10 seconds) bounds upload-slot wait plus PUT/HEAD, and each GET.
+Terminal evidence bypasses best-effort queue admission and synchronously retries uploads up to
+`ARCHIVE_R2_TERMINAL_ATTEMPTS` (3), with bounded backoff, before the DB write. Its settlement has
+already committed and cannot be undone by storage failure. Terminal failures also log a bounded
+error because a worker completion has no pending caller event to annotate.
+
+Readers use `archive_bodies.pointer` to collect the R2 location and any DB fallback bytes inside
+a session, then close it before `archive_bodies.read`. This applies to lookup, call-result reads,
+and terminal-result reads, including the Activity routes' outer auth/query sessions. `r2-first`
+only tries R2 for a published `both`/`r2` location; missing objects, timeouts, errors and checksum
+mismatches fall back to DB. Lookup selects `result_snapshot_id` under the existing result-state
+and observed-version guards, then classifies the resolved body after closing the session. Unknown
+results retain the decisive snapshot; empty results invalidate serving without deleting history.
+Pruning protects both that decisive snapshot and all R2-backed rows and their DB carriers. `db` does not contact R2, including for R2-only rows. The admin body
+viewer remains a DB-only diagnostic in this first delivery. Read switches should be enabled
+before any future R2-only write rollout. No serving allowlist, cohort or production setting is
+changed here.
+
+`archive_bodies.Observation` completes the existing `tool_called` event after the background write,
+without delaying the response or inserting another call row/event. Fields are
+`archive_body_write`, `archive_body_storage`, `archive_body_upload_status`,
+`archive_body_upload_ms` (including upload-slot wait and terminal retries when applicable),
+`archive_body_dropped` and `archive_body_drop_reason`; queue rejection also records
+`archive_body_upload_drop_reason`. Bounded reason codes distinguish upload queue/byte limits,
+upload failure/timeout, DB queue/byte limits, cancellation, record failure and policy/size gates.
+An upload loss can coexist with a successfully retained DB copy. Process counters in
+`archive_bodies.outcomes` have bounded labels. `archive.drain` drains both queues before analytics;
+shutdown/crash loss retains the existing best-effort limitations. Refresh and worker-only terminal
+writes have counters/logs rather than inventing a second `tool_called` event.
+
+When archive mode is enabled, any R2 switch requires `ARCHIVE_OBJECT_STORE_ENDPOINT`, `ARCHIVE_OBJECT_STORE_BUCKET`,
+`ARCHIVE_OBJECT_STORE_ACCESS_KEY_ID` and `ARCHIVE_OBJECT_STORE_SECRET_ACCESS_KEY`; bootstrap refuses incomplete config
+before opening DB connections. See SECURITY.md. `scripts/smoke_archive_r2.py --dev-bucket NAME`
+performs a real PUT/HEAD/GET only on `treg-archive-dev`, outside CI; it leaves
+one tiny test object. It reads environment variables only and prints SKIP with missing variable
+names when configuration/credentials are absent. `.env.example` contains blank placeholders. No real smoke runs as part of unit tests. Production values are managed
+separately in treg-internal.
+
 ## The call→archive link (2026-09-03)
 
 `record()` returns `(key_hash, content_hash)` — computed synchronously and handed to `_store`
@@ -56,7 +140,7 @@ so the hash is taken once — and `lookup()` adds `key_hash`, `content_hash` and
 dict. The call service (`application/call/service.py`) keeps them in `archive_key_hash` /
 `archive_content_hash` and the `_audit` closure writes them onto the `CallRecord` (migration
 0011: two nullable columns, no index — the read starts from the org-scoped row by id and both
-targets are already indexed). `archive.resolve_result(session, key_hash, content_hash)` walks
+targets are already indexed). `archive.resolve_result(key_hash, content_hash)` walks
 row → key → newest snapshot with that content hash → `body_of` carrier, and returns the request
 shape (`req_*`, pre-injection) plus the answer; a hash-only version reports `stored: false`.
 `GET /calls/{id}/result` (api.py) exposes it to members of the row's org, with a `note` on every
@@ -312,8 +396,7 @@ and credentials could not anyway: injection happens after the key is taken.
 `ArchiveKey` — one logical question: `key_hash` (unique), `endpoint_id`, `provider`, effective
 `policy`, AIMD timer state (`ttl_s`, grow ×1.5 capped on stable refetch / shrink ×0.5 floored on
 change — the learner lands in PR 5), change statistics (`change_seen`/`stable_seen`/
-`last_changed_at`), legacy `volatile_paths` (consulted only in explicit `legacy_noise` comparison mode,
-never removed from stored bytes), and demand (`heat`, `last_requested_at`). Platform-scoped, no `org_id`:
+`last_changed_at`), legacy `volatile_paths` (retained for schema compatibility, no longer read or updated), and demand (`heat`, `last_requested_at`). Platform-scoped, no `org_id`:
 one team's fetch may warm another team's hit, and own-key traffic never enters.
 
 `ArchiveSnapshot` — one version: unique `(key_id, version)`, verbatim `body` bytes, `content_hash`
@@ -326,8 +409,7 @@ fetched: `caller` | `refresh` | `sample`.
 
 Money. A cached hit will only TAG existing records "cached" — billing of a cached hit is an
 explicitly deferred founder decision, and no archive code imports ledger/billing. Relay
-faithfulness also extends through time: served bytes are exactly what the vendor sent; noisy-field
-stripping exists only on comparison copies inside change detection.
+faithfulness also extends through time: served bytes are exactly what the vendor sent.
 
 ## Tests
 
@@ -367,7 +449,7 @@ rollup rides the recording's own commit, so the two cannot drift.
 Stored bodies compress with zlib level 6 when it shrinks them (`enc` column: NULL = raw, "zlib");
 bodies under 256 bytes stay raw. Measured on 40 real prod bodies: 5.2x, 68 MB/s in, ~1 GB/s out —
 the recorder writes under 1 MB/s, so the cost is invisible and ~6.5 GB/day becomes ~1.25 GB/day.
-Every reader unpacks (serve lookup, the dedup-carrier follow, the noise/change compare, the
+Every DB body reader unpacks (serve lookup, the dedup-carrier follow, the
 call-result reader, the panel's body viewer), so the caller always receives the exact original
 bytes; `size_bytes` and `content_hash` describe RAW bytes always, keeping dedup and statistics
 semantics unmoved. Rows from before migration 0014 stay raw and readable forever. The founder's
@@ -386,7 +468,9 @@ age no defense; then old (`archive_prune_min_age_days`, 7) versions beyond the n
 exempt — their history is the future data product. Runs from the lifespan beside the refresh
 worker whenever the archive records, `archive_prune_batch` (500) bodies per pass per
 `archive_prune_interval_s` (3600); batch 0 disables. Rollup counters (bodies_kept, kept_bytes)
-move atomically with each strip.
+move atomically with each strip. Rows marked `both` or `r2` are excluded from stripping, and the
+DB carriers of surviving double-write rows remain protected. No R2 delete or prune operation
+exists. This intentionally preserves rollback copies during the double-write phase.
 
 ## Recorder throttle (2026-09-03, memory-bounded 2026-09-07)
 

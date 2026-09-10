@@ -93,8 +93,8 @@ async def test_disappearance_invalidates_once_and_retains_history(clients, cache
         snapshots = (await s.execute(select(ArchiveSnapshot).order_by(ArchiveSnapshot.version))).scalars().all()
         assert len(snapshots) == 4
         assert snapshots[2].body_of == snapshots[3].body_of == snapshots[1].id
-        old = await archive.resolve_result(s, k.key_hash, archive.content_hash(FOUND))
-        assert old['response']['body_text'] == FOUND.decode()
+    old = await archive.resolve_result(k.key_hash, archive.content_hash(FOUND))
+    assert old['response']['body_text'] == FOUND.decode()
 
 
 @pytest.mark.parametrize('raw', [b'{"errors":[{"details":"upstream unavailable"}]}', b'{}', b'not JSON'])
