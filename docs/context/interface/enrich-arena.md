@@ -670,10 +670,15 @@ table to avoid clipping. No sample-status sublabels are shown.
 Row hover details identify the verifier providers and check date; the chart source shows the sample period. Fewer than 20 completed checks
 are withheld; small-sample labels are hidden. Risky, unknown and conflicting verdicts stay
 in the denominator but do not count as valid; unfinished checks are excluded. A genuine zero is
-displayed and missing values have no chart bars. Phone format checks never produce a verified rate:
-reachability and ownership remain unverified. The publication preserves the legacy `rate` projection
+displayed and missing values have no chart bars. Phone lookup uses a separate **Phone format validity**
+metric: the percentage of sampled returned numbers passing format checks among completed checks.
+The header tooltip explains that this does not confirm a live line, deliverability or ownership.
+The API publishes this only as `format_validity_rate` for `phone_format` rows with at least 20
+completed checks; it never promotes phone format checks into email validity or verified hit rate.
+The publication preserves the legacy `rate` projection
 for older consumers and adds explicit `checked_n` and `validity_rate` fields; the UI only consumes
-`validity_rate`, so older snapshots cannot accidentally display the lookup projection as validity.
+`validity_rate` for email and `format_validity_rate` for phone, so older snapshots cannot
+accidentally display the lookup projection as validity.
 
 Publication data stays outside the checkout. To populate a migrated deployment, pass the private
 aggregate JSON to `scripts/import_arena_verification.py` with its configured `TREG_DATABASE_URL`;

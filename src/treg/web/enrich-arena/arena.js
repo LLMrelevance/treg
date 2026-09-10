@@ -235,8 +235,8 @@
       },
       supportsVerifiedRate(){return ['people.email.find','people.phone.find'].includes(this.taskId);},
       vendorListingPrompt(){return 'Read https://treg.to/vendor-listing.md and add our API to the treg catalog, then open a PR.';},
-      verifiedRateLabel(){return this.taskId==='people.email.find'?'Email validity rate':'Verified hit rate';},
-      verifiedExplanation(){return this.taskId==='people.phone.find'?'Phone format checks do not establish reachability or ownership. Verified hit rate is not available yet.':'Percentage of sampled returned emails with completed checks that both verifiers marked valid. Risky, unknown and conflicting verdicts do not count as valid.';},
+      verifiedRateLabel(){return this.taskId==='people.email.find'?'Email validity rate':'Phone format validity';},
+      verifiedExplanation(){return this.taskId==='people.phone.find'?'Percentage of sampled returned phone numbers with completed checks that passed the verifier’s number-format check. This does not confirm a live line, deliverability or ownership.':'Percentage of sampled returned emails with completed checks that both verifiers marked valid. Risky, unknown and conflicting verdicts do not count as valid.';},
       verificationWindow(){const v=this.insights?.verification;if(!v)return 'No published pilot';const date=x=>new Date(x).toLocaleDateString('en-US',{timeZone:'UTC'});return 'Sample '+date(v.sample_since)+'–'+date(v.sample_until)+' · Checked '+date(v.checked_at)+' · UTC';},
       insightVerification(){return ['people.email.verify','people.phone.verify'].includes(this.taskId);},
       insightWindow(){if(!this.insights)return '';const date=s=>new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(s));const observed=this.insights.observed_since&&this.insights.observed_until;return (observed?'Recorded ':'Window ')+date(observed?this.insights.observed_since:this.insights.since)+' – '+date(observed?this.insights.observed_until:this.insights.until)+' · UTC';},
@@ -331,15 +331,18 @@
       showMetricTooltip(event){const r=event.currentTarget.getBoundingClientRect(),width=Math.min(300,window.innerWidth-24);this.metricTooltip={width,left:Math.max(12,Math.min(r.left+(r.width-width)/2,window.innerWidth-width-12)),top:Math.max(12,Math.min(r.bottom+8,window.innerHeight-140))};},
       verifiedRateValue(row){
         const a=row.audit;
-        return this.taskId==='people.email.find'&&a?.method==='email_verifier_consensus'&&a.checked_n>=20&&Number.isFinite(a.validity_rate)&&a.validity_rate>=0&&a.validity_rate<=100?a.validity_rate:null;
+        const email=this.taskId==='people.email.find',phone=this.taskId==='people.phone.find';
+        if(!a||!(a.checked_n>=20)||!(email&&a.method==='email_verifier_consensus'||phone&&a.method==='phone_format'))return null;
+        const rate=email?a.validity_rate:a.format_validity_rate;
+        return Number.isFinite(rate)&&rate>=0&&rate<=100?rate:null;
       },
       verifiedRate(row){const rate=this.verifiedRateValue(row);return rate===null?'—':rate.toFixed(1)+'%';},
       verifiedRateNote(row){
-        if(this.taskId==='people.phone.find')return 'Format checked only; reachability and ownership are not verified.';
         const a=row.audit;
         if(!a)return 'No published verification sample for this endpoint and input.';
         if(!(a.checked_n>=20))return 'Insufficient completed verification sample.';
         const v=this.insights?.verification,date=x=>x?new Date(x).toLocaleDateString('en-US',{timeZone:'UTC'}):'';
+        if(this.taskId==='people.phone.find')return 'Share of sampled returned phone numbers that passed '+a.verifiers.map(p=>this.providerName(p)).join(' + ')+' number-format checks. Checks completed '+date(v?.checked_at)+'. Unresolved inputs are excluded; reachability and ownership are not verified.';
         return 'Share of sampled returned emails marked valid by '+a.verifiers.map(p=>this.providerName(p)).join(' + ')+'. Checks completed '+date(v?.checked_at)+'. '+'Risky, unknown and conflicting verdicts are not counted as valid; unfinished checks are excluded. Verifier agreement does not confirm delivery or ownership.';
       },
       insightRate(row){
