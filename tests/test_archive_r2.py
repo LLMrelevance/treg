@@ -66,6 +66,10 @@ async def snapshots():
 
 
 async def test_upload_precedes_pointer_and_call_does_not_wait(clients, r2, monkeypatch):
+    # Warm catalog/auth initialization before measuring only the non-blocking archive behavior.
+    with monkeypatch.context() as warm:
+        warm.setattr(get_settings(), 'archive_mode', 'off')
+        assert (await clients.get(URL)).status_code == 200
     events = []
     monkeypatch.setattr(service.analytics, 'capture', lambda who, name, props, **kw: events.append((name, props)))
     r2.gate = asyncio.Event()
@@ -558,7 +562,7 @@ async def test_upload_wait_is_not_transfer_timeout(r2, monkeypatch):
     for _ in range(get_settings().archive_r2_upload_concurrency):
         await sem.acquire()
     observation = archive_bodies.StorageReport()
-    task = asyncio.create_task(archive_bodies.prepare(RAW, archive.content_hash(RAW), mode="both", keep=True, observation=observation))
+    task = asyncio.create_task(archive_bodies.prepare(RAW, archive.content_hash(RAW), mode="both", observation=observation))
     await asyncio.sleep(0.03)
     assert not task.done()
     for _ in range(get_settings().archive_r2_upload_concurrency):
@@ -620,3 +624,51 @@ async def test_r2_legacy_admission_restarts_unknown_baseline(clients, r2, monkey
     async with db.session_maker() as session:
         key = (await session.execute(select(ArchiveKey))).scalar_one()
         assert key.result_state == 'found' and key.stable_seen == 1
+
+async def test_db_deadline_reports_timeout_not_cancelled(clients, r2, monkeypatch, caplog):
+    monkeypatch.setattr(get_settings(), 'archive_body_write', 'db')
+    monkeypatch.setattr(archive, '_STORE_TIMEOUT_S', .01)
+    async def blocked(**kwargs):
+        await asyncio.Event().wait()
+    monkeypatch.setattr(archive, '_store_locked', blocked)
+    reports = []
+    await archive._store(method='GET', endpoint_id=EP, provider='tikhub', url=URL,
+                         caller_body=b'', headers={}, status_code=200,
+                         media_type='application/json', body=RAW,
+                         observation=archive_bodies.StorageReport(emit=reports.append))
+    assert len(reports) == 1 and reports[0]['drop_reason'] == 'record_timeout'
+    assert any('record_timeout' in record.message for record in caplog.records)
+
+
+async def test_cancel_before_start_reports_once(clients, r2, monkeypatch):
+    reports = []
+    archive.record(method='GET', endpoint_id=EP, provider='tikhub', url=URL,
+                   caller_body=b'', headers={}, status_code=200,
+                   media_type='application/json', body=RAW,
+                   observation=archive_bodies.StorageReport(emit=reports.append))
+    for task in list(archive_bodies._pending):
+        task.cancel()
+    await archive.drain()
+    assert len(reports) == 1 and reports[0]['drop_reason'] == 'cancelled'
+
+
+@pytest.mark.parametrize('error,reason', [
+    (PermissionError, 'permission_denied'), (TimeoutError, 'timeout'),
+    (FileNotFoundError, 'not_found'), (RuntimeError, 'store_error')])
+async def test_object_boundary_classifies_put_and_get_by_type(error, reason):
+    from treg.infra.object_store import R2ObjectStore, ObjectStoreError
+    class Broken:
+        async def put_async(self, *args, **kwargs):
+            raise error('SignatureDoesNotMatch secret text never forwarded')
+        async def get_async(self, *args, **kwargs):
+            raise error('SignatureDoesNotMatch secret text never forwarded')
+    store = R2ObjectStore(Broken(), 1000)
+    with pytest.raises(ObjectStoreError) as caught:
+        await store.put(RAW, content_hash=archive.content_hash(RAW))
+    assert str(caught.value) == reason
+    if error is FileNotFoundError:
+        assert await store.get(archive.content_hash(RAW)) is None
+    else:
+        with pytest.raises(ObjectStoreError) as caught:
+            await store.get(archive.content_hash(RAW))
+        assert str(caught.value) == reason

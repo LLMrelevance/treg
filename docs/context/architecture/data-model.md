@@ -548,3 +548,11 @@ publication time and aggregate JSON keep verification pilots independent of roll
 It holds no contacts or raw evidence. The public insights API selects the latest publication through
 the publication-time index; see [Enrich Arena](../interface/enrich-arena.md) for estimate semantics
 and the aggregate-only import workflow.
+
+## Archive retention
+
+Archive retention statistics count logical snapshots with recoverable bodies, including R2
+and deduplicated versions. Pruning DB bytes changes `both` to `r2` without reducing those
+counts; pruning the last DB copy clears `body_storage` and decrements them. Failed R2-only
+uploads still append a hash-only snapshot with a null location. The retired `volatile_paths`
+column remains for compatibility and no longer appears in admin responses.

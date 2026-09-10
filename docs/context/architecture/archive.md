@@ -64,7 +64,7 @@ and pruning. `infra.object_store.ObjectStore` exposes only put/get/head; `open_r
 obstore lazily and bootstrap owns its lifecycle. Tests inject `MemoryObjectStore` through
 `bootstrap.configure_archive_object_store` or `create_app(archive_object_store=...)`.
 
-Every object name is the raw body's SHA-256, with no prefix. PUT computes the name internally and
+Every object name is the raw body's SHA-256, with no prefix. The caller supplies its already-computed content hash to PUT, which validates the hash-shaped name and
 uses `checksum_algorithm=SHA256` so R2 verifies the upload checksum. A successful single PUT
 returns its hash and byte size, with no follow-up HEAD. HEAD makes one request for size. No custom
 sha256 attribute is stored or checked; GET enforces size limits and verifies the downloaded hash.
@@ -89,15 +89,16 @@ All switches are settings, with environment prefix `TREG_`:
 `both` first uploads, then enters the existing per-key lock / DB semaphore and transaction to
 store the DB body and publish the R2 location. No PUT occurs under a row lock or with a checked-out
 DB connection. On upload failure, `both` retains the DB copy with location `db`; `r2` publishes
-no snapshot. A successful upload followed by a failed DB transaction can leave an unreferenced
+a hash-only snapshot with no body location. A successful upload followed by a failed DB transaction can leave an unreferenced
 content-addressed object; no pointer names a failed upload. Existing policy and size gates apply
 before uploading. Hash-only history stays in DB when bytes are ineligible.
 
 R2 has independent `ARCHIVE_R2_UPLOAD_CONCURRENCY` (8), `ARCHIVE_R2_MAX_PENDING` (256), and
 `ARCHIVE_R2_MAX_PENDING_BYTES` (128 MiB) budgets. Only PUT holds an
 upload slot. The DB stage keeps its original two slots and 30-second deadline. Upload admission
-failure in `both` falls back to the separately bounded original DB queue; `r2` sheds the recording.
-`ARCHIVE_R2_TIMEOUT_S` (10 seconds) continues to bound upload-slot wait plus PUT.
+failure falls back to the separately bounded DB queue: `both` retains DB bytes, while `r2`
+retains only hash/history/statistics if DB admission succeeds.
+`ARCHIVE_R2_TIMEOUT_S` (10 seconds) bounds PUT only; upload-slot waiting is measured separately as `queue_wait_ms`.
 `ARCHIVE_R2_READ_TIMEOUT_S` (2 seconds, configurable) separately bounds each lookup/result/terminal
 GET including materializing bytes. The shared SDK transport uses the larger timeout so it cannot
 prematurely cut off either operation; application deadlines enforce the separate budgets.
@@ -110,7 +111,7 @@ already committed and cannot be undone by storage failure. Terminal failures als
 error because a worker completion has no pending caller event to annotate.
 
 Readers use `archive_bodies.pointer` to collect R2 metadata inside
-a session (`defer(ArchiveSnapshot.body)` for R2-first), then close it before `archive_bodies.read`. Only a failed R2 read opens a new short DB
+a session (`defer(ArchiveSnapshot.body)` for R2-first), then close it before `archive_bodies.read`. When DB bytes are needed, including after an R2 failure, a new short DB
 session for fallback bytes. Terminal batches use at most eight simultaneous reads. This applies to lookup, call-result reads,
 and terminal-result reads, including the Activity routes' outer auth/query sessions. `r2-first`
 only tries R2 for a published `both`/`r2` location; missing objects, timeouts, errors and checksum
@@ -557,3 +558,9 @@ Known result-admission upgrade limit: when a historical R2-only row has no curre
 it. The baseline becomes unknown; the next decisive result establishes a new baseline without
 a stability comparison. Subsequent observations learn normally. This conservative loss of one
 learning interval avoids object I/O inside a write session or an extra speculative GET per write.
+
+`WritePlan` is the single body-retention decision passed into the DB writer. DB retention is
+inferred from its storage location; failed R2-only uploads become hash-only plans. Each started
+recording emits its completion report from one `finally` block, while queue callbacks release
+budgets and report cancellation of tasks that never started. `tool_called` remains independent.
+The object-store lifespan chooses a real or injected context once and always resets the seam.

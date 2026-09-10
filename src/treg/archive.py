@@ -279,6 +279,14 @@ def key_url(upstream_url: str, query_items: list[tuple[str, str]], exclude: set[
     return f"{upstream_url}&{q}" if "?" in upstream_url else f"{upstream_url}?{q}"
 
 
+def _write_plan(endpoint_id: str, body: bytes, origin: str) -> archive_bodies.WritePlan:
+    from .domain.catalog import store as catalog_store
+    keep = ((origin == "async_terminal" or storable(catalog_store.load().by_id.get(endpoint_id)))
+            and len(body) <= get_settings().archive_max_body_bytes)
+    return archive_bodies.WritePlan(get_settings().archive_body_write if keep else None,
+                                    reason=None if keep else "policy_or_size")
+
+
 def record(
     *,
     method: str,
@@ -306,15 +314,16 @@ def record(
     kh = cache_key(method, endpoint_id, url, caller_body, headers)
     ch = content_hash(body)
     observation = observation or archive_bodies.StorageReport()
-    upload_rejection = None
-    if get_settings().archive_body_write != "db":
-        upload_rejection = archive_bodies.submit(lambda: _store(
+    plan = _write_plan(endpoint_id, body, origin)
+    if plan.storage in ("both", "r2"):
+        rejection = archive_bodies.submit(lambda: _store(
             method=method, endpoint_id=endpoint_id, provider=provider, url=url,
             caller_body=caller_body, headers=headers, status_code=status_code,
             media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
-            observation=observation), len(body), observation)
-        if upload_rejection is None:
+            observation=observation, plan=plan), len(body), observation)
+        if rejection is None:
             return kh, ch
+        plan = archive_bodies.WritePlan("db" if plan.keep_db else None, reason=rejection)
         # Both mode preserves the old DB path even when the separate upload queue sheds.
 
     body_len = len(body)
@@ -329,7 +338,7 @@ def record(
         method=method, endpoint_id=endpoint_id, provider=provider, url=url,
         caller_body=caller_body, headers=headers, status_code=status_code,
         media_type=media_type, body=body, origin=origin, key_hash=kh, body_hash=ch,
-        observation=observation, upload_rejection=upload_rejection))
+        observation=observation, plan=plan))
     _pending.add(task)
     # Release bytes AND task when done. NOT redundant with drain()'s own removal: on a running
     # server drain() never fires, and this callback is the only exit from `_pending` — without it
@@ -483,7 +492,7 @@ async def _store(
     key_hash: str | None = None,
     body_hash: str | None = None,
     observation: archive_bodies.StorageReport | None = None,
-    upload_rejection: str | None = None,
+    plan: archive_bodies.WritePlan | None = None,
 ) -> None:
     """One recording: upsert the key, append a version, keep the change statistics honest.
 
@@ -496,35 +505,26 @@ async def _store(
     bytes are stored now, so a policy upgrade heals the store forward without a backfill."""
     from sqlalchemy.exc import IntegrityError
 
-    from .domain.catalog import store as catalog_store
-
     observation = observation or archive_bodies.StorageReport()
-    kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
-    ch = body_hash or content_hash(body)
-    keep = ((origin == "async_terminal" or storable(catalog_store.load().by_id.get(endpoint_id)))
-            and len(body) <= get_settings().archive_max_body_bytes)
+    stored, reason = None, "record_failed"
     try:
-        async def prepare():
-            return (archive_bodies.WritePlan("db" if keep and get_settings().archive_body_write != "r2" else None,
-                                            keep and get_settings().archive_body_write != "r2", reason=upload_rejection)
-                    if upload_rejection else
-                    await archive_bodies.prepare(body, ch, mode=get_settings().archive_body_write, keep=keep, observation=observation,
-                                                 terminal=origin == "async_terminal"))
-        if origin == "async_terminal":
-            try:
-                async with asyncio.timeout(_TERMINAL_UPLOAD_S):
-                    plan = await prepare()
-            except TimeoutError:
-                observation.props["archive_body_upload_status"] = "failed"
-                plan = archive_bodies.WritePlan("db" if keep else None, keep, reason="timeout")
-                _log.error("terminal archive upload deadline exceeded; saving DB evidence")
-            if plan.storage is None and keep:
-                plan = archive_bodies.WritePlan("db" if keep else None, keep, reason=plan.reason)
-        else:
-            plan = await prepare()
-        if not plan.publish:
-            observation.finish(reason=plan.reason)
-            return
+        kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
+        ch = body_hash or content_hash(body)
+        plan = plan or _write_plan(endpoint_id, body, origin)
+        if plan.storage in ("both", "r2"):
+            if origin == "async_terminal":
+                try:
+                    async with asyncio.timeout(_TERMINAL_UPLOAD_S):
+                        plan = await archive_bodies.prepare(body, ch, mode=plan.storage,
+                                                           observation=observation, terminal=True)
+                except TimeoutError:
+                    observation.props["archive_body_upload_status"] = "failed"
+                    plan = archive_bodies.WritePlan("db", reason="timeout")
+                    _log.error("terminal archive upload deadline exceeded; saving DB evidence")
+                if plan.storage is None:
+                    plan = archive_bodies.WritePlan("db", reason=plan.reason)
+            else:
+                plan = await archive_bodies.prepare(body, ch, mode=plan.storage, observation=observation)
 
         # Same-key waiters must queue before taking a scarce database-write slot. Otherwise four
         # duplicate recordings can occupy the whole semaphore while only one touches the database.
@@ -538,24 +538,24 @@ async def _store(
                             method=method, endpoint_id=endpoint_id, provider=provider, url=url,
                             caller_body=caller_body, headers=headers, status_code=status_code,
                             media_type=media_type, body=body, origin=origin,
-                            key_hash=kh, body_hash=ch, body_storage=plan.storage, keep_db=plan.keep_db)
-                        observation.finish(storage=plan.storage, reason=plan.reason)
+                            key_hash=kh, body_hash=ch, plan=plan)
+                        stored, reason = plan.storage, plan.reason
                         return
                     except IntegrityError:
                         if attempt == 3:
                             raise
                         await asyncio.sleep(0.01 * (attempt + 1))
     except asyncio.CancelledError:
-        observation.finish(reason="cancelled")
+        reason = "cancelled"
         raise
     except TimeoutError:
-        observation.finish(reason="record_timeout")
+        reason = "record_timeout"
         _log.error("archive record_timeout for %s", endpoint_id)
     except Exception:
-        observation.finish(reason="record_failed")
+        reason = "record_failed"
         _log.error("archive recording dropped for %s", endpoint_id, exc_info=True)
     finally:
-        observation.finish(reason="record_failed")
+        observation.finish(storage=stored, reason=reason)
 
 
 async def _lock_archive_key(s, key_id: int):
@@ -595,8 +595,7 @@ async def _store_locked(
     origin: str = "caller",
     key_hash: str | None = None,
     body_hash: str | None = None,
-    body_storage: str | None = "db",
-    keep_db: bool = True,
+    plan: archive_bodies.WritePlan,
 ) -> None:
     from sqlalchemy import select
     from sqlalchemy.exc import IntegrityError
@@ -614,10 +613,6 @@ async def _store_locked(
     # `_store` callable on its own (tests).
     kh = key_hash or cache_key(method, endpoint_id, url, caller_body, headers)
     ch = body_hash or content_hash(body)
-    cap = get_settings().archive_max_body_bytes
-    # Terminal task JSON is mandatory settlement evidence. It contains only the provider's JSON
-    # envelope (possibly including expiring media URLs), never the media itself.
-    keep_bytes = (origin == "async_terminal" or pol in _STORABLE) and len(body) <= cap
     now = _utcnow()
 
     async with background_session_maker() as s:
@@ -655,16 +650,16 @@ async def _store_locked(
         new_key = newest is None            # first version ⇒ this recording created the key
         seen_before = (key.stable_seen, key.change_seen)
 
-        stored, enc = _pack(body) if keep_bytes and keep_db else (None, None)
+        stored, enc = _pack(body) if plan.keep_db else (None, None)
         snap = ArchiveSnapshot(
             key_id=key.id, version=1 if newest is None else newest.version + 1,
             status_code=status_code, media_type=media_type, content_hash=ch,
             body=stored, enc=enc, size_bytes=len(body),
-            fetched_at=now, origin=origin, body_storage=body_storage if keep_bytes else None)
+            fetched_at=now, origin=origin, body_storage=plan.storage)
         # Byte deduplication is independent of usefulness, including empty history.
         if newest is not None and newest.content_hash == ch:
             carrier = newest.body_of or (newest.id if newest.body is not None else None)
-            if keep_db and keep_bytes and carrier is not None:
+            if plan.keep_db and carrier is not None:
                 snap.body, snap.body_of = None, carrier
 
         baseline = None
@@ -716,7 +711,7 @@ async def _store_locked(
         await _bump_stats(
             s, endpoint_id=endpoint_id, provider=provider, pol=pol, new_key=new_key,
             stable_d=key.stable_seen - seen_before[0], changed_d=key.change_seen - seen_before[1],
-            kept=body_storage is not None, size=len(body), now=now)
+            kept=plan.storage is not None, size=len(body), now=now)
         await s.commit()
 
 

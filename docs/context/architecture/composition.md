@@ -155,3 +155,8 @@ Shutdown cancels and awaits every started background worker before draining Aren
 analytics or closing the shared client, so database rollback/close finishes before event-loop teardown.
 
 `POST /reviews` and `GET /admin/reviews` belong to control, alongside feedback intake and reads.
+
+The archive object-store lifespan normalizes configuration once, chooses an R2 factory or
+injected in-memory context, and resets the store on exit. R2 validation runs before DB startup
+verification; an obsolete comparison-mode environment variable no longer blocks migration CLI
+settings construction.

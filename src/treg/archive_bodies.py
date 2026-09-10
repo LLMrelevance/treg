@@ -84,18 +84,17 @@ def _upload_sem():
 @dataclass(frozen=True)
 class WritePlan:
     storage: str | None
-    keep_db: bool
-    publish: bool = True
     reason: str | None = None
 
+    @property
+    def keep_db(self) -> bool:
+        return self.storage in ("db", "both")
 
-async def prepare(body: bytes, content_hash: str, *, mode: str, keep: bool, observation: StorageReport,
+
+async def prepare(body: bytes, content_hash: str, *, mode: str, observation: StorageReport,
                   terminal: bool = False) -> WritePlan:
-    if not keep:
-        return WritePlan(None, False, reason="policy_or_size")
     if mode == "db":
-        return WritePlan("db", True)
-    started = time.monotonic()
+        return WritePlan("db")
     reason = "store_error"
     attempts = get_settings().archive_r2_terminal_attempts if terminal else 1
     try:
@@ -115,7 +114,7 @@ async def prepare(body: bytes, content_hash: str, *, mode: str, keep: bool, obse
                     finally:
                         observation.props["archive_body_upload_ms"] += (time.monotonic() - transfer) * 1000
                 observation.props["archive_body_upload_status"] = "uploaded"
-                return WritePlan(mode, mode == "both")
+                return WritePlan(mode)
             except TimeoutError:
                 reason = "timeout"
             except ObjectStoreError as exc:
@@ -127,8 +126,7 @@ async def prepare(body: bytes, content_hash: str, *, mode: str, keep: bool, obse
         observation.props["archive_body_upload_status"] = "failed"
         _log.error("archive body upload failed after %s attempt(s): %s", attempts, reason)
         # Double write preserves the DB copy when R2 fails, without publishing an R2 pointer.
-        return WritePlan("db" if mode == "both" else None, mode == "both",
-                         publish=True, reason=reason)
+        return WritePlan("db" if mode == "both" else None, reason=reason)
     finally:
         observation.props["archive_body_upload_ms"] = round(observation.props["archive_body_upload_ms"], 3)
 
@@ -201,9 +199,6 @@ async def _db_fallback(pointer):
 
 async def read(pointer: BodyPointer, path: str, *, diagnostics: dict | None = None) -> bytes | None:
     """Call only after closing every DB session owned by the request."""
-    from .infra.object_store import ObjectStoreError
-    from .archive import _unpack
-
     reason, elapsed = "none", 0.0
     def observed(body, source):
         if diagnostics is not None:
