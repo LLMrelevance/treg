@@ -13,6 +13,8 @@ sources:
   - src/treg/routers/feedback.py
   - src/treg/alembic/versions/0025_feedback.py
   - src/treg/alembic/versions/0026_callreview.py
+  - src/treg/alembic/versions/0027_feedback_handling.py
+  - tests/test_feedback_handling_schema.py
   - src/treg/web/feedback.md
   - tests/test_feedback.py
   - tests/test_reviews.py
@@ -65,6 +67,29 @@ local write. Their existing call permissions and transport boundaries remain dis
 one document; CLI help and MCP share `FEEDBACK_DESCRIPTION`. The plugin generator propagates the
 short skill instructions to each installation format. Self-hosted submissions stay on the
 configured registry.
+
+## Internal handling storage
+
+`FeedbackHandling` and `FeedbackHandlingEvent` in `models.py` (revision 0027) hold internal
+processing separately from the original `Feedback`. State is one row per report: `status`
+(`open`, `investigating`, `resolved`, `rejected`), nullable assignee label, version and UTC update
+time. The migration does not backfill reports; the internal service treats absent state as open,
+unassigned, version zero. `(status, feedback_id)` is indexed.
+
+History records each version's before/after status and assignee, note, related links, actor,
+authentication source and UTC time. `(feedback_id, version)` is unique; database checks constrain
+statuses, positive event versions, source (`web` or `api`), and a nonblank note when entering a
+closed status. Both tables reference `feedback.id` with `ON DELETE CASCADE`, so deleting a
+report or its team also removes its internal history. History is append-only for the admin role,
+not exempt from the report's retention lifecycle.
+
+The private `treg-internal` admin's handling store is the only runtime writer. It owns the atomic
+state/history transaction, optimistic version checks, input validation and narrowly scoped DB
+grants. Shared-token authentication records `shared-admin`, not an individual operator's identity.
+This repository owns only the models and migration; public intake, receipt response shapes and
+the call runtime do not expose or use these tables. Deploy the migration before the internal
+service's grants and release. Rolling back that service can retain the new tables; downgrading
+0027 deletes all handling history.
 
 ## Call review storage
 
