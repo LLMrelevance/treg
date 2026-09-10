@@ -793,3 +793,20 @@ dialog form>.primary { width:100%; margin-top:5px; }
 .vendor-selfserve-actions { display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
 .vendor-copy-prompt { background:#f4f7f5; color:#315e50; border:1px solid #dbe5df; border-radius:9px; padding:8px 12px; font-family:inherit; font-size:12px; cursor:pointer; }
 .vendor-copy-prompt:hover { background:#eaf1ed; }
+
+/* Shared landing-page community links, kept visible beside the account controls. */
+.masthead>nav[aria-label="Arena account"] { flex-wrap:wrap; justify-content:flex-end; row-gap:8px; }
+.arena-community { display:flex; align-items:center; gap:14px; flex-shrink:0; }
+.arena-community a { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; color:var(--muted); text-decoration:none; white-space:nowrap; }
+.arena-community a:hover { color:var(--ink); }
+.arena-community a:focus-visible { outline:2px solid var(--teal-ink); outline-offset:4px; border-radius:6px; }
+.arena-community svg { flex-shrink:0; }
+@media(max-width:1280px) {
+  .masthead { grid-template-columns:minmax(0,1fr) auto; }
+  .masthead .arena-page-tabs { grid-column:1/-1; grid-row:2; }
+  .masthead>nav[aria-label="Arena account"] { grid-column:2; grid-row:1; }
+}
+@media(max-width:600px) {
+  .masthead>nav[aria-label="Arena account"] { max-width:calc(100vw - 130px); }
+  .arena-community { gap:12px; }
+}

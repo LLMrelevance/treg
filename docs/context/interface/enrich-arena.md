@@ -57,6 +57,9 @@ second header row. Links preserve task and input type; leaving Arena saves its
 query draft. Leaderboard does not restore or overwrite drafts, resume runs, fetch history or
 request quotes. It reads the same cached database snapshot as Arena. The account credit badge
 is a button opening `/app#billing` through `topUp`, preserving the selected team and Arena draft.
+The shared header also links to GitHub ("Open source"), Discord and X using the same icons and
+destinations as the people-search landing page. The links remain visible across Arena, Leaderboard
+and Benchmark, wrapping with account controls on narrow screens.
 Its visual system follows the treg redesign reference (`https://treg-design.vercel.app/#start`):
 Geist Pixel headings, Google Sans Flex body text, DM Mono for technical values, a cool gray canvas,
 white rounded cards with fine borders, black actions and restrained teal status accents. A static
@@ -491,7 +494,7 @@ The page opts out of PostHog autocapture and session recording through `sitetrac
 guard. All Arena routes belong to the control role (and default all role), including interactive
 paid execution; the dataplane's `/call/` contract is unchanged.
 
-Alembic revision `0025` creates `arenarun` and `arenaevaluation`. Run `python -m treg upgrade`
+Alembic revision `0026` creates `arenarun` and `arenaevaluation`. Run `python -m treg upgrade`
 before serving the new release. Tests cover auth/private access, aggregate admission, direct billing,
 own keys, cancellation, duplicate start/vote, attributed progress/results and pre-charge name validation, waterfall progression and OAuth return.
 
@@ -500,8 +503,7 @@ price invalidation, login gating, duplicate clicks, quote expiry and the correct
 
 ### Optional verification after contact lookup
 
-Find work email enables verification by default for new queries; Find phone number keeps it
-off by default. The switch choice is persisted in the draft and bound into the server quote.
+Find work email and Find phone number enable verification by default for new queries. The switch choice is persisted in the draft and bound into the server quote.
 Restoring an explicit draft opt-out or historical run preserves its recorded setting. Each found result gets one follow-up check with the
 cheapest currently accessible verifier (own keys cost zero). Battle quotes include the cap for
 every vendor/entry; waterfall quotes include one check per entry. Misses incur no verification

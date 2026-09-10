@@ -451,7 +451,7 @@
       identity(){return Object.fromEntries(this.inputKeys.map(k=>[k,(this.inputs[k]||'').trim()]));},
       identities(){return this.inputRows.map(row=>Object.fromEntries(this.inputKeys.map(k=>[k,(row[k]||'').trim()])));},
       saveDraft(pending=false){if(this.leaderboard||this.benchmark)return;write(DRAFT,{taskId:this.taskId,variant:this.variant,inputs:this.inputs,extraInputs:this.extraInputs,mode:this.mode,autoVerify:this.autoVerify,customServices:this.customServices,services:this.services,pending,at:Date.now()});},
-      restoreDraft(){const d=read(DRAFT);if(!d||Date.now()-d.at>600000){remove(DRAFT);return false;}if(!this.tasks.some(t=>t.id===d.taskId))return false;this.taskId=d.taskId;this.autoVerify=typeof d.autoVerify==='boolean'?d.autoVerify:d.taskId==='people.email.find';this.variant=d.variant;this.inputs=d.inputs||{};this.extraInputs=Array.isArray(d.extraInputs)?d.extraInputs.slice(0,49):[];this.mode=d.mode==='compare'?'compare':'waterfall';this.customServices=!!d.customServices;this.services=d.services||[];return !!d.pending;},
+      restoreDraft(){const d=read(DRAFT);if(!d||Date.now()-d.at>600000){remove(DRAFT);return false;}if(!this.tasks.some(t=>t.id===d.taskId))return false;this.taskId=d.taskId;this.autoVerify=typeof d.autoVerify==='boolean'?d.autoVerify:['people.email.find','people.phone.find'].includes(d.taskId);this.variant=d.variant;this.inputs=d.inputs||{};this.extraInputs=Array.isArray(d.extraInputs)?d.extraInputs.slice(0,49):[];this.mode=d.mode==='compare'?'compare':'waterfall';this.customServices=!!d.customServices;this.services=d.services||[];return !!d.pending;},
       resetTaskInputs(){
         this.inputs={};this.extraInputs=[];this.quote=null;this.customServices=false;this.services=[];
         if(this.booted){this.run=null;this.linkedRunPending=false;clearTimeout(this.pollTimer);if(!this.leaderboard)remove(ACTIVE);this.saveDraft(false);this.syncUrl();}
@@ -459,7 +459,7 @@
       chooseTask(id){
         if(this.busy||this.running||!this.tasks.some(t=>t.id===id))return;
         this.taskId=id;if(this.statsView==='verified'&&!['people.email.find','people.phone.find'].includes(id))this.statsView='rate';
-        this.autoVerify=id==='people.email.find';this.chartFocus=null;this.variant=0;this.resetTaskInputs();
+        this.autoVerify=['people.email.find','people.phone.find'].includes(id);this.chartFocus=null;this.variant=0;this.resetTaskInputs();
       },
       chooseVariant(i){
         if(this.busy||this.running||!Number.isInteger(i)||i<0||i>=this.currentTask.variants.length)return;

@@ -687,10 +687,11 @@ test('Email verdict badges distinguish uncertain statuses from invalid boolean p
  app.run.capability='people.email.find';assert.equal(app.outcomeLabel({state:'hit'}),'Found');assert.equal(app.outcomeClass({state:'hit'}),'hit');
 });
 
-test('New email lookups enable verification by default and preserve an explicit draft opt-out',()=>{
+test('New email and phone lookups enable verification by default and preserve draft opt-outs',()=>{
  const {app}=setup();app.tasks.push({id:'people.phone.find',variants:[['linkedin_url']]},{id:'people.search',variants:[['q']]});assert.equal(app.autoVerify,true);assert.equal(JSON.parse(app.quoteKey).auto_verify,true);
  app.autoVerify=false;app.saveDraft(false);app.autoVerify=true;app.restoreDraft();assert.equal(app.autoVerify,false);
- app.chooseTask('people.phone.find');assert.equal(app.autoVerify,false);
+ app.chooseTask('people.phone.find');assert.equal(app.autoVerify,true);assert.equal(JSON.parse(app.quoteKey).auto_verify,true);
+ app.autoVerify=false;app.saveDraft(false);app.autoVerify=true;app.restoreDraft();assert.equal(app.autoVerify,false);
  app.chooseTask('people.email.find');assert.equal(app.autoVerify,true);
  app.chooseTask('people.search');assert.equal(JSON.parse(app.quoteKey).auto_verify,false);
 });
