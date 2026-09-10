@@ -9,7 +9,7 @@ sources:
   - src/treg/archive_bodies.py
   - src/treg/config.py
   - src/treg/infra/object_store.py
-  - src/treg/alembic/versions/0028_archive_body_storage.py
+  - src/treg/alembic/versions/0032_archive_body_storage.py
   - tests/test_archive_r2.py
   - tests/fake_object_store.py
   - scripts/smoke_archive_r2.py
@@ -71,7 +71,7 @@ sha256 attribute is stored or checked; GET enforces size limits and verifies the
 Same-body concurrent uploads are harmless. R2 stores raw bytes, independent of the media type of any particular call.
 DB compression remains unchanged. GET verifies the full hash before returning data.
 
-Migration `0028` adds nullable `ArchiveSnapshot.body_storage`: `db`, `both`, or `r2`; NULL is
+Migration `0032` adds nullable `ArchiveSnapshot.body_storage`: `db`, `both`, or `r2`; NULL is
 interpreted as the legacy DB path and does not promise that bytes were retained. The existing
 `content_hash` names the R2 object. R2-only snapshots have no `body_of`; DB and double-write
 snapshots keep existing carrier dedup. No historical rows, body columns or objects are migrated
