@@ -705,6 +705,7 @@ test('Verification verdicts preserve catch-all and distinguish invalid phone for
  assert.equal(app.verificationVerdict({verification:{state:'hit',output:{valid:false,status:'catch_all'}}}),'Risky');
  assert.equal(app.verificationVerdict({verification:{capability:'people.phone.verify',state:'hit',output:{valid:false}}}),'Invalid phone number');
  assert.equal(app.verificationVerdict({verification:{state:'error'}}),'Verification unavailable');
+ assert.equal(app.verificationVerdict({verification:{state:'error',not_started:true}}),'Verification not run');
 });
 test('Verification is priced, claims once per row, and can run alongside other requests',async()=>{
  const {app}=setup();app.tasks.push({id:'people.email.verify',provider_previews:[[{estimate_micro:6250}]]});

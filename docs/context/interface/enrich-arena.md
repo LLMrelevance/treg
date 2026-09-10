@@ -619,8 +619,16 @@ verification when enabled. Nested charges are included in row/run totals; cancel
 and process-loss recovery preserve the lookup and never retry paid work automatically.
 
 Verify phone number is also a standalone batch-capable task using Tomba's existing phone-validator
-endpoint. Input requires an international number with + and country code; spacing and punctuation
-are normalized. It returns numbering-plan validity, country, line type and carrier when supplied.
+endpoint. The default input requires an international number with + and country calling code;
+spacing and punctuation are normalized. Requests can alternatively supply a national-format
+number with the optional ISO-2 `country_code`. `verification_identity` carries a lookup's reported
+country context into automatic and manual verification, and the Tomba adapter forwards it as a
+query parameter. QuickEnrich preserves its reported `data.country_code` in normalized output.
+An explicit international calling code takes precedence over that country context. Missing or
+unusable context for a national number produces a specific explanation without making or charging
+a verification call; no default country is guessed. Pre-dispatch failures carry `not_started` so
+the table shows “Verification not run” with the reason and does not attribute an unmade call to
+the planned provider. It returns numbering-plan validity, country, line type and carrier when supplied.
 It does **not** establish that the line is live or belongs to the intended person. Arena can plan
 a single-provider task through the existing candidate planner; public synthetic routes still
 require two verified adapters. No public single-provider routed endpoint is added.
