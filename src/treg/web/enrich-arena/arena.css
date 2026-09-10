@@ -817,11 +817,10 @@ body:has(dialog[open]) { overflow:hidden; }
   .masthead { grid-template-columns:minmax(0,1fr) auto auto; gap:8px; padding:12px 16px; }
   .masthead>nav[aria-label="Arena account"] { display:contents; }
   .masthead .brand { grid-column:1; grid-row:1; min-height:44px; }
-  .masthead .sign-in-button,.masthead .balance { grid-column:3; grid-row:1; justify-self:end; }
+  .masthead .sign-in-button,.masthead .account-actions { grid-column:3; grid-row:1; justify-self:end; }
   .masthead .arena-community { grid-column:2; grid-row:1; }
-  .masthead nav>.text-button { grid-column:3; grid-row:2; justify-self:end; }
-  .masthead .team-switcher { grid-column:1/3; grid-row:2; }
-  .masthead:has(nav>.text-button) .arena-page-tabs { grid-row:3; }
+  .masthead .team-switcher { grid-column:1/-1; grid-row:2; }
+  .masthead:has(.team-switcher) .arena-page-tabs { grid-row:3; }
   .masthead .arena-page-tabs { grid-column:1/-1; grid-row:2; width:100%; gap:2px; margin-top:0; }
   .masthead .arena-page-tabs a { flex:1; min-height:44px; justify-content:center; padding:10px 6px; font-size:12px; }
   .arena-community { gap:0; }
@@ -885,3 +884,16 @@ body:has(dialog[open]) { overflow:hidden; }
 .run-cost-summary dt { color:var(--muted); font-size:13px; margin-bottom:6px; }
 .run-cost-summary dd { margin:0; font-size:20px; font-variant-numeric:tabular-nums; }
 .run-cost-summary dd small { font-size:12px; color:var(--muted); }
+
+.account-actions { display:flex; align-items:center; gap:10px; }
+.mobile-account-menu { display:none; position:relative; margin:0; }
+.mobile-account-menu summary { display:flex; align-items:center; justify-content:center; width:32px; min-height:44px; cursor:pointer; list-style:none; border-radius:10px; }
+.mobile-account-menu summary::-webkit-details-marker { display:none; }
+.mobile-account-menu summary:focus-visible { outline:2px solid var(--teal-ink); outline-offset:2px; }
+.account-menu-panel { position:absolute; top:calc(100% + 6px); right:0; z-index:30; min-width:128px; padding:6px; border:1px solid var(--line); border-radius:14px; background:#fff; box-shadow:0 8px 24px #00000012; }
+.account-menu-panel button { width:100%; text-align:left; padding:10px 14px; white-space:nowrap; }
+@media(max-width:600px) {
+  .account-actions { gap:0; }
+  .account-actions .desktop-signout { display:none; }
+  .mobile-account-menu { display:block; }
+}

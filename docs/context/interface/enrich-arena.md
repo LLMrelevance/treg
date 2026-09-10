@@ -87,7 +87,7 @@ automatically. Vendor selection resets on task switches. Shared column labels st
 the fields on mobile as well as desktop. Narrow screens keep wider input grids in a local
 horizontal scroll region, with 16px editable text and 44px primary touch controls. The mobile
 header keeps the brand, community links and signup/credit controls together above the page tabs.
-At widths up to 600px, community links use accessible icons without the Open source text; team selection/sign-out use an account row
+At widths up to 600px, community links use accessible icons without the Open source text; Sign out lives in an account dropdown beside the credit balance, and team selection uses a separate row only when needed
 when signed in. Comparison filters use a two-column grid.
 Result tables keep their own horizontal scroll region and stats retain the vendor column while
 scrolling. Expanded answers become cards on small screens; selected overview rows and table
