@@ -400,18 +400,19 @@ async def load_terminal_responses(tasks: list[tuple[str, str]]) -> dict[str, byt
             return out
         by_key = {k.id: hashes[k.key_hash] for k in keys}
         snaps = (await s.execute(
-            select(ArchiveSnapshot).where(ArchiveSnapshot.key_id.in_(list(by_key)))
+            select(ArchiveSnapshot).options(*archive_bodies.read_options("terminal")).where(ArchiveSnapshot.key_id.in_(list(by_key)))
             .order_by(ArchiveSnapshot.key_id, ArchiveSnapshot.version.desc()))).scalars().all()
         newest: dict[int, ArchiveSnapshot] = {}
         for snap in snaps:
             newest.setdefault(snap.key_id, snap)
-        pointers = {by_key[key_id]: await archive_bodies.pointer(s, snap)
+        pointers = {by_key[key_id]: await archive_bodies.pointer(s, snap, "terminal")
                     for key_id, snap in newest.items()}
-    for call_id, pointer in pointers.items():
-        body = await archive_bodies.read(pointer, "terminal")
-        if body is not None:
-            out[call_id] = body
-    return out
+    semaphore = asyncio.Semaphore(8)
+    async def load(call_id, pointer):
+        async with semaphore:
+            return call_id, await archive_bodies.read(pointer, "terminal")
+    return {call_id: body for call_id, body in await asyncio.gather(
+        *(load(call_id, pointer) for call_id, pointer in pointers.items())) if body is not None}
 
 
 async def drain() -> None:
@@ -515,7 +516,7 @@ async def _store(
                     plan = await prepare()
             except TimeoutError:
                 observation.props["archive_body_upload_status"] = "failed"
-                plan = archive_bodies.WritePlan("db" if keep else None, keep, reason="upload_timeout")
+                plan = archive_bodies.WritePlan("db" if keep else None, keep, reason="timeout")
                 _log.error("terminal archive upload deadline exceeded; saving DB evidence")
             if plan.storage is None and keep:
                 plan = archive_bodies.WritePlan("db" if keep else None, keep, reason=plan.reason)
@@ -853,12 +854,12 @@ async def resolve_result(key_hash: str, content_hash: str) -> dict[str, Any] | N
         if key is None:
             return None
         snap = (await session.execute(
-            select(ArchiveSnapshot)
+            select(ArchiveSnapshot).options(*archive_bodies.read_options("result"))
             .where(ArchiveSnapshot.key_id == key.id, ArchiveSnapshot.content_hash == content_hash)
             .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
         if snap is None:
             return None
-        pointer = await archive_bodies.pointer(session, snap)
+        pointer = await archive_bodies.pointer(session, snap, "result")
     body = await archive_bodies.read(pointer, "result")
     return {
         "stored": body is not None,
@@ -994,7 +995,7 @@ async def lookup(
             if window <= 0:
                 return miss("ttl_disabled")
             newest = (await s.execute(
-                select(ArchiveSnapshot).where(ArchiveSnapshot.key_id == key.id)
+                select(ArchiveSnapshot).options(*archive_bodies.read_options("lookup")).where(ArchiveSnapshot.key_id == key.id)
                 .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
             # Older writers can still append during a rolling deploy. A version they wrote
             # invalidates our saved decision; classify that newest body as legacy evidence.
@@ -1003,7 +1004,7 @@ async def lookup(
             if assessed:
                 if key.result_state != "found":
                     return miss("result_" + key.result_state)
-                newest = await s.get(ArchiveSnapshot, key.result_snapshot_id)
+                newest = await s.get(ArchiveSnapshot, key.result_snapshot_id, options=archive_bodies.read_options("lookup"))
                 if newest is not None and newest.key_id != key.id:
                     return miss("snapshot_unavailable")
             if newest is None or not (200 <= newest.status_code < 300):
@@ -1013,7 +1014,7 @@ async def lookup(
                 diagnostics.update(cache_age_s=age_s, cache_window_s=window)
             if age_s < 0 or age_s > window:
                 return miss("stale")
-            pointer = await archive_bodies.pointer(s, newest)
+            pointer = await archive_bodies.pointer(s, newest, "lookup")
         body = await archive_bodies.read(pointer, "lookup", diagnostics=diagnostics)
         if body is None:
             return miss("body_missing")

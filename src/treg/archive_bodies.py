@@ -2,13 +2,12 @@
 import asyncio
 from collections import Counter
 from dataclasses import dataclass
-import hashlib
 import logging
 import re
 import time
 
 from .config import get_settings
-from .infra.object_store import ObjectInfo, ObjectStore
+from .infra.object_store import ObjectInfo, ObjectStore, ObjectStoreError
 
 _log = logging.getLogger("treg.archive_bodies")
 _store: ObjectStore | None = None
@@ -97,13 +96,11 @@ async def prepare(body: bytes, content_hash: str, *, mode: str, keep: bool, obse
     if mode == "db":
         return WritePlan("db", True)
     started = time.monotonic()
-    reason = "upload_failed"
+    reason = "store_error"
     attempts = get_settings().archive_r2_terminal_attempts if terminal else 1
     try:
         for attempt in range(attempts):
             try:
-                if hashlib.sha256(body).hexdigest() != content_hash:
-                    raise ValueError("archive content hash mismatch")
                 queued = time.monotonic()
                 async with _upload_sem():
                     observation.props["archive_body_queue_wait_ms"] += (time.monotonic() - queued) * 1000
@@ -112,17 +109,19 @@ async def prepare(body: bytes, content_hash: str, *, mode: str, keep: bool, obse
                         async with asyncio.timeout(get_settings().archive_r2_timeout_s):
                             if _store is None:
                                 raise RuntimeError("archive object store unavailable")
-                            info = await _store.put(body)
+                            info = await _store.put(body, content_hash=content_hash)
                             if info != ObjectInfo(content_hash, len(body)):
-                                raise ValueError("archive uploaded object mismatch")
+                                raise ObjectStoreError("hash_mismatch")
                     finally:
                         observation.props["archive_body_upload_ms"] += (time.monotonic() - transfer) * 1000
                 observation.props["archive_body_upload_status"] = "uploaded"
                 return WritePlan(mode, mode == "both")
             except TimeoutError:
-                reason = "upload_timeout"
+                reason = "timeout"
+            except ObjectStoreError as exc:
+                reason = exc.reason
             except Exception:
-                reason = "upload_failed"
+                reason = "store_error"
             if attempt + 1 < attempts:
                 await asyncio.sleep(min(0.1 * 2 ** attempt, 1.0))
         observation.props["archive_body_upload_status"] = "failed"
@@ -171,23 +170,38 @@ class BodyPointer:
     storage: str | None
     body: bytes | None
     enc: str | None
+    snapshot_id: int | None = None
 
 
-async def pointer(session, snapshot) -> BodyPointer:
-    """Read DB fallback bytes while the session is open. Performs no object storage I/O."""
+def read_options(path):
+    from sqlalchemy.orm import defer
     from .models import ArchiveSnapshot
+    return (defer(ArchiveSnapshot.body),) if getattr(get_settings(), "archive_body_read_" + path) == "r2-first" else ()
 
-    body, enc = snapshot.body, snapshot.enc
-    if body is None and snapshot.body_of is not None:
-        carrier = await session.get(ArchiveSnapshot, snapshot.body_of)
-        if carrier is not None and carrier.key_id == snapshot.key_id:
-            body, enc = carrier.body, carrier.enc
-    return BodyPointer(snapshot.content_hash, snapshot.body_storage, body, enc)
+
+async def pointer(session, snapshot, path):
+    """Capture metadata only for R2-first; DB fallback is loaded in a later short session."""
+    if getattr(get_settings(), "archive_body_read_" + path) == "r2-first":
+        return BodyPointer(snapshot.content_hash, snapshot.body_storage, None, None, snapshot.id)
+    from .archive import _snapshot_body
+    body = await _snapshot_body(session, snapshot)
+    return BodyPointer(snapshot.content_hash, snapshot.body_storage, body, None)
+
+
+async def _db_fallback(pointer):
+    from .infra.db import session_maker
+    from .models import ArchiveSnapshot
+    from .archive import _snapshot_body, _unpack
+    if pointer.snapshot_id is None:
+        return _unpack(pointer.body, pointer.enc)
+    async with session_maker() as session:
+        row = await session.get(ArchiveSnapshot, pointer.snapshot_id)
+        return await _snapshot_body(session, row) if row is not None else None
 
 
 async def read(pointer: BodyPointer, path: str, *, diagnostics: dict | None = None) -> bytes | None:
     """Call only after closing every DB session owned by the request."""
-    from .infra.object_store import ObjectReadError
+    from .infra.object_store import ObjectStoreError
     from .archive import _unpack
 
     reason, elapsed = "none", 0.0
@@ -203,12 +217,10 @@ async def read(pointer: BodyPointer, path: str, *, diagnostics: dict | None = No
         try:
             async with asyncio.timeout(get_settings().archive_r2_read_timeout_s):
                 if _store is None:
-                    raise ObjectReadError("store_unavailable")
+                    raise ObjectStoreError("store_unavailable")
                 body = await _store.get(pointer.content_hash)
                 if body is None:
                     reason = "not_found"
-                elif hashlib.sha256(body).hexdigest() != pointer.content_hash:
-                    raise ObjectReadError("hash_mismatch")
                 else:
                     elapsed = round((time.monotonic() - started) * 1000, 3)
                     return observed(body, "r2")
@@ -216,7 +228,7 @@ async def read(pointer: BodyPointer, path: str, *, diagnostics: dict | None = No
             reason = "timeout"
         except PermissionError:
             reason = "permission_denied"
-        except ObjectReadError as exc:
+        except ObjectStoreError as exc:
             reason = exc.reason if exc.reason in {
                 "not_found", "timeout", "permission_denied", "hash_mismatch", "too_large",
                 "store_unavailable", "store_error"} else "store_error"
@@ -227,5 +239,5 @@ async def read(pointer: BodyPointer, path: str, *, diagnostics: dict | None = No
         outcomes["read_fallback_" + path + "_" + reason] += 1
         level = logging.ERROR if reason in {"permission_denied", "hash_mismatch", "too_large"} else logging.WARNING
         _log.log(level, "archive R2 read fallback path=%s reason=%s elapsed_ms=%s", path, reason, elapsed)
-    body = _unpack(pointer.body, pointer.enc)
+    body = await _db_fallback(pointer)
     return observed(body, "db" if body is not None else "none")

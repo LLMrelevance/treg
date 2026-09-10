@@ -109,8 +109,9 @@ bounded evidence operation before propagating cancellation; failures and deadlin
 already committed and cannot be undone by storage failure. Terminal failures also log a bounded
 error because a worker completion has no pending caller event to annotate.
 
-Readers use `archive_bodies.pointer` to collect the R2 location and any DB fallback bytes inside
-a session, then close it before `archive_bodies.read`. This applies to lookup, call-result reads,
+Readers use `archive_bodies.pointer` to collect R2 metadata inside
+a session (`defer(ArchiveSnapshot.body)` for R2-first), then close it before `archive_bodies.read`. Only a failed R2 read opens a new short DB
+session for fallback bytes. Terminal batches use at most eight simultaneous reads. This applies to lookup, call-result reads,
 and terminal-result reads, including the Activity routes' outer auth/query sessions. `r2-first`
 only tries R2 for a published `both`/`r2` location; missing objects, timeouts, errors and checksum
 mismatches fall back to DB. Lookup selects `result_snapshot_id` under the existing result-state
@@ -537,3 +538,7 @@ inspector's own load. A dash in the TTL column means "click to learn".
 Startup uses the normalized archive mode (unknown values disable it). R2-only writes require
 all three reads to be `r2-first`; default, EU and FedRAMP R2 endpoints are accepted. The dev smoke
 script has no bucket argument and accepts only `treg-archive-dev`.
+
+ObjectStore owns the sole download hash validation; the memory fake follows the same contract.
+`put` accepts the internally computed content hash to avoid rehashing immutable bytes. Read and
+write errors use the same typed classification; SDK text is never parsed or logged.

@@ -100,7 +100,7 @@ async def test_upload_failure_never_publishes_r2_pointer(clients, r2, monkeypatc
     assert len(rows) == expected_rows and all(row.body_storage == ('db' if mode == 'both' else None) for row in rows)
     props = [p for name, p in events if name == 'archive_body_stored']
     assert len(props) == 1
-    assert props[0]['drop_reason'] == 'upload_failed'
+    assert props[0]['drop_reason'] == 'store_error'
     assert props[0]['upload_status'] == 'failed'
     assert props[0]['dropped'] is (mode == 'r2')
 
@@ -232,7 +232,7 @@ def test_db_defaults_need_no_r2_configuration():
 
 async def test_checksum_mismatch_is_not_published(clients, r2, monkeypatch):
     from treg.infra.object_store import ObjectInfo
-    async def wrong(body):
+    async def wrong(body, **kw):
         return ObjectInfo('0' * 64, len(body))
     monkeypatch.setattr(r2, 'put', wrong)
     monkeypatch.setattr(get_settings(), 'archive_body_write', 'r2')
@@ -269,7 +269,7 @@ async def test_upload_timeout_and_byte_shedding_are_observable(clients, r2, monk
     r2.gate = asyncio.Event()
     await clients.get(URL)
     await archive.drain()
-    assert any(p.get('drop_reason') == 'upload_timeout' for _, p in events)
+    assert any(p.get('drop_reason') == 'timeout' for _, p in events)
     monkeypatch.setattr(get_settings(), 'archive_r2_max_pending_bytes', 1)
     await clients.get(URL, headers={'Cache-Control': 'no-cache'})
     await archive.drain()
@@ -280,7 +280,7 @@ async def test_obstore_client_uses_one_request_and_checks_hash_and_size():
     from treg.infra.object_store import R2ObjectStore, ObjectInfo
     from tests.fake_object_store import MemoryObstoreSDK
     sdk = MemoryObstoreSDK()
-    store = R2ObjectStore(sdk, 1000, FileNotFoundError)
+    store = R2ObjectStore(sdk, 1000)
     digest = hashlib.sha256(RAW).hexdigest()
     assert await store.put(RAW) == ObjectInfo(digest, len(RAW))
     assert sdk.path == digest and 'sha256' not in sdk.attributes
@@ -289,7 +289,7 @@ async def test_obstore_client_uses_one_request_and_checks_hash_and_size():
     assert sdk.calls == ['put', 'head']
     assert await store.get(digest) == RAW
     assert sdk.calls == ['put', 'head', 'get']
-    small = R2ObjectStore(sdk, len(RAW) - 1, FileNotFoundError)
+    small = R2ObjectStore(sdk, len(RAW) - 1)
     with pytest.raises(ValueError, match='too large'):
         await small.put(RAW)
     with pytest.raises(ValueError, match='too_large'):
@@ -419,7 +419,7 @@ async def test_obstore_factory_configuration_and_missing_objects(monkeypatch, wr
 @pytest.mark.parametrize('reason,level', [('not_found', 'WARNING'), ('timeout', 'WARNING'),
                                          ('permission_denied', 'ERROR'), ('hash_mismatch', 'ERROR')])
 async def test_read_fallback_reason_level_and_diagnostics(r2, monkeypatch, caplog, path, reason, level):
-    from treg.infra.object_store import ObjectReadError
+    from treg.infra.object_store import ObjectStoreError
     monkeypatch.setattr(get_settings(), 'archive_body_read_' + path, 'r2-first')
     monkeypatch.setattr(get_settings(), 'archive_r2_read_timeout_s', 0.01)
     monkeypatch.setattr(get_settings(), 'archive_r2_timeout_s', 30.0)
@@ -429,7 +429,7 @@ async def test_read_fallback_reason_level_and_diagnostics(r2, monkeypatch, caplo
         elif reason == 'not_found':
             return None
         else:
-            raise ObjectReadError(reason)
+            raise ObjectStoreError(reason)
     monkeypatch.setattr(r2, 'get', fail)
     p = archive_bodies.BodyPointer(archive.content_hash(RAW), 'both', RAW, None)
     diagnostics = {}
@@ -468,9 +468,9 @@ async def test_upload_does_not_use_read_timeout(clients, r2, monkeypatch):
     monkeypatch.setattr(get_settings(), 'archive_r2_read_timeout_s', 0.001)
     monkeypatch.setattr(get_settings(), 'archive_r2_timeout_s', 1.0)
     put = r2.put
-    async def slow(body):
+    async def slow(body, **kw):
         await asyncio.sleep(0.02)
-        return await put(body)
+        return await put(body, **kw)
     monkeypatch.setattr(r2, 'put', slow)
     await clients.get(URL)
     await archive.drain()
@@ -478,16 +478,16 @@ async def test_upload_does_not_use_read_timeout(clients, r2, monkeypatch):
 
 
 @pytest.mark.parametrize('failure,expected', [(PermissionError('secret-body'), 'permission_denied'),
-    (RuntimeError('SignatureDoesNotMatch secret-body'), 'permission_denied'),
-    (RuntimeError('request timed out secret-body'), 'timeout'),
+    (RuntimeError('SignatureDoesNotMatch secret-body'), 'store_error'),
+    (RuntimeError('request timed out secret-body'), 'store_error'),
     (RuntimeError('503 secret-body'), 'store_error')])
 async def test_sdk_read_errors_are_sanitized(failure, expected):
-    from treg.infra.object_store import R2ObjectStore, ObjectReadError
+    from treg.infra.object_store import R2ObjectStore, ObjectStoreError
     class SDK:
         async def get_async(self, path):
             raise failure
-    store = R2ObjectStore(SDK(), 1000, FileNotFoundError)
-    with pytest.raises(ObjectReadError) as exc:
+    store = R2ObjectStore(SDK(), 1000)
+    with pytest.raises(ObjectStoreError) as exc:
         await store.get('0' * 64)
     assert exc.value.reason == expected and str(exc.value) == expected
 
@@ -561,3 +561,31 @@ async def test_upload_wait_is_not_transfer_timeout(r2, monkeypatch):
         sem.release()
     assert (await task).storage == 'both'
     assert observation.props['archive_body_queue_wait_ms'] >= 20
+
+async def test_terminal_reads_are_bounded_and_do_not_load_db_body(clients, r2, monkeypatch):
+    from sqlalchemy import inspect
+    monkeypatch.setattr(get_settings(), 'archive_body_read_terminal', 'r2-first')
+    for i in range(17):
+        await archive.store_terminal_response(str(i), 'tikhub', EP, 200, RAW)
+    original_pointer = archive_bodies.pointer
+    async def pointer(session, row, path):
+        assert 'body' in inspect(row).unloaded
+        return await original_pointer(session, row, path)
+    monkeypatch.setattr(archive_bodies, 'pointer', pointer)
+    async def no_db(pointer):
+        pytest.fail('successful R2 read fetched DB fallback')
+    monkeypatch.setattr(archive_bodies, '_db_fallback', no_db)
+    original_get = r2.get
+    active = peak = 0
+    async def get(key):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(.01)
+            return await original_get(key)
+        finally:
+            active -= 1
+    monkeypatch.setattr(r2, 'get', get)
+    assert len(await archive.load_terminal_responses([(str(i), EP) for i in range(17)])) == 17
+    assert peak == 8

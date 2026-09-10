@@ -2,7 +2,7 @@
 import asyncio
 import hashlib
 
-from treg.infra.object_store import ObjectInfo
+from treg.infra.object_store import ObjectInfo, ObjectStoreError
 
 
 class MemoryObjectStore:
@@ -16,7 +16,7 @@ class MemoryObjectStore:
         self.entered = asyncio.Event()
         self.check_io = lambda: None
 
-    async def put(self, body: bytes) -> ObjectInfo:
+    async def put(self, body: bytes, *, content_hash=None) -> ObjectInfo:
         self.check_io()
         self.put_calls += 1
         self.entered.set()
@@ -24,8 +24,8 @@ class MemoryObjectStore:
             await self.gate.wait()
         if self.fail_puts:
             self.fail_puts -= 1
-            raise OSError('fake unavailable')
-        key = hashlib.sha256(body).hexdigest()
+            raise ObjectStoreError('store_error')
+        key = content_hash or hashlib.sha256(body).hexdigest()
         self.objects[key] = body
         return ObjectInfo(key, len(body))
 
@@ -33,8 +33,11 @@ class MemoryObjectStore:
         self.check_io()
         self.get_calls += 1
         if self.fail_gets:
-            raise OSError('fake unavailable')
-        return self.objects.get(content_hash)
+            raise ObjectStoreError('store_error')
+        body = self.objects.get(content_hash)
+        if body is not None and hashlib.sha256(body).hexdigest() != content_hash:
+            raise ObjectStoreError('hash_mismatch')
+        return body
 
     async def head(self, content_hash: str) -> ObjectInfo | None:
         self.check_io()
