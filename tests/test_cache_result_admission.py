@@ -255,3 +255,61 @@ async def test_pruner_protects_decisive_body_and_carrier(clients, cache_on, monk
         key = (await s.execute(select(ArchiveKey))).scalar_one()
         snap = await s.get(ArchiveSnapshot, key.result_snapshot_id)
         assert await archive._snapshot_body(s, snap) == FOUND
+
+
+async def test_endpoint_without_hit_miss_keeps_original_cache_and_learning(clients, cache_on, monkeypatch):
+    ep = 'hunter.x.domain-finder'
+    monkeypatch.setattr(get_settings(), 'archive_serve_endpoints', ep)
+    raw = b'{"data":{"domain":"example.com"}}'
+    monkeypatch.setattr(service, 'relay', _fake_relay(200, raw))
+    url = '/call/' + ep + '?company=Example'
+    for _ in range(2):
+        r = await clients.get(url, headers={'Cache-Control': 'no-cache'})
+        assert r.status_code == 200 and r.content == raw
+        await archive.drain()
+    key = await _key()
+    assert key.stable_seen == 1 and key.change_seen == 0
+    assert key.ttl_s == 5400 and key.result_state is None
+    r = await clients.get(url)
+    assert r.headers.get('x-treg-cache') == 'hit' and r.content == raw
+
+
+async def test_existing_verified_adapter_also_rejects_misses(clients, cache_on, monkeypatch):
+    ep = 'hunter.companies.enrich'
+    monkeypatch.setattr(get_settings(), 'archive_serve_endpoints', ep)
+    raw = b'{"data":{"name":null}}'
+    monkeypatch.setattr(service, 'relay', _fake_relay(200, raw))
+    for _ in range(2):
+        r = await clients.get('/call/' + ep + '?domain=example.com')
+        assert r.status_code == 200 and r.content == raw
+        assert 'x-treg-cache' not in r.headers
+        await archive.drain()
+    assert (await _key()).result_state == 'empty'
+
+
+async def test_unverified_hit_miss_does_not_enable_new_policy(clients, cache_on, monkeypatch):
+    from dataclasses import replace
+    from treg.domain.catalog.store import load
+    from treg.domain.catalog.results import has_result_rules
+    cat = load()
+    monkeypatch.setitem(cat.adapters, EP, replace(cat.adapters[EP], verified=False))
+    assert not has_result_rules(EP)
+    events = []
+    monkeypatch.setattr(service.analytics, 'capture',
+                        lambda who, event, props, **kw: events.append((event, props)))
+    await _call(clients, monkeypatch, EMPTY)
+    r = await _call(clients, monkeypatch, FOUND)
+    # Preserves the original behavior for endpoints whose hit/miss is not enabled.
+    assert r.content == EMPTY and r.headers.get('x-treg-cache') == 'hit'
+    props = [p for event, p in events if event == 'tool_called']
+    assert all(p['cache_result_policy'] == 'legacy' and p['cache_admission'] == 'not_applicable' for p in props)
+
+
+@pytest.mark.parametrize('ep', ['hunter.companies.enrich', 'tikhub.tiktok.video.comments'])
+def test_verified_adapter_positive_fixture_is_admissible(ep):
+    from pathlib import Path
+    from treg.domain.catalog.results import classify, has_result_rules
+    assert has_result_rules(ep)
+    body = (Path(__file__).parents[1] / 'src/treg/catalog/examples' / (ep + '.json')).read_bytes()
+    result = classify(ep, 200, body)
+    assert result.state == 'found' and result.reason == 'adapter_hit'

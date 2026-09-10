@@ -5,7 +5,7 @@ import math
 from typing import Literal
 
 
-SUPPORTED = frozenset({
+STRICT_ENDPOINTS = frozenset({
     "hunter.companies.emails",
     "leadmagic.x.employee-finder",
     "seranking.google.keywords.volume",
@@ -26,10 +26,18 @@ def _text(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def has_result_rules(endpoint_id: str) -> bool:
+    """Only verified, configured hit/miss adapters opt into result-aware cache behavior."""
+    from .store import load
+
+    adapter = load().adapters.get(endpoint_id)
+    return adapter is not None and adapter.verified and bool(adapter.miss.strip())
+
+
 def classify(endpoint_id: str, status: int, body: bytes) -> Result:
     if not 200 <= status < 300:
         return Result("error", "http_error")
-    if endpoint_id not in SUPPORTED:
+    if not has_result_rules(endpoint_id):
         return Result("unknown", "unsupported_endpoint")
     try:
         doc = json.loads(body)
@@ -37,6 +45,16 @@ def classify(endpoint_id: str, status: int, body: bytes) -> Result:
         return Result("unknown", "invalid_json")
     if isinstance(doc, dict) and (doc.get("error") or doc.get("errors")):
         return Result("error", "provider_error")
+    if endpoint_id not in STRICT_ENDPOINTS:
+        from .store import load
+
+        if not isinstance(doc, (dict, list)):
+            return Result("unknown", "invalid_shape")
+        try:
+            miss = load().adapters[endpoint_id].is_miss(doc)
+        except Exception:  # a predicate failure is not evidence of a business change
+            return Result("unknown", "predicate_error")
+        return Result("empty", "adapter_miss") if miss else Result("found", "adapter_hit")
     if endpoint_id == "seranking.google.keywords.volume":
         if not isinstance(doc, list):
             return Result("unknown", "invalid_shape")

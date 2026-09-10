@@ -1,8 +1,9 @@
 """Versioned platform responses, result admission, adaptive TTL and cache serving.
 
-History and cache share exact provider bytes but have different eligibility rules. Only a
-confirmed useful result can be served; explicit empty results invalidate it. Errors and unknown
-results preserve the previous decisive observation without renewing its freshness. Response
+History and cache share exact provider bytes but have different eligibility rules. Endpoints
+with verified hit/miss rules can serve only confirmed useful results; explicit empty results invalidate it. Errors and unknown
+results preserve the previous decisive observation without renewing its freshness. Endpoints
+without verified hit/miss rules retain the original cache and learning behavior. Response
 history and byte deduplication remain independent of result usefulness.
 
 Recording observes already-buffered metered platform calls under the catalog retention policy.
@@ -530,11 +531,12 @@ async def _store_locked(
     from sqlalchemy.exc import IntegrityError
 
     from .domain.catalog import store as catalog_store
-    from .domain.catalog.results import classify
+    from .domain.catalog.results import classify, has_result_rules
     from .infra.db import background_session_maker
     from .models import ArchiveKey, ArchiveSnapshot
 
-    result = classify(endpoint_id, status_code, body)
+    result_aware = has_result_rules(endpoint_id)
+    result = classify(endpoint_id, status_code, body) if result_aware else None
     entry = catalog_store.load().by_id.get(endpoint_id)
     pol = policy(entry)
     # `record()` hands both hashes in, computed once on the call path; the fallback keeps
@@ -595,7 +597,10 @@ async def _store_locked(
                 snap.body, snap.body_of = None, carrier
 
         baseline = None
-        if (key.result_state is None or
+        if not result_aware:
+            baseline = newest
+            key.result_state = key.result_snapshot_id = None
+        elif (key.result_state is None or
                 (newest is not None and key.result_observed_version != newest.version)):
             # Upgrade lazily from the latest version only. Never search past an empty result.
             key.result_state = "unknown"
@@ -613,10 +618,12 @@ async def _store_locked(
             if baseline is not None and baseline.key_id != key.id:
                 baseline = None
 
-        decisive = result.state in ("found", "empty") and origin != "async_terminal"
-        if decisive and baseline is not None and (key.result_state, result.state) != ("empty", "empty"):
-            stable = key.result_state == result.state == "found" and baseline.content_hash == ch
-            if (not stable and key.result_state == result.state == "found"
+        previous_state = key.result_state if result_aware else "found"
+        next_state = result.state if result_aware else "found"
+        decisive = next_state in ("found", "empty") and origin != "async_terminal"
+        if decisive and baseline is not None and (previous_state, next_state) != ("empty", "empty"):
+            stable = previous_state == next_state == "found" and baseline.content_hash == ch
+            if (not stable and previous_state == next_state == "found"
                     and comparison_mode() == "legacy_noise"):
                 stable = _noise_only(await _snapshot_body(s, baseline), body, key)
             if stable:
@@ -633,8 +640,8 @@ async def _store_locked(
         # Make version conflicts explicit here, before any stats query or commit handling. The
         # IntegrityError leaves this function and the outer loop retries the whole transaction.
         await s.flush()
-        key.result_observed_version = snap.version
-        if decisive:
+        key.result_observed_version = snap.version if result_aware else None
+        if decisive and result_aware:
             key.result_state = result.state
             key.result_snapshot_id = snap.id
             s.add(key)
@@ -890,12 +897,14 @@ async def lookup(
         from sqlalchemy import select
 
         from .domain.catalog import store as catalog_store
+        from .domain.catalog.results import classify, has_result_rules
         # The API pool, deliberately: a lookup runs INSIDE a caller's /call/. Every other session in
         # this module is a write nobody awaits and goes to the background pool; this one is on the
         # hot path and must not queue behind them.
         from .infra.db import session_maker
         from .models import ArchiveKey, ArchiveSnapshot
 
+        result_aware = has_result_rules(endpoint_id)
         entry = catalog_store.load().by_id.get(endpoint_id)
         if not storable(entry):
             return miss("policy_excluded")
@@ -920,7 +929,7 @@ async def lookup(
                 .order_by(ArchiveSnapshot.version.desc()).limit(1))).scalars().first()
             # Older writers can still append during a rolling deploy. A version they wrote
             # invalidates our saved decision; classify that newest body as legacy evidence.
-            assessed = (newest is not None and key.result_state is not None
+            assessed = (result_aware and newest is not None and key.result_state is not None
                         and key.result_observed_version == newest.version)
             if assessed:
                 if key.result_state != "found":
@@ -938,11 +947,10 @@ async def lookup(
             body = await _snapshot_body(s, newest)
             if body is None:
                 return miss("body_missing")
-            from .domain.catalog.results import classify
-
-            result = classify(endpoint_id, newest.status_code, body)
-            if result.state != "found":
-                return miss("result_" + result.state)
+            if result_aware:
+                result = classify(endpoint_id, newest.status_code, body)
+                if result.state != "found":
+                    return miss("result_" + result.state)
         if diagnostics is not None:
             diagnostics["cache_outcome"] = "hit"
         _touch(kh)
@@ -1148,11 +1156,13 @@ async def refresh_once(client) -> int:
     spent = {provider: int(n) for provider, n in spent_rows}
     cap = get_settings().archive_refresh_daily_cap
 
+    from .domain.catalog.results import has_result_rules
+
     refreshed = 0
     for key in candidates:
         if refreshed >= _REFRESH_PER_PASS:
             break
-        if key.result_state != "found":
+        if has_result_rules(key.endpoint_id) and key.result_state != "found":
             continue
         entry = cat.by_id.get(key.endpoint_id)
         if not storable(entry):

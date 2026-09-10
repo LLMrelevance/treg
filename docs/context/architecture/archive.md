@@ -72,15 +72,23 @@ dry run by default, `--apply` to write, `--render` for the prod allowlist dance.
 ## Result admission
 
 `domain.catalog.results.classify` inspects the already-buffered provider bytes without rewriting
-any response. It recognizes three endpoints: `hunter.companies.emails`,
+any response. `has_result_rules` enables result-aware behavior only for endpoints with a
+verified adapter and a nonempty hit/miss expression. Those endpoints reuse `Adapter.is_miss`.
+Three endpoints additionally validate result fields: `hunter.companies.emails`,
 `leadmagic.x.employee-finder`, and `seranking.google.keywords.volume`. Results are `found`,
 `empty`, `error`, or `unknown`, with bounded reason codes. Hunter needs actual email values;
 LeadMagic needs person identity fields, not an email address; SE Ranking needs boolean
 `is_data_found` and a valid nonnegative volume for found rows. Zero volume is useful data. A
 mixed SE Ranking batch is useful if at least one row has data and every row has a valid shape.
 Explicit empty arrays/no-data flags are empty. HTTP errors and explicit provider error envelopes
-are errors; missing rules, invalid JSON and malformed shapes are unknown. Unsupported endpoints
-continue to archive under existing policies, but cannot serve or teach the cache timer.
+are errors; invalid JSON, predicate failures and unsupported shapes are unknown. Generic adapter
+rules retain their existing semantics, including their limitations on missing fields; verification
+against a fixture does not imply full response-schema validation.
+
+Endpoints without enabled hit/miss rules retain their original latest-snapshot serving, TTL
+learning, and refresh behavior. Their unknown business-result metric does not reject caching.
+The mode, serving allowlist, cohort and retention gates remain authoritative for every endpoint.
+This policy does not enable cache serving for additional endpoints.
 
 `ArchiveKey.result_state` and `result_snapshot_id` track the last decisive found/empty observation,
 separately from the latest historical snapshot. `result_observed_version` identifies the newest
@@ -91,7 +99,8 @@ rechecks the candidate's body against current rules and never searches behind an
 The pointer is owned by the archive writer and key ownership is checked on reads; snapshots are
 never deleted, so no cyclic foreign key is introduced.
 
-Only found-to-found observations can count stable. Strict mode compares exact raw-byte hashes.
+For endpoints with enabled hit/miss rules, only found-to-found observations can count stable.
+Strict mode compares exact raw-byte hashes.
 Found-to-empty counts one change and invalidates serving; repeated empty results neither grow
 nor shrink TTL. Empty-to-found counts a change and restores eligibility. Errors and unknowns add
 history under the existing capture policy but do not replace decisive evidence or update learning.
@@ -124,8 +133,9 @@ touched; stripping exists only in comparison.
 
 `archive.refresh_worker` runs in-process from lifespan (adsconv's discipline), gated by
 `worker_enabled()` = serve mode AND `archive_refresh_daily_cap > 0`; interval
-`archive_refresh_interval_s` (300 s). Only keys with a confirmed `found` decision can earn refreshing; legacy/empty/unknown keys wait
-for caller observations. A key EARNS refreshing: window ≥ 80% consumed AND
+`archive_refresh_interval_s` (300 s). For endpoints with enabled hit/miss rules, only keys with a confirmed `found` decision can earn
+refreshing; unclassified/empty/unknown keys wait for caller observations. Other endpoints keep
+the original refresh eligibility. A key EARNS refreshing: window ≥ 80% consumed AND
 `last_requested_at > fetched_at` (a caller asked since the last fetch — a refresh itself never
 counts as demand). Brakes: per-provider daily call cap (counted from `origin="refresh"`
 snapshots — no bookkeeping table to drift) and 10 per pass. The call replays the stored
@@ -263,9 +273,10 @@ Outcomes distinguish hit, key_missing, stale, snapshot_unavailable, body_missing
 policy_excluded, caller_bypass, endpoint_disabled, rollout_disabled, missing_cohort, control,
 lookup_error, result_empty, result_error, result_unknown and not_attempted (or mode_disabled for
 direct disabled lookups). Buffered call telemetry also includes `result_state`, `result_reason`,
-and `cache_admission` (`eligible`, `empty`, `error`, `unknown`). Admission describes the result
-gate, not persistence success or permission to serve. Business `hit` is true/false/null for the
-three supported endpoints; other endpoints retain their existing adapter-based business metric.
+`cache_result_policy` (`hit_miss` or `legacy`), and `cache_admission` (`eligible`, `empty`,
+`error`, `unknown`, or `not_applicable` for legacy). Admission describes the result gate, not
+persistence success or permission to serve. Business `hit` is true/false/null using the same
+classifier; endpoints without enabled rules remain null.
 `cached` and `cache_outcome=hit` describe cache reuse, a different fact. A rejected stored body
 appears in `cache_outcome`; the final live answer appears in `result_state`.
 No request key, body, ignored field paths or headers are added to analytics. The existing
