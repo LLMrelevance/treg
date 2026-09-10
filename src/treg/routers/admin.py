@@ -17,6 +17,7 @@ from sqlmodel import select
 
 from .. import reconcile
 from ..config import get_settings
+from ..infra import kv
 from ..infra.db import background_session_maker, get_admin_session
 from ..domain import money
 from ..models import ArchiveEndpointStat, ArchiveKey, ArchiveSnapshot, Bundle, CallRecord, LedgerEntry, Membership, Org, Referral, Secret, Tool, User
@@ -296,6 +297,14 @@ async def admin_health(_: str = Depends(require_superadmin), db: AsyncSession = 
         out.append({"secret_id": s.id, "name": s.name, "org": org.slug if org else None,
                     "kind": s.kind, "status": s.health_status, "detail": s.health_detail})
     return out
+
+
+@app.get("/admin/kv", include_in_schema=False)
+async def admin_kv(_: str = Depends(require_superadmin)) -> dict:
+    """Is the shared key-value store reachable? `configured` false means the in-process fallback
+    (no `TREG_KV_URL`); `reachable` false with it configured means every budgeted invitation is
+    currently withheld (infra/kv.py fails closed)."""
+    return {"configured": kv.configured(), "reachable": await kv.store().ping()}
 
 
 # Rebind app so the second block keeps its decorator text and remains a separate attach point.

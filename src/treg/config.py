@@ -48,6 +48,11 @@ class Settings(BaseSettings):
 
     review_sample_rate: float = Field(default=0, ge=0, le=1)
     feedback_hint_rate: float = Field(default=0, ge=0, le=1)
+    # Review invitations a team can receive per hour, whatever its call volume. Sampling decides
+    # WHICH calls qualify; this decides how many of them a team is actually asked about.
+    review_budget_per_hour: int = Field(default=5, ge=1)
+    # The shared key-value store (Redis protocol). Empty = an in-process fallback; see infra/kv.py.
+    kv_url: str = ""
 
     # SQLite locally, Postgres on Render — same code path, just swap the URL.
     database_url: str = "sqlite+aiosqlite:///./treg.db"
