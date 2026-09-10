@@ -42,7 +42,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, TypedDict
 from urllib.parse import parse_qsl, urlsplit
-from uuid import uuid4
 
 import httpx
 from mcp.server import MCPServer
@@ -52,7 +51,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
 from mcp.types import METHOD_NOT_FOUND, ToolAnnotations
 
-from . import analytics, audit, hints
+from . import audit, hints
 from .domain.catalog import store as catalog_store
 from .config import PUBLIC_HOST_ALIASES, get_settings
 from .feedback_contract import FeedbackCategory, FEEDBACK_DESCRIPTION, ReviewUsefulness, REVIEW_DESCRIPTION
@@ -1045,17 +1044,13 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
                            f"at its real price because treg's {provider} account is out; cost_usd is "
                            f"what the relay billed, not the catalog's direct price")
     if 200 <= r.status_code < 300 and not out.get("hint") and not out.get("replayed"):
-        kind = None
-        if r.headers.get("X-Treg-Review") == "requested" and out.get("call_id"):
+        # /call/ decides whether to invite (application/call/invite.py) and records that it did;
+        # this surface only renders the header into the single hint slot.
+        kind = r.headers.get("X-Treg-Hint")
+        if kind == "review" and out.get("call_id"):
             out["hint"] = hints.review_hint(out["call_id"])
-            kind = "review"
-        elif hints.sampled("feedback", out.get("call_id") or uuid4().hex):
+        elif kind == "feedback":
             out["hint"] = hints.HINT
-            kind = "feedback"
-        if kind:
-            analytics.capture(analytics.SERVER_DISTINCT_ID, "mcp_hint_attached", {
-                "call_id": out.get("call_id"), "surface": surface.client_name, "kind": kind,
-            })
     if r.status_code == 402:
         # States the fact and stops. No link, and `topup_url` is stripped from the relayed body, so
         # nothing on this path points a user at a payment page.

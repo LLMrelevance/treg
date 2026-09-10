@@ -28,6 +28,7 @@ from .bootstrap_http import (
     _SecurityHeadersMiddleware,
 )
 from .config import get_settings
+from .infra import kv
 from .infra.db import background_session_maker, verify_db
 from .infra.catalog_observations import (
     CachedEndpointObservationReader,
@@ -272,6 +273,7 @@ _CONTROL_ROUTE_KEYS: frozenset[RouteKey] = frozenset({
     ('/admin/calls', ('GET',), 'admin_calls'),
     ('/admin/errors', ('GET',), 'admin_errors'),
     ('/admin/health', ('GET',), 'admin_health'),
+    ('/admin/kv', ('GET',), 'admin_kv'),
     ('/admin/users/{user_id}/superadmin', ('POST',), 'admin_set_superadmin'),
     ('/admin/users/{user_id}/suspend', ('POST',), 'admin_suspend_user'),
     ('/admin/users/{user_id}', ('DELETE',), 'admin_delete_user'),
@@ -486,6 +488,10 @@ def _lifespan(role: AppRole):
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await verify_db()
+        if kv.configured() and not await kv.store().ping():
+            # Not fatal: the store's tenants fail closed (infra/kv.py). Loud, because until it
+            # answers no team receives a review invitation. /admin/kv shows the live state.
+            logging.getLogger("treg").warning("kv configured but unreachable at startup")
 
         limits = httpx.Limits(max_keepalive_connections=100, max_connections=200)
         app.state.http = httpx.AsyncClient(
@@ -551,6 +557,7 @@ def _lifespan(role: AppRole):
                 await archive.drain()
                 await analytics.drain()
                 await app.state.http.aclose()
+                await kv.close()
             finally:
                 analytics.remove_fault_handler(fault_handler)
 

@@ -341,6 +341,10 @@ def _reset_call_path_caches():
             limiter.reset()
         except ImportError:
             pass
+        # The shared store's in-process fallback (the review-invitation budget): org ids restart
+        # with every reset_db(), so a counter left over would ration the NEXT test's team.
+        from treg.infra import kv
+        kv._store = None
     _clear()
     yield
     _clear()
