@@ -874,7 +874,7 @@ body:has(dialog[open]) { overflow:hidden; }
 }
 
 /* Keep community links in the top row without shrinking their touch targets. */
-@media(max-width:440px) { .masthead .arena-community a>span { display:none; } }
+@media(max-width:600px) { .masthead .arena-community a>span { display:none; } }
 @media(max-width:360px) {
   .masthead .brand-name { display:none; }
   .masthead .sign-in-button { padding-inline:14px; }
