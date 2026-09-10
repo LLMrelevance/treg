@@ -4,7 +4,7 @@ status: building
 sources:
   - src/treg/archive.py
   - src/treg/domain/catalog/results.py
-  - src/treg/alembic/versions/0027_archive_result_admission.py
+  - src/treg/alembic/versions/0031_archive_result_admission.py
   - tests/test_cache_result_admission.py
   - src/treg/alembic/versions/0002_archive_tables.py
   - src/treg/alembic/versions/0003_callrecord_cached.py
@@ -92,7 +92,7 @@ This policy does not enable cache serving for additional endpoints.
 
 `ArchiveKey.result_state` and `result_snapshot_id` track the last decisive found/empty observation,
 separately from the latest historical snapshot. `result_observed_version` identifies the newest
-version assessed by this code. Migration `0027` adds nullable columns without rewriting history
+version assessed by this code. Migration `0031` adds nullable columns without rewriting history
 or resetting TTL/counters. Legacy keys are classified lazily from their newest body; a version
 appended by an older binary during rollout similarly invalidates the saved decision. Lookup
 rechecks the candidate's body against current rules and never searches behind an explicit empty.
