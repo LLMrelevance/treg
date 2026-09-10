@@ -255,26 +255,6 @@ def _burst_retry_after(provider: str, response: UpstreamResponse, body: bytes) -
     return float(signal.retry_after_s)
 
 
-def _hit_verdict(mk: MarketplaceCall, status: int, body: bytes) -> bool | None:
-    """Found or not, read off a 2xx body by the endpoint's fixture-verified routing adapter; None
-    when nothing can tell. The verdict is all that is kept — never the body."""
-    if not 200 <= status < 300:
-        return None
-    adapter = catalog_store.load().adapters.get(mk.endpoint_id)
-    if adapter is None or not adapter.verified:
-        return None
-    try:
-        doc = json.loads(body)
-    except ValueError:
-        return None
-    if not isinstance(doc, dict):
-        return None
-    try:
-        return not adapter.is_miss(doc)
-    except Exception:  # noqa: BLE001 — an undecidable predicate is a NULL, not a wrong verdict
-        return None
-
-
 def _refusal_kind(status_code: int) -> str | None:
     if status_code >= 500:
         return None
@@ -1103,9 +1083,18 @@ async def _execute_call(request: _ApplicationRequest, upstream_client: httpx.Asy
                 err_response = _error_response_evidence(
                     response.raw_headers, body, _renderings)
         may_overflow = response.status >= 400 and mk.tier == "platform"
+        from ...domain.catalog.results import classify, has_result_rules
+
+        result = classify(mk.endpoint_id, response.status, body)
+        result_aware = has_result_rules(mk.endpoint_id)
+        cache_diagnostics.update(
+            result_state=result.state, result_reason=result.reason,
+            cache_result_policy="hit_miss" if result_aware else "legacy",
+            cache_admission=("eligible" if result.state == "found" else result.state)
+            if result_aware else "not_applicable")
         pending = _audit(response.status, observed_micro=observed,
                          charged_micro=None if deferred else charged,
-                         duration_ms=duration_ms, response_bytes=len(body), hit=_hit_verdict(mk, response.status, body),
+                         duration_ms=duration_ms, response_bytes=len(body), hit=result.hit,
                          capacity_signal=capacity_signal, error_request=err_request, error_response=err_response,
                          defer_analytics=may_overflow)
         served_via = ""

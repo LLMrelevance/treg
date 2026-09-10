@@ -30,6 +30,7 @@ sources:
   - src/treg/maintenance.py
   - src/treg/web/sitetrack.js
   - src/treg/models.py
+  - src/treg/alembic/versions/0031_archive_result_admission.py
   - src/treg/timeutil.py
   - src/treg/infra/db.py
   - src/treg/domain/referrals.py
@@ -68,6 +69,11 @@ Migration `0019` adds `consecutive_failures` with a retained server default of z
 writers during rollout. Valid polls reset it; failures grow the retry delay to 15 minutes.
 `attempts` also acts as a claim version: old workers cannot overwrite a newer claim. Caller polling
 can finalize the original task independently; the terminal-state guard prevents duplicate charges.
+
+Migration `0031` adds nullable `ArchiveKey.result_state`, `result_snapshot_id`, and
+`result_observed_version`. Archive owns them: the last decisive result is independent of the
+latest historical response. No backfill or TTL reset occurs; legacy observations are classified
+lazily. See [archive result admission](archive.md#result-admission).
 
 ## Registry tables
 

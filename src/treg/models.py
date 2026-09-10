@@ -1372,11 +1372,9 @@ class ArchiveKey(SQLModel, table=True):
 
     Timer state is AIMD (grow slowly on stability, shrink fast on change): `ttl_s` is the current
     per-key timer, adjusted by the learner on every refetch outcome. `change_seen` / `stable_seen`
-    count outcomes so the learner and the admin report can show their evidence. `volatile_paths`
-    holds the learned noisy JSON paths (request ids, server timestamps) excluded from change
-    detection — stored per key, applied before comparing, never applied to stored bytes.
-
-    PR 1 creates the shape only; nothing writes it until the recorder lands (PR 2).
+    count eligible observations. Only found-to-found comparisons can count stable; explicit
+    appearance/disappearance counts changed. `volatile_paths` belongs to the opt-in legacy noise
+    comparison; strict mode compares raw hashes. Neither mode changes stored bytes.
     """
 
     __table_args__ = (UniqueConstraint("key_hash", name="uq_archive_key_hash"),)
@@ -1390,8 +1388,8 @@ class ArchiveKey(SQLModel, table=True):
     ttl_s: int = Field(default=0)                  # current per-key timer; 0 = no serving opinion yet
     fetched_at: datetime = Field(default_factory=_now, index=True)  # newest snapshot's fetch time
     # --- change statistics (the learner's evidence) ---
-    change_seen: int = Field(default=0)            # refetches whose stripped hash differed
-    stable_seen: int = Field(default=0)            # refetches whose stripped hash matched
+    change_seen: int = Field(default=0)            # eligible observations classified changed
+    stable_seen: int = Field(default=0)            # positive observations classified stable
     last_changed_at: datetime | None = Field(default=None)
     volatile_paths: list = Field(default_factory=list, sa_column=Column(JSON))
     # --- demand (what earns a refresh) ---
@@ -1408,12 +1406,20 @@ class ArchiveKey(SQLModel, table=True):
     # must replay them or its recording lands under a different key than the caller's question.
     req_headers: dict = Field(default_factory=dict, sa_column=Column(JSON))
 
+    # Null state marks legacy keys, classified lazily. The pointer belongs to this key and
+    # names the last found/empty observation; errors cannot replace decisive evidence.
+    # No cyclic FK: archive owns both writes, validates key_id, and never deletes snapshots.
+    result_state: str | None = Field(default=None)
+    result_snapshot_id: int | None = Field(default=None)
+    # Detect writes from an older binary that did not maintain the result decision.
+    result_observed_version: int | None = Field(default=None)
+
 
 class ArchiveSnapshot(SQLModel, table=True):
-    """One stored answer — a version in a key's history. The newest fresh one is the cache.
+    """One historical answer. Cache eligibility is tracked separately on ArchiveKey.
 
-    Bytes are kept VERBATIM: change detection strips noisy fields on a comparison copy, never on
-    what is stored, so a served hit replays exactly what the vendor sent (relay faithfulness,
+    Bytes are kept VERBATIM: strict comparison uses raw hashes; legacy noise detection only
+    operates on a comparison copy. A hit replays exactly what the vendor sent (relay faithfulness,
     extended through time). `content_hash` (sha256 of the raw body) deduplicates: consecutive
     identical answers add a version row but reference the same bytes via `body_of` instead of
     storing them again — the history of "asked on these dates, same answer" is itself data.
