@@ -657,7 +657,7 @@ async def test_feedback_hint_only_wraps_successful_sampled_calls(clients, monkey
         assert replay['call_id'] == first['call_id']
         assert failed['status'] == 503
         assert failed.get('hint') != hints.HINT
-        exposures = [a for a, _ in events if a[1] == 'mcp_hint_attached']
+        exposures = [a for a, _ in events if a[1] == 'hint_attached']
         assert len(exposures) == int(sampled)
         if sampled:
             assert exposures[0][2]['call_id'] == first['call_id']
