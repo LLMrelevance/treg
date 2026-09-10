@@ -512,7 +512,7 @@
         try{
           if(!window.Intercom){
             const intercom=function(){intercom.q.push(arguments);};intercom.q=[];window.Intercom=intercom;
-            const script=document.createElement('script');script.async=true;script.src='https://widget.intercom.io/widget/'+encodeURIComponent(app);
+            const appId=encodeURIComponent(app),script=document.createElement('script');script.async=true;script.src='https://widget.intercom.io/widget/'+appId;
             document.head.appendChild(script);
           }
           window.intercomSettings=payload;
