@@ -21,7 +21,7 @@ sources:
   - src/treg/alembic/versions/0022_org_spent_today_counter.py
   - src/treg/alembic/versions/0023_callrecord_org_user_created_at_index.py
   - src/treg/alembic/versions/0024_membership_calls_today_counter.py
-  - src/treg/alembic/versions/0030_enrich_arena.py
+  - src/treg/alembic/versions/0027_enrich_arena.py
   - src/treg/alembic/versions/0028_arena_insights.py
   - src/treg/alembic/versions/0029_arena_verification_snapshot.py
 
@@ -49,7 +49,7 @@ related:
 
 # Data model
 
-Revision `0030` adds `ArenaRun` and `ArenaEvaluation` for [Enrich Arena](../interface/enrich-arena.md).
+Revision `0027` adds `ArenaRun` and `ArenaEvaluation` for [Enrich Arena](../interface/enrich-arena.md).
 Runs freeze encrypted inputs, adapter requests, outcomes and receipts; evaluations record an immutable
 preference with the exposed candidate set and feedback context (attributed since version 2). Both are creator/team scoped and expire after
 30 days. The run is claimed with a conditional update; a unique run-id evaluation constraint and
