@@ -234,9 +234,13 @@ is the median of successful calls (including repeats), displayed only with at le
 a known timing aggregate. Current prices remain estimates for the selected entries, and own-key
 prices retain their no-treg-charge label. Historical stats do not alter dispatch or result awards.
 
-`GET /arena/insights` returns the persisted database aggregate via one primary-key read, with
+`GET /arena/insights` first reads the current version's persisted database aggregate by primary key, with
 `updated_at`, source window, actual first/last observation dates, collection status and only public aggregate fields. The disclosure shows recorded dates when observations exist, so a sparse or historical sample does not appear to span the whole rolling window. No production
-metrics ship in assets or fixtures. A fresh database returns `warming` with no rows. The UI polls
+metrics ship in assets or fixtures. If that version has not published yet, one bounded snapshot query
+serves the latest completed, compatible publication from a previous version, preserving its source
+window and update timestamp. Ordering uses the payload's publication timestamp because the worker
+clears the cursor's `updated_at` during refresh. The current version takes precedence as soon as it
+publishes, including a completed snapshot with no rows. A fresh database returns `warming` with no rows. The UI polls
 every two minutes while visible, preserves the last successful values after a refresh error, and
 shows the last update time. Prices still come from the catalog and team quote.
 
@@ -250,7 +254,8 @@ the global content index for identical responses shared by many requests. Missin
 remains unresolved; newer different answers never substitute for historical evidence. The values
 CTE requires SQLAlchemy 2.0.42 or newer, reflected in the server dependency floor.
 `ArenaInsightState` serializes the cursor across workers and stores the aggregate;
-initial history is withheld until the first pass completes. Steady state refreshes about every two
+partial initial history is withheld until the first pass completes; a previous completed publication
+remains visible during a version-triggered rebuild. Steady state refreshes about every two
 minutes (plus collection time), allowing one minute for audit/archive writes and revisiting ten minutes
 of recent evidence. The first backfill may take longer. Evidence that arrives later than this revisit
 window remains unresolved until a version-triggered rebuild; lossy audit cannot establish complete traffic.
