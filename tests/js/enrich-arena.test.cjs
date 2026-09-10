@@ -971,17 +971,17 @@ test('Arena counts arrival before data loading, including a failed page-data req
  assert.equal(events.length,1);assert.equal(app.error,'Data unavailable');
 });
 
-test('Phone verified rate column is hidden without displayed rates, including format-only evidence',()=>{
-  const {app}=setup();app.taskId='people.phone.find';
-  assert.equal(app.showVerifiedRateColumn,false);
-  app.tasks.push({id:'people.phone.find',variants:[['linkedin_url']],provider_previews:[[{provider:'tomba',endpoint_id:'tomba.phone'}]]});
-  app.verifiedRateValue=()=>null;
-  assert.equal(app.showVerifiedRateColumn,false);
-  app.verifiedRateValue=()=>0;
-  assert.equal(app.showVerifiedRateColumn,true,'Zero is a real rate');
-  app.taskId='people.email.find';
-  assert.equal(app.showVerifiedRateColumn,true,'Email validity column is unchanged');
- });
+test('Phone format column follows published data for displayed providers',()=>{
+ const {app}=setup();app.taskId='people.phone.find';
+ assert.equal(app.showVerifiedRateColumn,false);
+ app.tasks.push({id:'people.phone.find',variants:[['linkedin_url']],provider_previews:[[{provider:'quickenrich',endpoint_id:'quickenrich.phone'}]]});
+ const audit={task:app.taskId,input:app.insightInput,endpoint:'quickenrich.phone',method:'phone_format',checked_n:19,format_validity_rate:0};
+ app.insights={verification:{rows:[audit]}};
+ assert.equal(app.showVerifiedRateColumn,false,'Insufficient checks stay hidden');
+ audit.checked_n=20;assert.equal(app.showVerifiedRateColumn,true,'Zero is a real format validity rate');
+ app.customServices=true;app.services=[];assert.equal(app.showVerifiedRateColumn,false,'Hidden vendors do not keep the column visible');
+ app.taskId='people.email.find';assert.equal(app.showVerifiedRateColumn,true,'Email validity visibility is unchanged');
+});
 
 test('Run costs include every charge but count found entries once across vendors',()=>{
  const {app}=setup();app.run={charged_micro:90000,results:[
