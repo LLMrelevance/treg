@@ -184,7 +184,10 @@ def _app_version() -> str:
     if _app_version_cache is None or _app_version_cache[0] != mtime:
         digest = hashlib.sha256(index.read_bytes()).hexdigest()[:12]
         _app_version_cache = (mtime, digest)
-    return _app_version_cache[1]
+    settings = get_settings()
+    rollout = (settings.dashboard_rollout_enabled, settings.dashboard_rollout_percent,
+               sorted(settings.dashboard_rollout_user_ids))
+    return hashlib.sha256(f"{_app_version_cache[1]}:{rollout}".encode()).hexdigest()[:12]
 
 
 @app.get("/meta")
@@ -194,7 +197,7 @@ async def meta() -> dict:
     — plus the bundle version, so an open tab can detect a new deploy and offer a refresh.
 
     `treg_version` and `app_version` answer DIFFERENT questions and both are worth having.
-    `app_version` is a hash of index.html: it changes whenever the dashboard bundle does, which is
+    `app_version` hashes the dashboard entry and rollout policy: it changes with either, which is
     what an open tab compares to offer a refresh. `treg_version` is the released package version,
     which is what a release check needs — after publishing 0.9.0 there was no way to confirm from the
     live path which version was actually serving, only the commit id.

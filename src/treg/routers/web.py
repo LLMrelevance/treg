@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from functools import lru_cache
+import hashlib
 import html as _html
 import html as html_mod
 import json
@@ -32,8 +33,20 @@ from .auth_helpers import OAUTH_RETURN_COOKIE, _is_https, _take_oauth_return
 from .signup_cookies import _remember_referral
 
 
-def _dashboard_index() -> Path:
+def _new_dashboard(user: User | None) -> bool:
     settings = get_settings()
+    if not settings.dashboard_rollout_enabled or user is None:
+        return False
+    if user.id in settings.dashboard_rollout_user_ids:
+        return True
+    bucket = int.from_bytes(hashlib.sha256(f"dashboard-v2:{user.id}".encode()).digest()[:8], "big") % 100
+    return bucket < settings.dashboard_rollout_percent
+
+
+def _dashboard_index(user: User | None = None) -> Path:
+    settings = get_settings()
+    if not _new_dashboard(user):
+        return _WEB_DIR / "dashboard-legacy" / "index.html"
     if settings.frontend_dev:
         host = urlsplit(settings.public_url).hostname
         if "sqlite" not in settings.database_url or host not in {"localhost", "127.0.0.1", "::1"}:
@@ -44,7 +57,7 @@ def _dashboard_index() -> Path:
 
 def _dashboard_document(index: Path) -> str:
     document = index.read_text(encoding="utf-8")
-    if get_settings().frontend_dev:
+    if get_settings().frontend_dev and index.parent.name == "frontend":
         host = urlsplit(get_settings().public_url).hostname
         origin = "http://[::1]:5173" if host == "::1" else f"http://{host}:5173"
         document = document.replace(
@@ -258,7 +271,7 @@ def _page(title: str, description: str, path: str, body: str, ld: list[dict],
 
 
 def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
-                      prerender: str) -> HTMLResponse:
+                      prerender: str, user: User | None = None) -> HTMLResponse:
     """Serve the dashboard SPA at a PUBLIC catalog URL, with the head a crawler needs.
 
     The public catalog is not a second implementation of the marketplace — it IS the marketplace.
@@ -279,7 +292,7 @@ def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
        implementation this design avoids. It carries the TEXT (names, summaries, providers, prices),
        which is what a crawler that does not run scripts is here for.
     """
-    index = _dashboard_index()
+    index = _dashboard_index(user)
     if not index.exists():
         return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     base = get_settings().public_url.rstrip("/")
@@ -328,7 +341,7 @@ def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
     marker = '<div id="app"'
     if marker in html:
         html = html.replace(marker, f'<div id="prerender">{prerender}</div>\n{marker}', 1)
-    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=600"})
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store", "Vary": "Cookie"})
 
 
 # The fallback's own skin. Scoped to #prerender and written against the dashboard's OWN tokens
@@ -352,7 +365,7 @@ _PRERENDER_CSS = """<style>
 
 
 @app.get("/catalog", include_in_schema=False)
-async def catalog_index():
+async def catalog_index(treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session)):
     """The catalog index — the marketplace's Catalog view, on a public, indexable URL."""
     base = get_settings().public_url.rstrip("/")
     rows = _platform_rows()
@@ -421,11 +434,11 @@ async def catalog_index():
         f"Tool catalog — {total_eps:,} API endpoints your agent can call | treg",
         f"Browse {total_eps:,} endpoints across {len(rows)} platforms and {len(providers)} providers "
         "— SEO, social, enrichment, ads and scraping data. One key, priced per call, no provider signup.",
-        "/catalog", ld, prerender)
+        "/catalog", ld, prerender, await _user_from_session(treg_session, db))
 
 
 @app.get("/catalog/{slug}", include_in_schema=False)
-async def catalog_page(slug: str):
+async def catalog_page(slug: str, treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session)):
     """One platform shelf — the marketplace's platform view, on a public, indexable URL."""
     if slug in _CATALOG_RESERVED:
         raise HTTPException(status_code=404, detail=f"unknown platform {slug!r}")
@@ -490,7 +503,7 @@ async def catalog_page(slug: str):
             {"@type": "ListItem", "position": 3, "name": label, "item": f"{base}/catalog/{slug}"}]},
     ]
     return _spa_catalog_page(f"{label} API — {len(eps)} endpoints, priced per call | treg",
-                             desc[:300], f"/catalog/{slug}", ld, prerender)
+                             desc[:300], f"/catalog/{slug}", ld, prerender, await _user_from_session(treg_session, db))
 
 
 # --------------------------------------------------------------------------- /agents/<agent>
@@ -2678,6 +2691,15 @@ async def landing(request: Request, treg_session: str = Cookie(default=""),
     return await dashboard(request, treg_session, db)
 
 
+@app.get("/app/legacy/assets/{path:path}", include_in_schema=False)
+async def legacy_dashboard_asset(path: str):
+    directory = (_WEB_DIR / "dashboard-legacy" / "assets").resolve()
+    asset = (directory / path).resolve()
+    if not asset.is_relative_to(directory) or not asset.is_file():
+        raise HTTPException(404)
+    return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
 @app.get("/app/ui/assets/{name}", include_in_schema=False)
 async def dashboard_asset(name: str):
     """Only serve build artifacts from the dashboard's flat asset directory."""
@@ -2705,9 +2727,6 @@ async def dashboard(
     an account. Only reachable when `single_user_ok` holds (local sqlite + loopback URL), so this
     can never hand a session to a stranger on a real deploy.
     """
-    index = _dashboard_index()
-    if not index.exists():
-        return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     signed_in = await _user_from_session(treg_session, db)
     # A parked authorization resumes here, but ONLY once the user is actually signed in — otherwise
     # this would bounce them back to /oauth/authorize, which would bounce them here again.
@@ -2715,22 +2734,24 @@ async def dashboard(
         resume = RedirectResponse(parked, status_code=302)
         resume.delete_cookie(OAUTH_RETURN_COOKIE)
         return resume
-    resp = HTMLResponse(_dashboard_document(index), headers={"Cache-Control": "no-cache"})
-    if not signed_in:
-        owner = await _local_owner(db)
-        if owner is not None:
-            resp.set_cookie(sess.COOKIE, sess.make_session(owner.id, token_version=owner.token_version),
-                            httponly=True, samesite="lax",
-                            secure=_is_https(request),
-                            max_age=sess.TTL_SECONDS)
+    owner = await _local_owner(db) if not signed_in else None
+    index = _dashboard_index(signed_in or owner)
+    if not index.exists():
+        raise HTTPException(503, "Dashboard not bundled")
+    resp = HTMLResponse(_dashboard_document(index), headers={"Cache-Control": "private, no-store", "Vary": "Cookie"})
+    if owner is not None:
+        resp.set_cookie(sess.COOKIE, sess.make_session(owner.id, token_version=owner.token_version),
+                        httponly=True, samesite="lax",
+                        secure=_is_https(request),
+                        max_age=sess.TTL_SECONDS)
     return resp
 
 
-def _spa_with_og(kind: str, name: str):
+def _spa_with_og(kind: str, name: str, user: User | None = None):
     """Serve the SPA at a shareable detail path (/app/skills/x, /app/tools/x) with per-resource
     og/twitter meta so link unfurls show what was shared. The meta echoes only the URL's own
-    name segment — no DB read, so an unauthenticated crawler learns nothing it didn't send."""
-    index = _dashboard_index()
+    name segment. Session lookup selects the frontend but never exposes resource contents."""
+    index = _dashboard_index(user)
     if not index.exists():
         return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     label = "skill" if kind == "skills" else "tool"
@@ -2750,7 +2771,7 @@ def _spa_with_og(kind: str, name: str):
                          count=1, flags=re.IGNORECASE | re.DOTALL)
     if not hits:  # no title at all: still emit the meta rather than serve a bare page
         html = html.replace("<head>", "<head>\n" + meta, 1)
-    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store", "Vary": "Cookie"})
 
 
 @app.get("/app/marketplace/{service}", include_in_schema=False)
@@ -2774,13 +2795,13 @@ async def dashboard_marketplace(
 
 
 @app.get("/app/skills/{name}", include_in_schema=False)
-async def dashboard_skill_page(name: str):
-    return _spa_with_og("skills", name)
+async def dashboard_skill_page(name: str, treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session)):
+    return _spa_with_og("skills", name, await _user_from_session(treg_session, db))
 
 
 @app.get("/app/tools/{name}", include_in_schema=False)
-async def dashboard_tool_page(name: str):
-    return _spa_with_og("tools", name)
+async def dashboard_tool_page(name: str, treg_session: str = Cookie(default=""), db: AsyncSession = Depends(get_session)):
+    return _spa_with_og("tools", name, await _user_from_session(treg_session, db))
 
 
 @app.get("/llms.txt", include_in_schema=False)

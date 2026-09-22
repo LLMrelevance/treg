@@ -14,7 +14,8 @@ This is an incremental extraction. The old use cases still share per-application
 `state/context.ts`; their JavaScript and the shared onboarding widgets are not fully typed.
 New isolated components should use typed props and events. Existing hash navigation and deep links
 remain in the navigation/catalog/details modules; this change does not replace their URL contract.
-There is no duplicated legacy Dashboard HTML implementation.
+The frozen rollback artifact lives in `src/treg/web/dashboard-legacy/`; it is not a second
+development source. Do not edit it. The server selects the frontend by authenticated user ID.
 
 ## Develop
 
@@ -46,3 +47,24 @@ Builds generate `src/treg/web/dashboard/`, which is ignored by Git and included 
 Do not edit generated files. Distributable package builds fail if these assets are absent; editable
 Python installs and background workers do not require Node. The Web build script is
 `scripts/build-web.sh`, which compiles the app and retains the locked Python installation.
+
+## Gradual rollout
+
+Production defaults to the frozen legacy frontend. Configure the Web service:
+
+- `TREG_DASHBOARD_ROLLOUT_ENABLED=true` enables rollout; `false` forces legacy for everyone.
+- `TREG_DASHBOARD_ROLLOUT_USER_IDS='[123,456]'` is the JSON array of allowed numeric user IDs.
+- `TREG_DASHBOARD_ROLLOUT_PERCENT=0` starts with only the allowlist. Increase toward 100 to
+  include stable account buckets; email changes, team switches and browser changes do not reshuffle them.
+
+Anonymous visitors (including the public catalog and token-only browsers) stay on legacy.
+After browser sign-in, the reload selects the account's frontend. All dashboard, catalog and
+shared-link entries use the same selection and private, no-store HTML. Frontend selection grants
+no API permissions. Legacy JavaScript is frozen under its own revision-qualified asset URLs.
+PostHog is not involved. Environment changes require a process restart/rolling deployment;
+rollback needs no frontend rebuild. Existing tabs switch on reload, and configuration changes
+also change the app-version stamp so open tabs can offer a refresh.
+
+The local dev script enables 100% for signed-in accounts by default. Override its rollout variables
+to rehearse production settings. Once the rollout is complete, remove legacy and the temporary
+selection mechanism in a separate change; even 100% currently leaves anonymous visitors on legacy.

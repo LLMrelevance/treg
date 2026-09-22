@@ -158,7 +158,7 @@ async def test_catalog_urls_serve_the_dashboard_spa(clients: AsyncClient):
     for path in ("/catalog", "/catalog/google"):
         body = (await clients.get(path)).text
         assert '<div id="app"' in body, path
-        assert 'type="module"' in body and "/app/ui/assets/" in body, path
+        assert "/app/legacy/assets/" in body, path
 
 
 async def test_the_catalog_index_lists_shelves_without_javascript(clients: AsyncClient):

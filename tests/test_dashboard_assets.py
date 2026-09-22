@@ -2,20 +2,37 @@
 
 from pathlib import Path
 import re
+import pytest
 
 from httpx import AsyncClient
 
 from treg import api
 
 
-async def test_dashboard_redesign_assets_are_served_from_the_same_origin(clients: AsyncClient):
+@pytest.fixture
+async def new_dashboard(clients, monkeypatch):
+    from treg.config import get_settings
+    from treg.infra.db import session_maker
+    from treg.models import User
+    from treg.domain.identity import session
+    from sqlmodel import select
+    monkeypatch.setattr(get_settings(), 'dashboard_rollout_enabled', True)
+    monkeypatch.setattr(get_settings(), 'dashboard_rollout_percent', 100)
+    async with session_maker() as db:
+        user = (await db.execute(select(User).where(User.email == 'tim@superdesign.dev'))).scalar_one()
+        clients.cookies.set(session.COOKIE, session.make_session(user.id, token_version=user.token_version))
+    return clients
+
+
+async def test_dashboard_redesign_assets_are_served_from_the_same_origin(new_dashboard):
+    clients = new_dashboard
     page = await clients.get('/app')
     assert page.status_code == 200
     paths = set(re.findall(r'(?:href|src)="(/media/redesign/[^"\']+)"', page.text))
     assets = set(re.findall(r'(?:href|src)="(/app/ui/assets/[^"\']+)"', page.text))
     assert any(p.endswith('.js') for p in assets)
     assert any(p.endswith('.css') for p in assets)
-    assert page.headers['cache-control'] == 'no-cache'
+    assert page.headers['cache-control'] == 'private, no-store'
     for asset in assets:
         response = await clients.get(asset)
         assert response.status_code == 200
@@ -35,7 +52,8 @@ async def test_dashboard_redesign_assets_are_served_from_the_same_origin(clients
         assert response.headers['content-type'].startswith(expected_type), path
 
 
-async def test_dashboard_dev_entry_preserves_same_origin_requests(clients, monkeypatch):
+async def test_dashboard_dev_entry_preserves_same_origin_requests(new_dashboard, monkeypatch):
+    clients = new_dashboard
     from treg.config import get_settings
     settings = get_settings()
     monkeypatch.setattr(settings, 'frontend_dev', True)
@@ -45,10 +63,11 @@ async def test_dashboard_dev_entry_preserves_same_origin_requests(clients, monke
     assert 'http://localhost:5173/app/ui/@vite/client' in response.text
     assert 'http://localhost:5173/app/ui/src/main.ts' in response.text
     assert '/agent-setup.js' in response.text
-    assert response.headers['cache-control'] == 'no-cache'
+    assert response.headers['cache-control'] == 'private, no-store'
 
 
-async def test_dashboard_dev_entry_refuses_a_public_hostname(clients, monkeypatch):
+async def test_dashboard_dev_entry_refuses_a_public_hostname(new_dashboard, monkeypatch):
+    clients = new_dashboard
     import pytest
     from treg.config import get_settings
     monkeypatch.setattr(get_settings(), 'frontend_dev', True)

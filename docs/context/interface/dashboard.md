@@ -89,6 +89,8 @@ sources:
   - src/treg/web/tour/tour.js
   - src/treg/web/tour/index.html
   - src/treg/api.py
+  - tests/test_dashboard_rollout.py
+  - src/treg/web/dashboard-legacy/README.md
   - src/treg/routers/web.py
   - src/treg/domain/identity/session.py
   - src/treg/routers/api_keys.py
@@ -195,10 +197,19 @@ the obsolete embedded marketing page is removed. The public landing page remains
 History navigation retains existing hashes, catalog URLs and shared links in `state/navigation.js`,
 `state/catalog.js`, `state/details.js` and `state/boot.js`.
 
-`GET /app` serves the compiled document same-origin from the Python package, preserving local
+`_new_dashboard` selects the compiled entry by verified session user ID: the master rollout switch
+must be on, then an ID allowlist or a stable SHA-256 bucket below the configured percentage selects
+new. Defaults are off and zero percent. Anonymous and token-only browser entries retain the frozen
+`dashboard-legacy/index.html`, whose Vue/onboarding/tutorial JavaScript has revision-qualified legacy asset
+URLs. No query parameter, team selection or analytics service controls assignment. All dashboard,
+shared-link and catalog entries use this decision and `private, no-store` plus `Vary: Cookie`.
+Environment changes require restarting Web processes. Existing tabs switch on reload; the version
+stamp also incorporates rollout settings to offer a refresh when assignment policy changes.
+
+`GET /app` serves the selected document same-origin from the Python package, preserving local
 sign-in and parked OAuth authorization. Catalog and shared-link handlers modify that same document's
 metadata as before. `_app_version()` hashes the built entry, whose asset filenames change with
-bundle content. HTML is revalidated; `/app/ui/assets/{name}` serves immutable hashed assets and
+bundle content. HTML is not cached; `/app/ui/assets/{name}` serves immutable hashed assets and
 returns 404 for missing files. Assets remain a control-role surface.
 
 `bash scripts/build-dashboard.sh` installs the npm lockfile and builds into the gitignored

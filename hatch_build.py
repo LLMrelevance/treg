@@ -13,4 +13,7 @@ class CustomBuildHook(BuildHookInterface):
             raise RuntimeError(
                 "Dashboard assets are missing. Run bash scripts/build-dashboard.sh before uv build."
             )
+        legacy = Path(self.root) / "src/treg/web/dashboard-legacy/index.html"
+        if not legacy.is_file():
+            raise RuntimeError("Frozen legacy dashboard is missing; both frontends must ship during rollout.")
         build_data["artifacts"].append("src/treg/web/dashboard/**")
