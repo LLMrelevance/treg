@@ -41,11 +41,14 @@ def test_tavily_surface_keeps_only_safe_synchronous_data_tools():
     shown = {eid: cat.cost_view(ep["cost"], "tavily") for eid, ep in rows.items()}
     assert {eid: (cost["usd"], cost["unit"]) for eid, cost in shown.items()} == {
         "tavily.web.search": (0.016, "call"),
-        "tavily.web.extract": (0.0016, "result"),
-        "tavily.web.map": (0.0008, "page"),
-        "tavily.web.crawl": (0.0024, "result"),
+        "tavily.web.extract": (0.0032, "result"),
+        "tavily.web.map": (0.0016, "page"),
+        "tavily.web.crawl": (0.0048, "result"),
     }
     assert shown["tavily.web.search"]["usd_min"] == 0.008
+    assert shown["tavily.web.extract"]["usd_min"] == 0.0016
+    assert shown["tavily.web.map"]["usd_min"] == 0.0008
+    assert shown["tavily.web.crawl"]["usd_min"] == 0.0024
     assert shown["tavily.web.extract"]["tavily_rates"] == {"basic": 0.2, "advanced": 0.4}
     assert shown["tavily.web.map"]["tavily_rates"] == {"regular": 0.1, "instructions": 0.2}
     assert shown["tavily.web.crawl"]["tavily_rates"]["advanced_instructions"] == 0.6

@@ -95,7 +95,8 @@ endpoints:
     verified: '2026-09-21'
     cost:
       type: per_success
-      value: 0.2
+      value: 0.4
+      table_min: 0.2
       currency: credit
       per: 1
       unit: result
@@ -137,7 +138,8 @@ endpoints:
     verified: '2026-09-21'
     cost:
       type: per_success
-      value: 0.1
+      value: 0.2
+      table_min: 0.1
       currency: credit
       per: 1
       unit: page
@@ -184,7 +186,8 @@ endpoints:
     verified: '2026-09-21'
     cost:
       type: per_success
-      value: 0.3
+      value: 0.6
+      table_min: 0.3
       currency: credit
       per: 1
       unit: result
