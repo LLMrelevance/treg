@@ -35,6 +35,10 @@ Email OTP dev mode is on — codes appear in the login page / API response, no m
 
 `TREG_DEV_DB=/absolute/path/to/dev.db` selects a separate database without resetting the default.
 
+For a LAN preview, build with `bash scripts/build-dashboard.sh`, then use
+`TREG_FRONTEND_DEV=false scripts/dev-local.sh restart` (or `up` if stopped). This serves
+compiled assets on port 18790; the default hot-update mode requires a browser on the same machine.
+
 ## Troubleshooting
 
 - **Port 18790 in use, no session** → something else owns it: `lsof -i :18790`.

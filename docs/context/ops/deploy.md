@@ -237,6 +237,8 @@ build hook rejects a wheel or sdist without the dashboard entry and includes the
 editable installs remain Python-only. Node and npm are build tools, not runtime services.
 `TREG_FRONTEND_DEV=true` serves the authored entry with Vite scripts on local port 5173 and is
 accepted only with SQLite and a loopback public URL. `scripts/dev-local.sh up` manages both processes.
+For browser previews from another device, build the dashboard and start or restart the local stack
+with `TREG_FRONTEND_DEV=false`; compiled assets then use the same origin on port 18790.
 
 [`deploy/render.example.yaml`](../../../deploy/render.example.yaml) is a generic self-hosting example.
 It creates one web service and one PostgreSQL database, builds with

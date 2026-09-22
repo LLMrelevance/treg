@@ -21,6 +21,11 @@ There is no duplicated legacy Dashboard HTML implementation.
 Install Node 22.12+ and npm, then run `scripts/dev-local.sh up` from the repository root.
 Open `http://localhost:18790/app`; the Python response loads Vite modules from :5173 for hot updates.
 The local-only `TREG_FRONTEND_DEV` switch cannot be used with PostgreSQL or a public hostname.
+For preview from another device on the LAN, build first with `bash scripts/build-dashboard.sh`,
+then run `TREG_FRONTEND_DEV=false scripts/dev-local.sh restart` (or `up` for a stopped stack).
+Open the server on port 18790 using the host machine's LAN IP. This serves compiled assets from
+the same origin; rerun the build after frontend changes. Loopback Vite hot updates are for
+browsers on the development machine.
 
 ## Validate and package
 
