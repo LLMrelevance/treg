@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from email import policy
 from email.parser import BytesParser
@@ -575,6 +576,14 @@ _TAVILY_ENDPOINTS = frozenset({
 })
 _TAVILY_BOUNDED_SITE_ENDPOINTS = frozenset({"tavily.web.map", "tavily.web.crawl"})
 _TAVILY_PLATFORM_MAX_RESULTS = 20
+_TAVILY_RATE_KEYS = {
+    "tavily.web.search": frozenset({"basic", "fast", "ultra_fast", "advanced"}),
+    "tavily.web.extract": frozenset({"basic", "advanced"}),
+    "tavily.web.map": frozenset({"regular", "instructions"}),
+    "tavily.web.crawl": frozenset({
+        "basic", "basic_instructions", "advanced", "advanced_instructions",
+    }),
+}
 
 
 def _openmart_credits(records: int) -> int:
@@ -602,31 +611,57 @@ def _openmart_requested_records(endpoint_id: str, body: bytes) -> int | None:
     return value if type(value) is int else None
 
 
-def _tavily_rate_credits(cost: dict, name: str) -> float:
-    """Read Tavily's endpoint/mode credit allocation from catalog data."""
-    rates = cost.get("tavily_rates") or {}
-    value = rates.get(name)
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+def _tavily_rate_credits(endpoint_id: str, cost: dict, name: str) -> float:
+    """Read a complete positive Tavily rate set, or refuse the call before reserve/relay."""
+    rates = cost.get("tavily_rates")
+    expected = _TAVILY_RATE_KEYS[endpoint_id]
+    valid = (
+        isinstance(rates, dict)
+        and set(rates) == expected
+        and all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and value > 0
+            for value in rates.values()
+        )
+    )
+    if not valid:
+        raise ResolutionFailed(
+            "catalog_price_invalid", status_code=503, detail={
+                "error": "catalog_price_invalid",
+                "endpoint_id": endpoint_id,
+                "message": "Tavily pricing is unavailable because its catalog rates are invalid",
+            },
+        )
+    return float(rates[name])
 
 
 def _tavily_pricing(endpoint_id: str, cost: dict, body: bytes) -> tuple[int, int]:
     """Return Tavily's bounded hold and frozen response unit without rewriting the request."""
     rate = catalog_store.load().credit_rates.get("tavily")
-    if not rate:
-        return 0, 0
+    if (not isinstance(rate, (int, float)) or isinstance(rate, bool)
+            or not math.isfinite(float(rate)) or rate <= 0):
+        raise ResolutionFailed(
+            "catalog_price_invalid", status_code=503, detail={
+                "error": "catalog_price_invalid",
+                "endpoint_id": endpoint_id,
+                "message": "Tavily pricing is unavailable because its credit rate is invalid",
+            },
+        )
     credit_micro = _usd_to_micro(float(rate))
     document = _json_object(body)
     if endpoint_id == "tavily.web.search":
         depth = document.get("search_depth")
         if depth == "advanced":
-            credits = _tavily_rate_credits(cost, "advanced")
+            credits = _tavily_rate_credits(endpoint_id, cost, "advanced")
         elif depth in ("basic", "fast", "ultra-fast"):
             # An explicit depth overrides auto_parameters, including explicit basic.
-            credits = _tavily_rate_credits(cost, str(depth).replace("-", "_"))
+            credits = _tavily_rate_credits(endpoint_id, cost, str(depth).replace("-", "_"))
         elif document.get("auto_parameters") is True:
-            credits = _tavily_rate_credits(cost, "advanced")
+            credits = _tavily_rate_credits(endpoint_id, cost, "advanced")
         else:
-            credits = _tavily_rate_credits(cost, "basic")
+            credits = _tavily_rate_credits(endpoint_id, cost, "basic")
         return _usd_to_micro(float(rate) * credits), credit_micro
 
     instructions = document.get("instructions")
@@ -645,7 +680,8 @@ def _tavily_pricing(endpoint_id: str, cost: dict, body: bytes) -> tuple[int, int
         else:
             depth = "advanced" if document.get("extract_depth") == "advanced" else "basic"
             mode = f"{depth}_instructions" if instructed else depth
-    per_result_micro = _usd_to_micro(float(rate) * _tavily_rate_credits(cost, mode))
+    per_result_micro = _usd_to_micro(
+        float(rate) * _tavily_rate_credits(endpoint_id, cost, mode))
     return count * per_result_micro, per_result_micro
 
 

@@ -257,6 +257,30 @@ def check_platform_request(rule: object, input_schema: object, where: str,
             fail(errors, where, "platform_request value must match the field's singleton enum")
 
 
+TAVILY_RATE_KEYS = {
+    "tavily.web.search": {"basic", "fast", "ultra_fast", "advanced"},
+    "tavily.web.extract": {"basic", "advanced"},
+    "tavily.web.map": {"regular", "instructions"},
+    "tavily.web.crawl": {
+        "basic", "basic_instructions", "advanced", "advanced_instructions",
+    },
+}
+
+
+def check_tavily_rates(endpoint_id: str, cost: dict, where: str,
+                        errors: list[str]) -> None:
+    """Tavily's provider-specific formulas require a complete positive finite mode table."""
+    expected = TAVILY_RATE_KEYS.get(endpoint_id)
+    if expected is None:
+        return
+    rates = cost.get("tavily_rates")
+    if not isinstance(rates, dict) or set(rates) != expected:
+        fail(errors, where, "cost.tavily_rates must contain exactly " + ", ".join(sorted(expected)))
+        return
+    if any(not _finite_number(value) or value <= 0 for value in rates.values()):
+        fail(errors, where, "cost.tavily_rates values must be positive finite numbers")
+
+
 def check_platform_auth(ep: dict, where: str, errors: list[str]) -> None:
     """Anonymous platform fallback is intentionally narrow: proven public GETs that cost zero."""
     mode = ep.get("platform_auth")
@@ -1045,6 +1069,8 @@ def main(argv: list[str]) -> int:
                     fail(errors, where, f"cost.type missing or not one of {sorted(COST_TYPES)}")
                 else:
                     check_cost(cost, where, errors, warnings, inp, provider)
+                    if service == "tavily":
+                        check_tavily_rates(eid, cost, where, errors)
             effective_async = effective_async_descriptor(data.get("async"), ep.get("async"))
             if effective_async is not None:
                 check_async_descriptor(effective_async, where, str(service), endpoint_index,

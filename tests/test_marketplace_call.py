@@ -1526,6 +1526,29 @@ def test_tavily_search_reserve_honors_depth_and_explicit_basic_override(body, ex
     assert (reserve, unit) == (expected, 8_000)
 
 
+@pytest.mark.parametrize("rates", [
+    None,
+    {},
+    {"basic": 1, "fast": 1, "ultra_fast": 1},
+    {"basic": 1, "fast": 1, "ultra_fast": 1, "advanced": 2, "typo": 1},
+    {"basic": 0, "fast": 1, "ultra_fast": 1, "advanced": 2},
+    {"basic": -1, "fast": 1, "ultra_fast": 1, "advanced": 2},
+    {"basic": True, "fast": 1, "ultra_fast": 1, "advanced": 2},
+    {"basic": "1", "fast": 1, "ultra_fast": 1, "advanced": 2},
+    {"basic": float("nan"), "fast": 1, "ultra_fast": 1, "advanced": 2},
+    {"basic": float("inf"), "fast": 1, "ultra_fast": 1, "advanced": 2},
+])
+def test_tavily_pricing_fails_closed_on_incomplete_or_invalid_rates(rates):
+    cost = _tavily_cost("tavily.web.search") | {"tavily_rates": rates}
+    with pytest.raises(ResolutionFailed) as caught:
+        call_resolution._marketplace_pricing(
+            "tavily", "tavily.web.search", cost, {},
+            b'{"query":"x","search_depth":"basic"}',
+        )
+    assert caught.value.kind == "catalog_price_invalid"
+    assert caught.value.status_code == 503
+
+
 @pytest.mark.parametrize("count", [1, 4, 5, 6, 20])
 def test_tavily_extract_reserve_and_basic_settlement_are_fractional_per_success(count):
     urls = [f"https://example.com/{i}" for i in range(count)]
@@ -1688,6 +1711,27 @@ async def test_tavily_platform_gates_search_usage_and_site_work_limits(
     assert response.status_code == 400
     assert response.json()["detail"]["error"] == "catalog_parameter_invalid"
     assert await _balance(clients) == before
+
+
+async def test_tavily_invalid_runtime_rates_refuse_before_reserve_and_relay(
+    clients, monkeypatch, tavily_platform_on,
+):
+    rates = catalog_store.load().by_id["tavily.web.search"]["cost"]["tavily_rates"]
+    monkeypatch.setitem(rates, "basic", 0)
+
+    async def must_not_relay(*args, **kwargs):
+        raise AssertionError("invalid Tavily pricing must fail before upstream relay")
+
+    monkeypatch.setattr(call_service, "relay", must_not_relay)
+    before_balance = await _balance(clients)
+    before_entries = await _entries(clients)
+    response = await clients.post("/call/tavily.web.search", json={
+        "query": "x", "search_depth": "basic", "include_usage": True,
+    })
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"] == "catalog_price_invalid"
+    assert await _balance(clients) == before_balance
+    assert await _entries(clients) == before_entries
 
 
 @pytest.mark.parametrize("status", [401, 422, 429, 432, 433])

@@ -208,6 +208,9 @@ hold. Search reserves one or two credits and `settle._tavily_cost_micro` reads i
 mapping and extraction modes; Tavily does not expose every successfully mapped page, so treg absorbs
 any hidden mapping difference under the 20-page platform cap. Extract, Map and Crawl never use the
 provider account's grouped `usage.credits` to decide which team pays. BYOK bypasses all metering.
+Each endpoint's `tavily_rates` mapping has an exact mode-key contract. Catalog validation rejects an
+incomplete, extra, non-finite or non-positive rate, and runtime repeats that check before reserve or
+relay so catalog drift cannot silently turn a platform call into a free call.
 
 A verification stamp proves the request shape, response shape, and paid behavior that the evidence
 actually observed. A placeholder path value or a free miss does not prove a paid hit. Such rows keep

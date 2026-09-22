@@ -560,6 +560,35 @@ def test_platform_request_requires_declared_fixed_body_value(rule, valid):
     assert (not errors) is valid
 
 
+def test_tavily_rates_require_complete_positive_finite_endpoint_tables():
+    cat = catalog_store.load()
+    for endpoint_id, expected in validator.TAVILY_RATE_KEYS.items():
+        cost = cat.by_id[endpoint_id]["cost"]
+        errors = []
+        validator.check_tavily_rates(endpoint_id, cost, endpoint_id, errors)
+        assert errors == []
+        assert set(cost["tavily_rates"]) == expected
+
+    valid = cat.by_id["tavily.web.search"]["cost"]["tavily_rates"]
+    broken = [
+        None,
+        {},
+        {key: value for key, value in valid.items() if key != "advanced"},
+        valid | {"typo": 1},
+        valid | {"basic": 0},
+        valid | {"basic": -1},
+        valid | {"basic": True},
+        valid | {"basic": "1"},
+        valid | {"basic": float("nan")},
+        valid | {"basic": float("inf")},
+    ]
+    for rates in broken:
+        errors = []
+        validator.check_tavily_rates(
+            "tavily.web.search", {"tavily_rates": rates}, "test", errors)
+        assert errors
+
+
 # ---- ContactOut ----
 
 def _contactout_cost(eid):
