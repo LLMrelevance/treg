@@ -1009,7 +1009,10 @@ async def test_arena_and_dashboard_share_setup_components(clients):
     page = (await clients.get('/enrich-arena')).text
     dashboard = (await clients.get('/app')).text
     assert '/agent-setup.js' in page and '/agent-setup.js' in dashboard
-    assert 'treg-setup-instructions' in page and 'treg-setup-instructions' in dashboard
+    from dashboard_source import FRONTEND
+    assert 'treg-setup-instructions' in page
+    assert 'treg-setup-instructions' in (FRONTEND / 'dialogs/WelcomeDialog.vue').read_text()
+    assert "app.component('TregSetupInstructions', setup.SetupInstructions!)" in (FRONTEND / 'main.ts').read_text()
     assert 'Setup treg in' in page and 'ref="setupDialog"' in page
 
 

@@ -8,7 +8,10 @@ sources:
   - src/treg/web/robots.txt
   - src/treg/web/catalog.css
   - src/treg/web/usecase.css
-  - src/treg/web/index.html
+  - frontend/index.html
+  - frontend/src/App.vue
+  - frontend/src/components/PublicNavigation.vue
+  - frontend/src/state/boot.js
   - src/treg/web/landing.html
   - src/treg/web/terms.html
   - src/treg/web/usecase-seo.html
@@ -181,9 +184,9 @@ competing providers merged onto it** (Majestic $0.0008 · Serpstat $0.0025 · SE
 the comparison *is* the product — while the hand-built page listed each endpoint separately. Same
 data, different axis, two things to maintain.
 
-So `/catalog` and `/catalog/<slug>` now serve **`index.html`**, and the Vue app renders the same
+So `/catalog` and `/catalog/<slug>` serve the **compiled Dashboard entry**, and the Vue app renders the same
 platform views a member sees. This works because the catalog API is unauthenticated; `publicCatalog`
-in `index.html` is the flag, set from `catalogFromPath()` before the `/auth/me` check so the first
+in `frontend/src/state/data.js` is the flag, set from `catalogFromPath()` before the `/auth/me` check so the first
 paint is already in public mode.
 
 What public mode changes, and why each one:
@@ -245,8 +248,7 @@ skips `Other` outright — so the sitemap would publish `/catalog/<slug>` while 
 links to nothing. `test_no_shelf_is_published_that_the_app_grid_hides` fails the build if that
 happens.
 
-**UI changes to the shared views reach the public pages automatically** — it is the same
-`index.html`. Three things do NOT follow along:
+**UI changes to the shared views reach the public pages automatically** — they use the same Dashboard components. Three things do NOT follow along:
 
 1. **Anything reading member-only state.** `providers`, `connCount`, `billing` and `sessionMode` are
    all empty without a session, so a new element built on them renders blank publicly. Three helpers
@@ -283,13 +285,13 @@ asserted to appear in its body. Edit one, edit the other, same commit.
 
 **The catalog page and the app must ask for the same population.** See `include_hidden` above.
 
-**A promo banner on `index.html` is a catalog-page edit.** `/catalog` and `/catalog/<slug>` render
-from `index.html`, so anything added to that file lands on all ~80 crawlable shelves unless it is
+**A promo banner in `App.vue` is a catalog-page edit.** `/catalog` and `/catalog/<slug>` render
+from the same Vue app, so anything added to its shell lands on all ~80 crawlable shelves unless it is
 gated. The one banner this app has carried — the Product Hunt launch strip, since removed — sat
 inside the Vue app behind `v-if="…&& !publicCatalog"` for exactly this reason; anything similar needs
 the same gate, plus a test that the catalog's `#prerender` block never carries it. Note also that
 `landing.html` **is** `{BASE}`-substituted
-and `index.html` **is not** (`dashboard()` returns a plain `FileResponse`), so a placeholder that is
+and `index.html` **is not** (`dashboard()` returns the compiled document without that substitution), so a placeholder that is
 safe in one half ships literally in the other — hardcode absolute URLs on the app side.
 
 **Prices need `_usd_short`, not `%g`.** `%g` flips to scientific notation below `1e-4`, and a shelf

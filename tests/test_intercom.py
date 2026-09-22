@@ -48,8 +48,10 @@ async def test_auth_me_user_hash_is_hmac_of_the_email(clients, monkeypatch):
 
 
 def test_pages_gate_on_meta_app_id():
+    from dashboard_source import FRONTEND
+    assert "intercom_app_id" in (FRONTEND / "state/analytics.js").read_text()
     # each Intercom-bearing page keys its loader off /meta's intercom_app_id (empty = inert)
-    for page in ("index.html", "landing.html", "support.html"):
+    for page in ("landing.html", "support.html"):
         assert "intercom_app_id" in (WEB / page).read_text(), page
 
 
@@ -57,5 +59,5 @@ def test_no_hardcoded_workspace_id_anywhere():
     # the only allowed form of the widget URL is the config-driven concatenation
     pat = re.compile(r"widget\.intercom\.io/widget/(?!'\+app)")
     for f in WEB.rglob("*"):
-        if f.is_file() and f.suffix in {".html", ".js", ".md", ".txt"}:
+        if "dashboard" not in f.relative_to(WEB).parts and f.is_file() and f.suffix in {".html", ".js", ".md", ".txt"}:
             assert not pat.search(f.read_text()), f"hardcoded Intercom workspace id in {f.name}"

@@ -176,7 +176,7 @@ def _app_version() -> str:
     re-derived when the file's mtime moves (so dev --reload picks up edits too). Long-lived tabs
     compare this against the value they booted with and offer a refresh when it drifts."""
     global _app_version_cache
-    index = _WEB_DIR / "index.html"
+    index = _WEB_DIR / "dashboard" / "index.html"
     try:
         mtime = index.stat().st_mtime
     except OSError:

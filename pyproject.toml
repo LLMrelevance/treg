@@ -257,6 +257,9 @@ pythonpath = ["."]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.sdist]
 # The sdist is PUBLISHED — everything it carries becomes public on PyPI. Hatchling's default is
 # "every file git does not ignore", and `.git/info/exclude` is LOCAL-ONLY, so working material kept
@@ -270,6 +273,7 @@ exclude = [
   "docs/*-PLAN.md",         # ditto: plan docs live locally
   ".import_linter_cache",   # build cache (nested .gitignore hides it from git, not from hatchling)
   ".codegraph",
+  "frontend/node_modules", "frontend/test-results", "frontend/playwright-report",
   "videos",                 # git-excluded marketing renders
   "*.db", "*.sqlite3", "scratch*", "body.json",   # stray local artifacts
   ".env", ".env.*",         # belt and braces: a credential file must never reach a tarball

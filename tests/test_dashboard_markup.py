@@ -1,8 +1,7 @@
-"""Structural checks on the single-file dashboard.
+"""Source regressions for the compiled Vue dashboard.
 
-index.html is a 3k-line Vue template with no build step and no component boundaries, so nothing
-catches a block ending up in the wrong place. These assert the few structural rules that, when
-broken, produce bugs that look like dead buttons rather than errors.
+Components are expanded at their mount sites so conditional ancestry remains visible.
+Browser tests complement these checks with real navigation and event handling.
 """
 
 from __future__ import annotations
@@ -14,7 +13,9 @@ import pytest
 
 from treg import api
 
-INDEX = (Path(api.__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
+from dashboard_source import dashboard_source
+
+INDEX = dashboard_source()
 TUTORIAL = (Path(api.__file__).parent / "web" / "tutorial.html").read_text(encoding="utf-8")
 
 # Dialogs reachable from more than one view. Each is opened by a button that exists on both the

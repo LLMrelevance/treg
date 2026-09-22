@@ -3,6 +3,10 @@ title: Running & deploying the server
 status: shipped
 sources:
   - pyproject.toml
+  - hatch_build.py
+  - scripts/build-dashboard.sh
+  - scripts/build-web.sh
+  - scripts/frontend-e2e-server.sh
   - src/treg/__main__.py
   - src/treg/maintenance.py
   - src/treg/alembic/env.py
@@ -224,12 +228,20 @@ database is local SQLite. Hosted deployments must still leave it false.
 
 ## Web service and generic Render example
 
-`GET /` serves the single-file dashboard from `src/treg/web/index.html`. The package includes the
-whole `web/` directory, so tutorials, agent files and installer assets ship with the server wheel.
+`GET /app` serves the Vite-built Vue application from `src/treg/web/dashboard/index.html`.
+The frontend is authored in `frontend/` within the same repository. `GET /` retains the existing
+landing behavior. Dashboard assets, tutorials, agent files and installer assets ship with the wheel.
+
+Run `bash scripts/build-dashboard.sh` before building a distributable Python package. Hatch's
+build hook rejects a wheel or sdist without the dashboard entry and includes the generated assets;
+editable installs remain Python-only. Node and npm are build tools, not runtime services.
+`TREG_FRONTEND_DEV=true` serves the authored entry with Vite scripts on local port 5173 and is
+accepted only with SQLite and a loopback public URL. `scripts/dev-local.sh up` manages both processes.
 
 [`deploy/render.example.yaml`](../../../deploy/render.example.yaml) is a generic self-hosting example.
 It creates one web service and one PostgreSQL database, builds with
-`uv sync --locked --no-dev --extra server --active`, runs `python -m treg upgrade` before serving,
+`bash scripts/build-web.sh` (frontend build followed by the locked Python install), runs
+`python -m treg upgrade` before serving,
 starts `python -m treg`, and checks `/meta`. Copy it into the operator's own deployment repository and
 change resource names, region, plans, public URL and integrations.
 

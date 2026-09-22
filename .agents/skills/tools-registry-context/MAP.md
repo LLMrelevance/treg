@@ -23,18 +23,98 @@ Regenerate via `scripts/build-map.py`.
 | `dsh/index.js` | interface/skill.md |
 | `examples/proxy-demo/server.js` | architecture/local-proxy.md |
 | `external:meetings/2026-06-30-jason-tools-registry.md` | foundation/charter.md, reference/glossary.md |
+| `frontend/index.html` | interface/dashboard.md, interface/seo.md |
+| `frontend/package.json` | interface/dashboard.md |
+| `frontend/src/App.vue` | interface/dashboard.md, interface/seo.md |
+| `frontend/src/api.ts` | interface/dashboard.md |
+| `frontend/src/components/DashboardNavigation.vue` | interface/dashboard.md |
+| `frontend/src/components/PublicNavigation.vue` | interface/dashboard.md, interface/seo.md |
+| `frontend/src/components/SignInDialog.vue` | interface/dashboard.md |
+| `frontend/src/components/SignedOutPage.vue` | interface/dashboard.md, interface/landing-sandbox.md |
+| `frontend/src/dialogs/AcceptInvitesDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/AgentGuideDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/CallDetailsDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/ConnectTokenDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/ConnectionMethodDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/CopyToolDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/EditToolDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/ExtraCredentialDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/ImportSkillDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/RecipeDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/RequestToolDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/ResourcePickerDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/RunToolDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/ShareDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/TopUpDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/TryEndpointDialog.vue` | interface/dashboard.md |
+| `frontend/src/dialogs/WelcomeDialog.vue` | interface/dashboard.md, interface/onboarding.md |
+| `frontend/src/main.ts` | interface/dashboard.md |
+| `frontend/src/pages/ActivityPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/AdminPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/CatalogPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/DetailPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/GettingStartedPage.vue` | interface/dashboard.md, interface/onboarding.md |
+| `frontend/src/pages/HelpPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/PlatformPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/ProviderPage.vue` | architecture/instagram-oauth.md, interface/dashboard.md |
+| `frontend/src/pages/ReferralsPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/SecretsPage.vue` | interface/dashboard.md |
+| `frontend/src/pages/TeamPage.vue` | architecture/auth-secrets.md, interface/dashboard.md |
+| `frontend/src/pages/ToolsPage.vue` | interface/dashboard.md |
+| `frontend/src/state/activity.js` | interface/dashboard.md |
+| `frontend/src/state/admin.js` | interface/dashboard.md |
+| `frontend/src/state/agents.js` | interface/dashboard.md |
+| `frontend/src/state/agentsComputed.js` | interface/dashboard.md |
+| `frontend/src/state/analytics.js` | interface/dashboard.md |
+| `frontend/src/state/billing.js` | interface/dashboard.md |
+| `frontend/src/state/billingComputed.js` | interface/dashboard.md |
+| `frontend/src/state/boot.js` | interface/dashboard.md, interface/landing-sandbox.md, interface/seo.md |
+| `frontend/src/state/catalog.js` | interface/dashboard.md |
+| `frontend/src/state/catalogComputed.js` | interface/dashboard.md |
+| `frontend/src/state/connections.js` | architecture/instagram-oauth.md, interface/dashboard.md |
+| `frontend/src/state/constants.js` | interface/dashboard.md |
+| `frontend/src/state/context.ts` | interface/dashboard.md |
+| `frontend/src/state/controller.js` | interface/dashboard.md |
+| `frontend/src/state/data.js` | interface/dashboard.md |
+| `frontend/src/state/details.js` | interface/dashboard.md |
+| `frontend/src/state/detailsComputed.js` | interface/dashboard.md |
+| `frontend/src/state/format.js` | interface/dashboard.md |
+| `frontend/src/state/governance.js` | interface/dashboard.md |
+| `frontend/src/state/help.js` | interface/dashboard.md |
+| `frontend/src/state/keys.js` | architecture/auth-secrets.md, interface/dashboard.md |
+| `frontend/src/state/lifecycle.js` | interface/dashboard.md |
+| `frontend/src/state/navigation.js` | interface/dashboard.md |
+| `frontend/src/state/onboarding.js` | interface/dashboard.md, interface/onboarding.md |
+| `frontend/src/state/onboardingComputed.js` | interface/dashboard.md |
+| `frontend/src/state/projects.js` | interface/dashboard.md |
+| `frontend/src/state/referrals.js` | interface/dashboard.md |
+| `frontend/src/state/secrets.js` | interface/dashboard.md |
+| `frontend/src/state/session.js` | architecture/auth-secrets.md, interface/dashboard.md |
+| `frontend/src/state/sessionComputed.js` | interface/dashboard.md |
+| `frontend/src/state/sharing.js` | interface/dashboard.md |
+| `frontend/src/state/skills.js` | interface/dashboard.md |
+| `frontend/src/state/snippets.js` | interface/dashboard.md |
+| `frontend/src/state/team.js` | interface/dashboard.md |
+| `frontend/src/state/tools.js` | interface/dashboard.md |
+| `frontend/src/state/tryTool.js` | interface/dashboard.md |
+| `frontend/src/styles/base.css` | interface/dashboard.md |
+| `frontend/vite.config.ts` | interface/dashboard.md |
+| `hatch_build.py` | ops/deploy.md |
 | `package.json` | interface/skill.md |
 | `plugin/.codex-plugin/plugin.json` | interface/skill.md |
 | `plugins/minimax/.minimax-plugin/plugin.json` | interface/skill.md |
 | `plugins/treg/.cursor-plugin/plugin.json` | interface/skill.md |
 | `pyproject.toml` | architecture/import-boundaries.md, ops/deploy.md |
 | `scripts/backfill_call_archive_links.py` | architecture/archive.md |
+| `scripts/build-dashboard.sh` | ops/deploy.md |
+| `scripts/build-web.sh` | ops/deploy.md |
 | `scripts/build_plugin.py` | interface/skill.md |
 | `scripts/catalog_drift.py` | architecture/catalog.md |
 | `scripts/catalog_ingest.py` | architecture/catalog.md, architecture/instagram-oauth.md |
 | `scripts/catalog_validate.py` | architecture/catalog.md |
 | `scripts/dev-local.sh` | ops/deploy.md |
 | `scripts/dump_surface.py` | architecture/composition.md |
+| `scripts/frontend-e2e-server.sh` | ops/deploy.md |
 | `scripts/import_arena_verification.py` | interface/enrich-arena.md |
 | `scripts/indexnow_submit.py` | interface/seo.md |
 | `scripts/minimax_plugin.py` | interface/skill.md |
@@ -308,7 +388,6 @@ Regenerate via `scripts/build-map.py`.
 | `src/treg/web/feedback.md` | architecture/feedback.md |
 | `src/treg/web/grokbot.html` | interface/seo.md |
 | `src/treg/web/gtag.js` | architecture/ads-conversions.md |
-| `src/treg/web/index.html` | architecture/auth-secrets.md, architecture/instagram-oauth.md, interface/dashboard.md, interface/landing-sandbox.md, interface/onboarding.md, interface/seo.md |
 | `src/treg/web/install.sh` | interface/landing-sandbox.md |
 | `src/treg/web/jev.html` | interface/seo.md |
 | `src/treg/web/landing.html` | interface/seo.md |
@@ -423,13 +502,13 @@ Regenerate via `scripts/build-map.py`.
 |---|---|
 | `architecture/ads-conversions.md` | `adsconv.py`, `signup.py`, `adtrack.js`, `gtag.js` |
 | `architecture/archive.md` | `archive.py`, `hunter.yaml`, `results.py`, `0031_archive_result_admission.py`, `test_cache_result_admission.py`, `archive_bodies.py`, `config.py`, `object_store.py`, `0032_archive_body_storage.py`, `test_archive_r2.py`, `fake_object_store.py`, `smoke_archive_r2.py`, `0002_archive_tables.py`, `0003_callrecord_cached.py`, `0004_archivekey_request_shape.py`, `0011_callrecord_archive_link.py`, `service.py`, `settle.py`, `0039_archive_own_key_and_repeat_pricing.py`, `backfill_call_archive_links.py`, `api.py`, `bootstrap.py`, `admin.py`, `asynctasks.py` |
-| `architecture/auth-secrets.md` | `injectors.py`, `ssrf.py`, `crypto.py`, `oauth.py`, `__init__.py`, `authorization.py`, `oauth_flow.py`, `refresh.py`, `oauth_exchange.py`, `oauth_refresh.py`, `oauth_providers.py`, `index.html`, `health.py`, `connect.py`, `connections.py`, `resources.py`, `__init__.py`, `bindings.py`, `bundles.py`, `api_keys.py`, `access.py`, `api_keys.py`, `test_api_keys.py`, `test_oauth_refresh.py`, `test_financialdatasets.py`, `test_key_providers.py`, `test_dashboard_markup.py`, `config.py` |
+| `architecture/auth-secrets.md` | `injectors.py`, `ssrf.py`, `crypto.py`, `oauth.py`, `__init__.py`, `authorization.py`, `oauth_flow.py`, `refresh.py`, `oauth_exchange.py`, `oauth_refresh.py`, `oauth_providers.py`, `session.js`, `keys.js`, `TeamPage.vue`, `health.py`, `connect.py`, `connections.py`, `resources.py`, `__init__.py`, `bindings.py`, `bundles.py`, `api_keys.py`, `access.py`, `api_keys.py`, `test_api_keys.py`, `test_oauth_refresh.py`, `test_financialdatasets.py`, `test_key_providers.py`, `test_dashboard_markup.py`, `config.py` |
 | `architecture/catalog.md` | `tavily.yaml`, `exa.yaml`, `anyapi.extended.yaml`, `trestleiq.yaml`, `financialdatasets.yaml`, `test_financialdatasets.py`, `quickenrich.yaml`, `influencersclub.yaml`, `quickenrich.extended.yaml`, `trykitt.yaml`, `contracts.yaml`, `millionverifier.yaml`, `adapters.yaml`, `prospeo.yaml`, `test_route_cost_ceiling.py`, `tomba.yaml`, `__init__.py`, `contracts.py`, `paths.py`, `plan.py`, `synthetic.py`, `route.py`, `test_routing.py`, `catalog-drift.yml`, `catalog_drift.py`, `catalog_ingest.py`, `catalog_validate.py`, `aliases.yaml`, `fx.yaml`, `cloro.yaml`, `aviato.yaml`, `crustdata.yaml`, `google-search-console.yaml`, `google-search-console.extended.yaml`, `google-tag-manager.yaml`, `google-tag-manager.extended.yaml`, `instagram.yaml`, `instagram.extended.yaml`, `justoneapi.extended.yaml`, `minimax.yaml`, `apify.yaml`, `brightdata.yaml`, `companyenrich.yaml`, `oceanio.yaml`, `akta.extended.yaml`, `dataforseo.yaml`, `dataforseo.extended.yaml`, `test_dataforseo_constraints.py`, `scrapecreators.yaml`, `scrapecreators.extended.yaml`, `serpapi.yaml`, `serpapi.extended.yaml`, `diffbot.yaml`, `diffbot.extended.yaml`, `tikhub.extended.yaml`, `lusha.extended.yaml`, `openrouter.yaml`, `openrouter.extended.yaml`, `replicate.yaml`, `replicate.extended.yaml`, `reapi.yaml`, `piapi.yaml`, `__init__.py`, `store.py`, `hunter.yaml`, `mcp.py`, `settlement.py`, `stats.py`, `catalog_observations.py`, `catalog_stats.py`, `0038_endpoint_day_stats.py`, `catalog.py`, `test_aigc_pr_b.py`, `test_catalog_api.py`, `test_catalog_validate.py` |
 | `architecture/composition.md` | `bootstrap.py`, `bootstrap_handlers.py`, `bootstrap_http.py`, `call_surface.py`, `connect.py`, `mcp_oauth.py`, `session.py`, `admin.py`, `auth.py`, `billing.py`, `call.py`, `connections.py`, `onboard.py`, `orgs.py`, `resources.py`, `referrals.py`, `web.py`, `dump_surface.py`, `test_app_roles.py` |
 | `architecture/data-model.md` | `alembic.ini`, `env.py`, `0001_baseline_current_schema.py`, `0002_archive_tables.py`, `0003_callrecord_cached.py`, `0004_archivekey_request_shape.py`, `0005_capacity_policy_snapshot.py`, `0006_overflow_route.py`, `0007_overflow_spend.py`, `0008_org_platform_overflow_disabled.py`, `0009_callrecord_hit.py`, `0017_async_task_record.py`, `0018_async_resource_ownership.py`, `0019_async_poll_failures.py`, `0020_callrecord_created_at_indexes.py`, `0021_ledgerentry_org_created_at_index.py`, `0022_org_spent_today_counter.py`, `0023_callrecord_org_user_created_at_index.py`, `0024_membership_calls_today_counter.py`, `0027_enrich_arena.py`, `0028_arena_insights.py`, `0029_arena_verification_snapshot.py`, `0011_callrecord_archive_link.py`, `0015_idempotentcall_membership_cascade.py`, `0034_managed_api_keys.py`, `0035_default_key_generation.py`, `0036_activity_key_indexes.py`, `0038_endpoint_day_stats.py`, `maintenance.py`, `sitetrack.js`, `models.py`, `0031_archive_result_admission.py`, `0032_archive_body_storage.py`, `0039_archive_own_key_and_repeat_pricing.py`, `0033_signup_promo_eligibility.py`, `0041_searchlog.py`, `timeutil.py`, `db.py`, `referrals.py`, `audit.py`, `analytics.py`, `bootstrap_handlers.py`, `ratestore.py`, `auth.py`, `test_postgres_reset.py`, `test_alembic_expand_safety.py`, `test_api_keys.py` |
 | `architecture/feedback.md` | `feedback_contract.py`, `__init__.py`, `reports.py`, `reviews.py`, `hints.py`, `config.py`, `call.py`, `invite.py`, `kv.py`, `feedback.py`, `feedback.py`, `0025_feedback.py`, `0026_callreview.py`, `0030_feedback_handling.py`, `test_feedback_handling_schema.py`, `feedback.md`, `test_feedback.py`, `test_reviews.py`, `test_hints.py`, `test_kv.py` |
 | `architecture/import-boundaries.md` | `pyproject.toml`, `ci.yml`, `__init__.py`, `__init__.py`, `access.py`, `authorize.py`, `idempotency.py`, `overflow.py`, `route.py`, `__init__.py`, `intake.py`, `resolve.py`, `reserve.py`, `settle.py`, `evidence.py`, `service.py`, `types.py`, `client_identity.py`, `__init__.py`, `__init__.py`, `access.py`, `budgets.py`, `publicdemo.py`, `teams.py`, `usage.py`, `__init__.py`, `__init__.py`, `authorization.py`, `oauth_flow.py`, `refresh.py`, `__init__.py`, `__init__.py`, `__init__.py`, `__init__.py`, `__init__.py`, `injectors.py`, `relay.py`, `__init__.py`, `limiter.py`, `test_call_architecture.py`, `test_import_lightness.py` |
-| `architecture/instagram-oauth.md` | `catalog_ingest.py`, `access.py`, `resolve.py`, `service.py`, `instagram.yaml`, `instagram.extended.yaml`, `cli.py`, `store.py`, `authorization.py`, `oauth_flow.py`, `oauth_exchange.py`, `mcp.py`, `call.py`, `index.html`, `0010_oauth_authorization_method.py`, `test_instagram_oauth_architecture.py` |
+| `architecture/instagram-oauth.md` | `catalog_ingest.py`, `access.py`, `resolve.py`, `service.py`, `instagram.yaml`, `instagram.extended.yaml`, `cli.py`, `store.py`, `authorization.py`, `oauth_flow.py`, `oauth_exchange.py`, `mcp.py`, `call.py`, `connections.js`, `ProviderPage.vue`, `0010_oauth_authorization_method.py`, `test_instagram_oauth_architecture.py` |
 | `architecture/local-proxy.md` | `localproxy.py`, `server.js` |
 | `architecture/local-run.md` | `localrun.py`, `egress.py`, `fsjail.py` |
 | `architecture/mcp-oauth.md` | `auth.py`, `mcp.py`, `health.py`, `mcp_oauth.py`, `session.py`, `access.py`, `api_keys.py`, `api_keys.py`, `auth.py`, `claude-connector.html`, `connect-demo.html`, `CLAUDE-CONNECTOR-SUBMISSION.md`, `test_mcp.py`, `test_mcp_oauth.py`, `test_mcp_directory.py`, `test_marketplace_call.py` |
@@ -444,14 +523,14 @@ Regenerate via `scripts/build-map.py`.
 | `interface/api.md` | `media.py`, `sitetrack.js`, `api.py`, `bootstrap_handlers.py`, `bootstrap_http.py`, `call_surface.py`, `caller_metadata.py`, `client_identity.py`, `auth.py`, `access.py`, `authorize.py`, `idempotency.py`, `intake.py`, `resolve.py`, `reserve.py`, `settle.py`, `evidence.py`, `service.py`, `types.py`, `relay.py`, `connect.py`, `onboard.py`, `referrals.py`, `signup.py`, `__init__.py`, `admin.py`, `auth.py`, `auth_helpers.py`, `billing.py`, `call.py`, `catalog.py`, `connections.py`, `onboard.py`, `orgs.py`, `api_keys.py`, `resources.py`, `referrals.py`, `signup_cookies.py`, `web.py`, `access.py`, `api_keys.py`, `teams.py`, `access.py`, `budgets.py`, `publicdemo.py`, `usage.py`, `mcp_oauth.py`, `session.py`, `timeutil.py`, `store.py`, `email.py`, `runner.py`, `ratestore.py` |
 | `interface/catalog-review-proposal.md` | `store.py`, `capabilities.yaml` |
 | `interface/cli.md` | `cli.py`, `test_released_cli_compat.py`, `test_cli_key_compatibility.py`, `auth_helpers.py`, `cli_analytics.py`, `convert.py`, `agents.py`, `api_keys.py`, `test_api_keys.py` |
-| `interface/dashboard.md` | `sitetrack.js`, `index.html`, `agent-setup.js`, `dashboard.css`, `SOURCES.md`, `README.md`, `vue-3.5.41.global.prod.js`, `tutorial.js`, `tutorial.html`, `tour.js`, `index.html`, `api.py`, `web.py`, `session.py`, `api_keys.py`, `test_api_keys.py` |
+| `interface/dashboard.md` | `sitetrack.js`, `index.html`, `package.json`, `vite.config.ts`, `App.vue`, `api.ts`, `DashboardNavigation.vue`, `PublicNavigation.vue`, `SignInDialog.vue`, `SignedOutPage.vue`, `AcceptInvitesDialog.vue`, `AgentGuideDialog.vue`, `CallDetailsDialog.vue`, `ConnectTokenDialog.vue`, `ConnectionMethodDialog.vue`, `CopyToolDialog.vue`, `EditToolDialog.vue`, `ExtraCredentialDialog.vue`, `ImportSkillDialog.vue`, `RecipeDialog.vue`, `RequestToolDialog.vue`, `ResourcePickerDialog.vue`, `RunToolDialog.vue`, `ShareDialog.vue`, `TopUpDialog.vue`, `TryEndpointDialog.vue`, `WelcomeDialog.vue`, `main.ts`, `ActivityPage.vue`, `AdminPage.vue`, `CatalogPage.vue`, `DetailPage.vue`, `GettingStartedPage.vue`, `HelpPage.vue`, `PlatformPage.vue`, `ProviderPage.vue`, `ReferralsPage.vue`, `SecretsPage.vue`, `TeamPage.vue`, `ToolsPage.vue`, `activity.js`, `admin.js`, `agents.js`, `agentsComputed.js`, `analytics.js`, `billing.js`, `billingComputed.js`, `boot.js`, `catalog.js`, `catalogComputed.js`, `connections.js`, `constants.js`, `context.ts`, `controller.js`, `data.js`, `details.js`, `detailsComputed.js`, `format.js`, `governance.js`, `help.js`, `keys.js`, `lifecycle.js`, `navigation.js`, `onboarding.js`, `onboardingComputed.js`, `projects.js`, `referrals.js`, `secrets.js`, `session.js`, `sessionComputed.js`, `sharing.js`, `skills.js`, `snippets.js`, `team.js`, `tools.js`, `tryTool.js`, `base.css`, `agent-setup.js`, `dashboard.css`, `SOURCES.md`, `README.md`, `vue-3.5.41.global.prod.js`, `tutorial.js`, `tutorial.html`, `tour.js`, `index.html`, `api.py`, `web.py`, `session.py`, `api_keys.py`, `test_api_keys.py` |
 | `interface/enrich-arena.md` | `arena.py`, `arena.py`, `arena.py`, `models.py`, `0027_enrich_arena.py`, `teams.py`, `auth.py`, `bootstrap.py`, `enrich-arena.html`, `arena.js`, `bench.js`, `arena-bench.test.cjs`, `arena-template.test.cjs`, `arena.css`, `agent-setup.js`, `arena_verification_insights.py`, `0029_arena_verification_snapshot.py`, `import_arena_verification.py`, `test_arena_verification_insights.py`, `arena_insights.py`, `arena_insights.py`, `0028_arena_insights.py`, `test_arena_insights.py`, `apollo.svg`, `branddev.svg`, `companyenrich.svg`, `findymail.svg`, `hunter.svg`, `icypeas.svg`, `leadmagic.svg`, `leadsforge.svg`, `lusha.svg`, `pdl.svg`, `predictleads.svg`, `thecompaniesapi.svg`, `tomba.svg`, `sitetrack.js`, `test_enrich_arena.py`, `enrich-arena.test.cjs` |
 | `interface/env-import.md` | `providers.py`, `skills.py` |
-| `interface/landing-sandbox.md` | `sandbox.py`, `sandbox_identity.py`, `pubfeed.py`, `sandbox.py`, `__init__.py`, `sandbox.py`, `api.py`, `onboard.py`, `web.py`, `index.html`, `install.sh` |
-| `interface/onboarding.md` | `auth.py`, `__init__.py`, `demo.py`, `cli.py`, `auth.py`, `onboard.py`, `index.html` |
-| `interface/seo.md` | `api.py`, `web.py`, `agent_pages.py`, `robots.txt`, `catalog.css`, `usecase.css`, `index.html`, `landing.html`, `terms.html`, `usecase-seo.html`, `usecase-company.html`, `usecase-enrichment.html`, `usecase-social.html`, `usecase-ads.html`, `people-search.html`, `grokbot.html`, `fable-gtm.html`, `ugc.html`, `jev.html`, `jev_xboost.py`, `xboost-seed.json`, `triage.json`, `signals.json`, `astra.html`, `page.css`, `page.js`, `llms.txt`, `indexnow_submit.py`, `support.html`, `og-card.html` |
+| `interface/landing-sandbox.md` | `sandbox.py`, `sandbox_identity.py`, `pubfeed.py`, `sandbox.py`, `__init__.py`, `sandbox.py`, `api.py`, `onboard.py`, `web.py`, `boot.js`, `SignedOutPage.vue`, `install.sh` |
+| `interface/onboarding.md` | `auth.py`, `__init__.py`, `demo.py`, `cli.py`, `auth.py`, `onboard.py`, `onboarding.js`, `WelcomeDialog.vue`, `GettingStartedPage.vue` |
+| `interface/seo.md` | `api.py`, `web.py`, `agent_pages.py`, `robots.txt`, `catalog.css`, `usecase.css`, `index.html`, `App.vue`, `PublicNavigation.vue`, `boot.js`, `landing.html`, `terms.html`, `usecase-seo.html`, `usecase-company.html`, `usecase-enrichment.html`, `usecase-social.html`, `usecase-ads.html`, `people-search.html`, `grokbot.html`, `fable-gtm.html`, `ugc.html`, `jev.html`, `jev_xboost.py`, `xboost-seed.json`, `triage.json`, `signals.json`, `astra.html`, `page.css`, `page.js`, `llms.txt`, `indexnow_submit.py`, `support.html`, `og-card.html` |
 | `interface/shell.md` | `shell.py`, `cli.py` |
 | `interface/skill.md` | `skill.md`, `SKILL.md`, `web.py`, `mcp_install.py`, `build_plugin.py`, `plugin.json`, `marketplace.json`, `plugin.json`, `plugin.json`, `package.json`, `cordis.patch.yml`, `index.js`, `plugin.json`, `minimax_plugin.py` |
 | `ops/capacity.md` | `__init__.py`, `collectors.py`, `policy.py`, `sweep.py`, `view.py`, `routes.py`, `signatures.py`, `verify.py`, `marks.py`, `test_capacity_protect.py`, `limiter.py`, `overflow_spend.py`, `routes_view.py`, `overflow.py`, `0007_overflow_spend.py`, `test_capacity_overflow.py`, `test_capacity_overflow_spend.py`, `0008_org_platform_overflow_disabled.py`, `test_capacity_smoothing.py`, `overflow_seed.json`, `__init__.py`, `orthogonal.py`, `monid.py`, `catalogs.py`, `0006_overflow_route.py`, `test_capacity_overflow_routes.py`, `test_influencersclub_overflow.py`, `worker.py`, `provider_balances.py`, `0005_capacity_policy_snapshot.py`, `test_capacity_know.py`, `test_capacity_collectors.py`, `test_financialdatasets.py` |
-| `ops/deploy.md` | `pyproject.toml`, `__main__.py`, `maintenance.py`, `env.py`, `0034_managed_api_keys.py`, `0035_default_key_generation.py`, `0036_activity_key_indexes.py`, `worker.py`, `selfhost.sh`, `config.py`, `db.py`, `email.py`, `audit.py`, `dev-local.sh`, `render.example.yaml` |
+| `ops/deploy.md` | `pyproject.toml`, `hatch_build.py`, `build-dashboard.sh`, `build-web.sh`, `frontend-e2e-server.sh`, `__main__.py`, `maintenance.py`, `env.py`, `0034_managed_api_keys.py`, `0035_default_key_generation.py`, `0036_activity_key_indexes.py`, `worker.py`, `selfhost.sh`, `config.py`, `db.py`, `email.py`, `audit.py`, `dev-local.sh`, `render.example.yaml` |
 | `reference/glossary.md` | `2026-06-30-jason-tools-registry.md` |

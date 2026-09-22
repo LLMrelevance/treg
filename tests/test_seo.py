@@ -158,7 +158,7 @@ async def test_catalog_urls_serve_the_dashboard_spa(clients: AsyncClient):
     for path in ("/catalog", "/catalog/google"):
         body = (await clients.get(path)).text
         assert '<div id="app"' in body, path
-        assert "vue" in body.lower(), path
+        assert 'type="module"' in body and "/app/ui/assets/" in body, path
 
 
 async def test_the_catalog_index_lists_shelves_without_javascript(clients: AsyncClient):
@@ -333,16 +333,16 @@ def test_no_shelf_is_published_that_the_app_grid_hides():
 # suite reads as text (see tests/test_dashboard_markup.py). Both were reported from the browser.
 
 def _spa() -> str:
-    from treg.routers.web import _WEB_DIR
-    return (_WEB_DIR / "index.html").read_text(encoding="utf-8")
+    from dashboard_source import dashboard_source
+    return dashboard_source()
 
 
 def test_public_catalog_drops_the_workspace_chrome():
     """A catalog visitor is reading a website, not operating an app. The org switcher, the global
     tool search and the member nav are furniture for a job they have not started."""
     spa = _spa()
-    assert '<div class="pubnav" v-if="publicCatalog">' in spa      # marketing nav instead
-    member_header = '<header class="rd-top" v-else>'
+    assert '<template v-if="publicCatalog">' in spa      # marketing nav instead
+    member_header = '<header class="rd-top" >'
     assert member_header in spa                                  # app bar only for members
     header = spa.split(member_header, 1)[1].split('</header>', 1)[0]
     assert 'class="orgblock"' in header and 'class="rd-navs"' in header

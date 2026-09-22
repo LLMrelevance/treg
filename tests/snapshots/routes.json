@@ -463,6 +463,15 @@
       "GET",
       "HEAD"
     ],
+    "name": "dashboard_asset",
+    "path": "/app/ui/assets/{name}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "dashboard",
     "path": "/app"
   },

@@ -32,6 +32,29 @@ from .auth_helpers import OAUTH_RETURN_COOKIE, _is_https, _take_oauth_return
 from .signup_cookies import _remember_referral
 
 
+def _dashboard_index() -> Path:
+    settings = get_settings()
+    if settings.frontend_dev:
+        host = urlsplit(settings.public_url).hostname
+        if "sqlite" not in settings.database_url or host not in {"localhost", "127.0.0.1", "::1"}:
+            raise RuntimeError("TREG_FRONTEND_DEV requires local SQLite and a loopback public URL")
+        return Path(__file__).resolve().parents[3] / "frontend" / "index.html"
+    return _WEB_DIR / "dashboard" / "index.html"
+
+
+def _dashboard_document(index: Path) -> str:
+    document = index.read_text(encoding="utf-8")
+    if get_settings().frontend_dev:
+        host = urlsplit(get_settings().public_url).hostname
+        origin = "http://[::1]:5173" if host == "::1" else f"http://{host}:5173"
+        document = document.replace(
+            '<script type="module" src="/src/main.ts"></script>',
+            f'<script type="module" src="{origin}/app/ui/@vite/client"></script>'
+            f'<script type="module" src="{origin}/app/ui/src/main.ts"></script>',
+        )
+    return document
+
+
 LOCAL_USER_EMAIL = "you@local.treg"   # the single-user identity; a real address is never needed
 
 
@@ -256,7 +279,7 @@ def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
        implementation this design avoids. It carries the TEXT (names, summaries, providers, prices),
        which is what a crawler that does not run scripts is here for.
     """
-    index = _WEB_DIR / "index.html"
+    index = _dashboard_index()
     if not index.exists():
         return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     base = get_settings().public_url.rstrip("/")
@@ -289,7 +312,7 @@ def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
         f'<meta name="twitter:image" content="{base}/media/og.png"/>\n'
         + blocks
     )
-    html = index.read_text(encoding="utf-8")
+    html = _dashboard_document(index)
     # index.html carries `robots: noindex` for the authenticated app; these URLs are public, and the
     # `index, follow` in `meta` only wins if the noindex is gone. Stripped BEFORE `meta` is spliced
     # in, so this scan only ever runs over the static bundle — never over a string carrying a
@@ -2655,12 +2678,22 @@ async def landing(request: Request, treg_session: str = Cookie(default=""),
     return await dashboard(request, treg_session, db)
 
 
+@app.get("/app/ui/assets/{name}", include_in_schema=False)
+async def dashboard_asset(name: str):
+    """Only serve build artifacts from the dashboard's flat asset directory."""
+    directory = (_WEB_DIR / "dashboard" / "assets").resolve()
+    asset = (directory / name).resolve()
+    if asset.parent != directory or not asset.is_file():
+        raise HTTPException(404)
+    return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
 @app.get("/app", include_in_schema=False)
 async def dashboard(
     request: Request, treg_session: str = Cookie(default=""),
     db: AsyncSession = Depends(get_session),
 ):
-    """Serve the single-file dashboard (same-origin, so it calls this API directly).
+    """Serve the compiled dashboard (same-origin, so it calls this API directly).
 
     Also the place a parked OAuth authorization resumes. Every browser sign-in door — GitHub, Google,
     the email code — ends here, so honouring the cookie at this ONE point covers all of them, rather
@@ -2672,7 +2705,7 @@ async def dashboard(
     an account. Only reachable when `single_user_ok` holds (local sqlite + loopback URL), so this
     can never hand a session to a stranger on a real deploy.
     """
-    index = _WEB_DIR / "index.html"
+    index = _dashboard_index()
     if not index.exists():
         return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     signed_in = await _user_from_session(treg_session, db)
@@ -2682,7 +2715,7 @@ async def dashboard(
         resume = RedirectResponse(parked, status_code=302)
         resume.delete_cookie(OAUTH_RETURN_COOKIE)
         return resume
-    resp = FileResponse(index, headers={"Cache-Control": "no-cache"})
+    resp = HTMLResponse(_dashboard_document(index), headers={"Cache-Control": "no-cache"})
     if not signed_in:
         owner = await _local_owner(db)
         if owner is not None:
@@ -2697,7 +2730,7 @@ def _spa_with_og(kind: str, name: str):
     """Serve the SPA at a shareable detail path (/app/skills/x, /app/tools/x) with per-resource
     og/twitter meta so link unfurls show what was shared. The meta echoes only the URL's own
     name segment — no DB read, so an unauthenticated crawler learns nothing it didn't send."""
-    index = _WEB_DIR / "index.html"
+    index = _dashboard_index()
     if not index.exists():
         return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     label = "skill" if kind == "skills" else "tool"
@@ -2713,7 +2746,7 @@ def _spa_with_og(kind: str, name: str):
     # `<title>tools-registry</title>`, the page says `<title>treg</title>`, so the replacement
     # silently did nothing and every shared link unfurled blank — a rename in the dashboard must
     # not be able to switch this off without a word.
-    html, hits = re.subn(r"<title>.*?</title>", lambda _m: meta, index.read_text(encoding="utf-8"),
+    html, hits = re.subn(r"<title>.*?</title>", lambda _m: meta, _dashboard_document(index),
                          count=1, flags=re.IGNORECASE | re.DOTALL)
     if not hits:  # no title at all: still emit the meta rather than serve a bare page
         html = html.replace("<head>", "<head>\n" + meta, 1)

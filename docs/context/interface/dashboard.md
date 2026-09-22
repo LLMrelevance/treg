@@ -3,7 +3,82 @@ title: The web dashboard (served from FastAPI)
 status: shipped
 sources:
   - src/treg/web/sitetrack.js
-  - src/treg/web/index.html
+  - frontend/index.html
+  - frontend/package.json
+  - frontend/vite.config.ts
+  - frontend/src/App.vue
+  - frontend/src/api.ts
+  - frontend/src/components/DashboardNavigation.vue
+  - frontend/src/components/PublicNavigation.vue
+  - frontend/src/components/SignInDialog.vue
+  - frontend/src/components/SignedOutPage.vue
+  - frontend/src/dialogs/AcceptInvitesDialog.vue
+  - frontend/src/dialogs/AgentGuideDialog.vue
+  - frontend/src/dialogs/CallDetailsDialog.vue
+  - frontend/src/dialogs/ConnectTokenDialog.vue
+  - frontend/src/dialogs/ConnectionMethodDialog.vue
+  - frontend/src/dialogs/CopyToolDialog.vue
+  - frontend/src/dialogs/EditToolDialog.vue
+  - frontend/src/dialogs/ExtraCredentialDialog.vue
+  - frontend/src/dialogs/ImportSkillDialog.vue
+  - frontend/src/dialogs/RecipeDialog.vue
+  - frontend/src/dialogs/RequestToolDialog.vue
+  - frontend/src/dialogs/ResourcePickerDialog.vue
+  - frontend/src/dialogs/RunToolDialog.vue
+  - frontend/src/dialogs/ShareDialog.vue
+  - frontend/src/dialogs/TopUpDialog.vue
+  - frontend/src/dialogs/TryEndpointDialog.vue
+  - frontend/src/dialogs/WelcomeDialog.vue
+  - frontend/src/main.ts
+  - frontend/src/pages/ActivityPage.vue
+  - frontend/src/pages/AdminPage.vue
+  - frontend/src/pages/CatalogPage.vue
+  - frontend/src/pages/DetailPage.vue
+  - frontend/src/pages/GettingStartedPage.vue
+  - frontend/src/pages/HelpPage.vue
+  - frontend/src/pages/PlatformPage.vue
+  - frontend/src/pages/ProviderPage.vue
+  - frontend/src/pages/ReferralsPage.vue
+  - frontend/src/pages/SecretsPage.vue
+  - frontend/src/pages/TeamPage.vue
+  - frontend/src/pages/ToolsPage.vue
+  - frontend/src/state/activity.js
+  - frontend/src/state/admin.js
+  - frontend/src/state/agents.js
+  - frontend/src/state/agentsComputed.js
+  - frontend/src/state/analytics.js
+  - frontend/src/state/billing.js
+  - frontend/src/state/billingComputed.js
+  - frontend/src/state/boot.js
+  - frontend/src/state/catalog.js
+  - frontend/src/state/catalogComputed.js
+  - frontend/src/state/connections.js
+  - frontend/src/state/constants.js
+  - frontend/src/state/context.ts
+  - frontend/src/state/controller.js
+  - frontend/src/state/data.js
+  - frontend/src/state/details.js
+  - frontend/src/state/detailsComputed.js
+  - frontend/src/state/format.js
+  - frontend/src/state/governance.js
+  - frontend/src/state/help.js
+  - frontend/src/state/keys.js
+  - frontend/src/state/lifecycle.js
+  - frontend/src/state/navigation.js
+  - frontend/src/state/onboarding.js
+  - frontend/src/state/onboardingComputed.js
+  - frontend/src/state/projects.js
+  - frontend/src/state/referrals.js
+  - frontend/src/state/secrets.js
+  - frontend/src/state/session.js
+  - frontend/src/state/sessionComputed.js
+  - frontend/src/state/sharing.js
+  - frontend/src/state/skills.js
+  - frontend/src/state/snippets.js
+  - frontend/src/state/team.js
+  - frontend/src/state/tools.js
+  - frontend/src/state/tryTool.js
+  - frontend/src/styles/base.css
   - src/treg/web/agent-setup.js
   - src/treg/web/media/redesign/dashboard.css
   - src/treg/web/media/redesign/SOURCES.md
@@ -108,34 +183,36 @@ generated tool name in the second, then health/capabilities and actions. Method-
 discovery is unchanged. A direct identity miss shows `setup required`; it does not show the
 connection as working and no direct tool exists.
 
-A single-file Vue 3 dashboard in `src/treg/web/index.html`, served **same-origin** by the API
-(`GET /app` → `FileResponse`, `dashboard()` in `routers.web`, via `_WEB_DIR`). Same origin = no CORS and it
-ships with the server (Render/Fly). The authenticated redesign follows the root `design.md`; older Ledger references in
-`docs/style-board.html` / `docs/DASHBOARD-PLAN.md` describe the previous visual system.
+The Vue 3 Dashboard is authored in `frontend/` and compiled with Vite. `frontend/index.html`
+contains only the document entry; templates live in `.vue` pages, dialogs and shared navigation.
+`state/` separates the existing Options API use cases by feature. `context.ts` keeps their
+per-application state available to extracted components during this incremental migration; it is
+not a singleton, and this boundary is not yet a fully typed domain store. The TypeScript entry,
+JSON transport and development configuration are checked with `vue-tsc` before every build.
+History navigation retains existing hashes, catalog URLs and shared links in `state/navigation.js`,
+`state/catalog.js`, `state/details.js` and `state/boot.js`.
 
-### Vue is vendored, not fetched from a CDN
-There is no bundler, so Vue arrives as a plain `<script src>` — but from **`/vendor/`**, served off
-`src/treg/web/vendor/` by an `_ImmutableStatic` mount in `bootstrap.py`, never from unpkg. It used to come
-from `unpkg.com/vue@3`, and a visitor whose network could not reach unpkg got a **blank signed-in
-dashboard with no error** ([#137](https://github.com/superdesigndev/treg/issues/137): mainland-China
-`ERR_CONNECTION_CLOSED`, then `Vue is not defined`). The landing has no external scripts at all, so
-the symptom read as "sign-in broke the site" when it was only "the dashboard needs one more origin".
+`GET /app` serves the compiled document same-origin from the Python package, preserving local
+sign-in and parked OAuth authorization. Catalog and shared-link handlers modify that same document's
+metadata as before. `_app_version()` hashes the built entry, whose asset filenames change with
+bundle content. HTML is revalidated; `/app/ui/assets/{name}` serves immutable hashed assets and
+returns 404 for missing files. Assets remain a control-role surface.
 
-Two rules follow, and both are load-bearing:
+`bash scripts/build-dashboard.sh` installs the npm lockfile and builds into the gitignored
+`src/treg/web/dashboard/` directory. Hatch includes it in distributions and rejects missing builds;
+Node is not needed when installing a published wheel. `scripts/dev-local.sh up` starts both Python
+and Vite, using a local-only development entry for hot updates. See `CONTRIBUTING.md`.
 
-- **Pin the version in the filename** (`vue-3.5.41.global.prod.js`) and verify new bytes against a
-  second CDN before committing them — see `src/treg/web/vendor/README.md`. A floating `vue@3` tag is
-  arbitrary future code running in an authenticated session; that is why it is gone.
-- **Nothing in the dashboard's critical path may be third-party.** Still CDN-hosted and *not*
-  critical: the `@lobehub` agent icons (`agentIcon`/`agentIconInv`) and Google Fonts — those degrade
-  to broken images and system fonts rather than a blank page.
+### Browser dependencies
 
-A **loader guard** sits right after the script tag. `[v-cloak]{display:none}` hides the un-compiled
-template until Vue mounts, which is precisely what made #137 silent — so the guard checks whether
-`#app` is still cloaked ~1.5s after `load` and, if it is, replaces the blank with a readable message,
-a reload button, and the issues link. Anything that stops Vue mounting now says so on screen.
+Vue is pinned in the npm lockfile and bundled from the same origin, so a blocked CDN cannot
+prevent startup. The shared onboarding widgets in `/agent-setup.js` still serve both Dashboard and
+Arena; their templates use Vue's bundled compiler. The existing vendored global Vue remains for
+standalone pages. Agent icons and Google Fonts remain optional external presentation assets.
+The unmounted entry displays a loading message and a reload link rather than hiding a raw template.
+The authenticated redesign follows the root `design.md`.
 
-`index.html`'s closing `<script src="/sitetrack.js">` (also on `landing.html`, every `usecase-*.html`,
+`frontend/index.html`'s `<script src="/sitetrack.js">` (also on `landing.html`, every `usecase-*.html`,
 `resources.html`, `tutorial.html`) sets the first-touch `treg_utm` cookie and initialises PostHog with
 pageviews on; `initAnalytics()` in the SPA defers to it (`window.__phInit`) and only identifies, keeping
 its inline init as the fallback for a stale bundle. Landing-page visitors used to be invisible to
@@ -923,7 +1000,7 @@ near-white background, bright cyan URLs, and a dark copy pill. That is also why 
 "terminal surfaces stay dark in both themes" rule is gone: in light mode a code block is now a light
 block with dark ink, which is what makes the ramp legible.
 
-Two token sets carry it (index.html §3.8, mirrored in tutorial.html, which has its own copy of the
+Two token sets carry it (`frontend/src/styles/base.css`, mirrored in tutorial.html, which has its own copy of the
 sheet): `--code-bg` / `--code-ink` / `--code-line` / `--code-btn` for the surface, and
 `--sx-cmd` / `--sx-var` / `--sx-str` / `--sx-flag` / `--sx-cmt` / `--sx-punct` for the ramp. Every
 light value clears **4.5:1** on `--code-bg` (measured worst case across all pages: 4.67 light, 5.62
@@ -977,7 +1054,7 @@ the prose walkthrough is `docs/TUTORIAL.md`. Editing steps means editing `tutori
 
 **Two focused tutorials as cards** — **Import & shell** (`importShell`, auto-import + shell mode + the
 local-run sandbox) and **Team access control** (`access`, per-member tool access + the local-run dial)
-are cards on the tutorial chooser (`view==='help'`), rendered by **one shared stepper template** in `index.html`
+are cards on the tutorial chooser (`view==='help'`), rendered by **one shared stepper template** in the Dashboard components
 (`helpMode === 'import-shell' || 'access'`), with its own `xtut*`-prefixed state/computed/method names
 (`xtut.i`, `xtutSteps`, `xtutStep`, `xtutTitle`, `xtutGo`) so they never collide with the CLI tutorial's
 `tut*` names. Two extra persona chips: `you` (green) and `sam` (amber). Each also has a **prose twin**

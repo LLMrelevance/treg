@@ -152,8 +152,11 @@ xdist is pulled via `--with`, not the lockfile — same as CI. The Postgres CI j
   `[server]` extra, the certificate authority is `[proxy]`. Never import a heavy dependency at the
   top of a CLI-path module; the "Lightweight CLI modules" import-linter contract lists them and
   fails the build.
-- **The dashboard** (`src/treg/web/index.html`) is a single-file Vue app with no build step, so a
-  broken view name fails silently. Verify in a browser.
+- **The dashboard** lives in `frontend/` (Vue components, TypeScript entry/transport, Vite).
+  Build with `bash scripts/build-dashboard.sh`; generated assets in `src/treg/web/dashboard/`
+  ship with Python. Run `npm --prefix frontend test` and `npm --prefix frontend run test:e2e`.
+  Existing Options API use cases live in `frontend/src/state/`; preserve their session and
+  navigation behavior when narrowing component state. Never put dashboard logic back into HTML.
 - **Schema.** Alembic owns it (`src/treg/alembic/versions/`); every schema change is a revision.
   Startup only verifies the revision and refuses to boot when behind; migrations run only via
   `python -m treg upgrade`.
