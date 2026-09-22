@@ -81,3 +81,26 @@ test('public catalog and shared deep links remain available without a session', 
   await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible()
   expect(errors).toEqual([])
 })
+
+test('session initialization never flashes the old signed-out landing page', async ({ page }) => {
+  let releaseMeta!: () => void
+  const metaGate = new Promise<void>(resolve => { releaseMeta = resolve })
+  await page.route('**/meta', async route => { await metaGate; await route.continue() })
+  await page.goto('/app?ref=frontend-test')
+  await expect(page.getByRole('status')).toHaveText('Loading treg…')
+  await expect(page.getByText('the tool catalog for your agent', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('dialog', { name: 'Sign in' })).toHaveCount(0)
+  releaseMeta()
+  await expect(page.getByPlaceholder('you@work.com')).toBeVisible()
+  await page.unroute('**/meta')
+
+  await signIn(page)
+  let releaseSession!: () => void
+  const sessionGate = new Promise<void>(resolve => { releaseSession = resolve })
+  await page.route('**/auth/me', async route => { await sessionGate; await route.continue() })
+  await page.reload()
+  await expect(page.getByRole('status')).toHaveText('Loading treg…')
+  await expect(page.getByText('Sign in to treg', { exact: true })).toHaveCount(0)
+  releaseSession()
+  await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible()
+})

@@ -189,6 +189,9 @@ contains only the document entry; templates live in `.vue` pages, dialogs and sh
 per-application state available to extracted components during this incremental migration; it is
 not a singleton, and this boundary is not yet a fully typed domain store. The TypeScript entry,
 JSON transport and development configuration are checked with `vue-tsc` before every build.
+Initialization renders a neutral loading state until session and route resolution finish, with a
+retry on unexpected failure. Signed-out arrivals get a focused sign-in entry or shared-link gate;
+the obsolete embedded marketing page is removed. The public landing page remains at `/`.
 History navigation retains existing hashes, catalog URLs and shared links in `state/navigation.js`,
 `state/catalog.js`, `state/details.js` and `state/boot.js`.
 

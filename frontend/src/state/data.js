@@ -4,6 +4,7 @@ export default function data(){
     let cfg={active:null,orgs:{}}; try{ cfg=JSON.parse(localStorage.getItem(LS))||cfg; }catch(e){}
     return {
       elements: createElements(),
+      bootReady: false, bootFailed: false,
       theme: localStorage.getItem('treg-theme')||'light',
       mobileNav: false,  // mobile sidebar toggle
       // True when this load is a PUBLIC catalog URL (/catalog, /catalog/<slug>). The catalog API is

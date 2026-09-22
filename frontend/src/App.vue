@@ -38,8 +38,16 @@ export default { ...controller, components: { ...controller.components, CatalogP
 
 <template>
 <div>
-<div :class="{redesign:authed && !publicCatalog}">
-  <!-- LANDING (logged-out) -->
+<main v-if="!bootReady || bootFailed" class="boot-status" aria-live="polite" :aria-busy="!bootReady">
+  <a href="/" class="brand">▚ treg</a>
+  <template v-if="bootFailed">
+    <p role="alert">The dashboard couldn't load. Please try again.</p>
+    <button class="btn" @click="reloadApp()">Try again</button>
+  </template>
+  <p v-else role="status">Loading treg…</p>
+</main>
+<div v-else :class="{redesign:authed && !publicCatalog}">
+  <!-- Focused sign-in entry after session initialization. -->
   <SignedOutPage v-if="!authed && !publicCatalog" />
 
   <template v-else>
@@ -251,3 +259,8 @@ export default { ...controller, components: { ...controller.components, CatalogP
 </div>
 </div>
 </template>
+
+<style scoped>
+.boot-status { min-height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); }
+.boot-status .brand { color: var(--text); text-decoration: none; }
+</style>

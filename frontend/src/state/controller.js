@@ -45,6 +45,10 @@ export default {
     activeOrgId(){ this.resetRenameForm(); },  // team switch or first load: prefill the rename form
   },
  provide() { return provideDashboard(this) },
- mounted: boot,
+ async mounted() {
+   try { await boot.call(this) }
+   catch (error) { this.bootFailed = true; console.error('Dashboard initialization failed', error) }
+   finally { this.bootReady = true }
+ },
  beforeUnmount() { this.stopLifecycle?.() },
 }
