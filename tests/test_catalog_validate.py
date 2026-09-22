@@ -544,19 +544,6 @@ def test_reported_charge_requires_supported_units_and_path(rule):
     assert bool(errors) is (rule != {'path': 'billing.charge', 'unit': 'usd'})
 
 
-def test_reported_credit_charge_accepts_priced_provider_and_cost_table():
-    cost = dict(catalog_store.load().by_id['tavily.web.search']['cost'])
-    errors = []
-    validator.check_cost(cost, 'test', errors, [],
-                         catalog_store.load().by_id['tavily.web.search']['input'], 'tavily')
-    assert errors == []
-
-    errors = []
-    validator.check_cost(cost, 'test', errors, [],
-                         catalog_store.load().by_id['tavily.web.search']['input'], 'no-such-provider')
-    assert any('needs a numeric fx.yaml credit_rates_usd entry' in error for error in errors)
-
-
 @pytest.mark.parametrize('rule,valid', [
     ({'body.realtime': True}, True),
     ({'body.realtime': 1}, False),
@@ -573,21 +560,33 @@ def test_platform_request_requires_declared_fixed_body_value(rule, valid):
     assert (not errors) is valid
 
 
-@pytest.mark.parametrize('rule,valid', [
-    ({'body.limit': {'min': 1, 'max': 20}}, True),
-    ({'body.limit': {'min': 0, 'max': 20}}, False),
-    ({'body.limit': {'min': 1, 'max': 51}}, False),
-    ({'body.limit': {'min': 20, 'max': 1}}, False),
-    ({'body.name': {'min': 1, 'max': 20}}, False),
-    ({'queryParams.limit': {'min': 1, 'max': 20}}, False),
-])
-def test_platform_bounds_require_declared_numeric_body_range(rule, valid):
-    errors = []
-    validator.check_platform_bounds(rule, {'body': {
-        'limit': {'type': 'integer', 'min': 1, 'max': 50},
-        'name': {'type': 'string'},
-    }}, 'test', errors)
-    assert (not errors) is valid
+def test_tavily_rates_require_complete_positive_finite_endpoint_tables():
+    cat = catalog_store.load()
+    for endpoint_id, expected in validator.TAVILY_RATE_KEYS.items():
+        cost = cat.by_id[endpoint_id]["cost"]
+        errors = []
+        validator.check_tavily_rates(endpoint_id, cost, endpoint_id, errors)
+        assert errors == []
+        assert set(cost["tavily_rates"]) == expected
+
+    valid = cat.by_id["tavily.web.search"]["cost"]["tavily_rates"]
+    broken = [
+        None,
+        {},
+        {key: value for key, value in valid.items() if key != "advanced"},
+        valid | {"typo": 1},
+        valid | {"basic": 0},
+        valid | {"basic": -1},
+        valid | {"basic": True},
+        valid | {"basic": "1"},
+        valid | {"basic": float("nan")},
+        valid | {"basic": float("inf")},
+    ]
+    for rates in broken:
+        errors = []
+        validator.check_tavily_rates(
+            "tavily.web.search", {"tavily_rates": rates}, "test", errors)
+        assert errors
 
 
 # ---- ContactOut ----

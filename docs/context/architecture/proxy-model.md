@@ -359,11 +359,11 @@ unchanged. The parent only assembles `{output, raw, _treg}` and owns the idempot
 
 ## Platform capacity: refuse before reserve (plan step D)
 
-Catalog `platform_request` and `platform_bounds` checks run only after a platform offer is selected
-and before reserve. Exact selectors can force settlement evidence such as Tavily's
-`include_usage: true`; numeric bounds can require a finite value in a narrower shared-key range,
-such as Tavily Map/Crawl `limit` 1–20. Missing and out-of-range values are caller errors. BYOK is
-unchanged because the provider, not treg, bears that account's exposure.
+Catalog `platform_request` checks and provider-specific request guards run only after a platform
+offer is selected and before reserve. Exact selectors require evidence such as Tavily Search's
+caller-supplied `include_usage: true`. Openmart requires its explicit bounded record count; Tavily
+Map and Crawl require an integer `limit` from 1 to 20. Missing, Boolean and out-of-range values are
+caller errors. BYOK is unchanged because the provider, not treg, bears that account's exposure.
 
 Tier 4 spends treg's own vendor account, and that account can be empty. `_resolve_marketplace_call`
 asks, after `_platform_offer` says yes: is this call **exhausted** in the in-process capacity view

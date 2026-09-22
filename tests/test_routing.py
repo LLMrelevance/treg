@@ -140,7 +140,7 @@ def test_openmart_tools_are_direct_only_not_routed():
     assert "openmart.companies.enrich" not in cat.by_id["treg.companies.enrich"]["routed_children"]
 
 
-def test_tavily_routes_only_search_and_keeps_group_billed_tools_direct():
+def test_tavily_routes_only_search_and_keeps_result_settled_tools_direct():
     cat = catalog_store.load()
     assert "tavily.web.search" in cat.by_id["treg.web.search"]["routed_children"]
     assert cat.adapters["tavily.web.search"].verified
