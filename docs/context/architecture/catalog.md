@@ -200,6 +200,15 @@ An optional `cost.settle: base` keeps documented riders in the reserve but settl
 call at the catalog base when repeat live evidence proves that the provider neither bills nor
 delivers those riders.
 
+Tavily follows the provider-specific request/response pattern used for Hunter, Tomba and Openmart.
+`resolve._tavily_pricing` reads `cost.tavily_rates` and the caller's original body to size a bounded
+hold. Search reserves one or two credits and `settle._tavily_cost_micro` reads its per-request
+`usage.credits`. Extract and Map instead settle fractional per-success rates from their documented
+`results` arrays. Crawl settles a conservative per-returned-extraction allocation combining its
+mapping and extraction modes; Tavily does not expose every successfully mapped page, so treg absorbs
+any hidden mapping difference under the 20-page platform cap. Extract, Map and Crawl never use the
+provider account's grouped `usage.credits` to decide which team pays. BYOK bypasses all metering.
+
 A verification stamp proves the request shape, response shape, and paid behavior that the evidence
 actually observed. A placeholder path value or a free miss does not prove a paid hit. Such rows keep
 the documented price and say which paid behavior remains unobserved. Captured examples use public
@@ -827,18 +836,17 @@ and state the break-even volume, and `fee_usd_month` must be present as data (th
 and edited by hand. The full ladder: docs/SHARED-PLAN-PRICING-PLAN.md; the billing side (429 never
 billable, the recovery report): architecture/money.md.
 
-For synchronous providers that disclose the exact charge in the response, a paid cost may declare
-`reported_charge: {path: ..., unit: usd|credit}`. The catalog estimate still reserves a safe
+For synchronous providers that disclose the exact USD charge in the response, a paid cost may
+declare `reported_charge: {path: ..., unit: usd}`. The catalog estimate still reserves a safe
 ceiling. A finite nonnegative response value settles the call at that amount; missing, invalid, or
-non-finite evidence falls back to the normal estimate/miss rules. Credit-denominated evidence
-requires a provider rate in `fx.yaml`, and the request freezes that conversion before relay so a
-later rate edit cannot re-price the in-flight call. `reported_charge` is generic catalog metadata,
-not a provider-specific billing branch, and cannot be combined with `cost.settle`.
+non-finite evidence falls back to the normal estimate/miss rules. `reported_charge` is generic
+catalog metadata, not a provider-specific billing branch, and cannot be combined with `cost.settle`.
 
-`platform_request` fixes exact body values needed only on the shared credential. The complementary
-`platform_bounds` mapping requires a declared numeric body field and a finite in-schema min/max;
-resolution rejects a missing, Boolean, non-finite, or out-of-range value before reserve. These
-controls never narrow a team's own credential.
+`platform_request` fixes exact body values needed only on the shared credential. Provider-specific
+request guards bound shapes whose billing formulas need more context than an exact selector:
+Openmart requires its explicit 1-25 record count, while Tavily Map and Crawl require an explicit
+integer limit from 1 to 20. Resolution applies these only after selecting the platform offer and
+before reserve; a team's own credential retains the upstream contract.
 
 A second treg-set kind, **`kind: treg_trial`**, prices a provider at exactly **$0** with a
 `trial_calls_per_team_day` allowance as data beside the zero: a capped taste served on treg's own

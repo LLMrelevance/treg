@@ -659,7 +659,6 @@ def _normalize(raw: dict, provider: str, directory: Path) -> dict:
         # User-visible long-lived objects created on a shared provider account.
         "managed_resource": raw.get("managed_resource") or None,
         "platform_request": raw.get("platform_request") or None,
-        "platform_bounds": raw.get("platform_bounds") or None,
         # How treg serves the catalog fallback after the team's own tool/credential ladder misses.
         # Absent means the provider credential is required. `anonymous` means the verified public
         # upstream route is called with no injected credential; catalog validation limits that

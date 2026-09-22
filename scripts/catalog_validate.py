@@ -257,32 +257,6 @@ def check_platform_request(rule: object, input_schema: object, where: str,
             fail(errors, where, "platform_request value must match the field's singleton enum")
 
 
-def check_platform_bounds(rule: object, input_schema: object, where: str,
-                          errors: list[str]) -> None:
-    """Validate platform-only numeric request limits; BYOK keeps the upstream range."""
-    if not isinstance(rule, dict) or not rule:
-        fail(errors, where, "platform_bounds must be a non-empty mapping")
-        return
-    fields = _input_fields(input_schema)
-    for path, bounds in rule.items():
-        spec = fields.get(path) if isinstance(path, str) else None
-        if (not isinstance(path, str) or not path.startswith("body.") or spec is None
-                or spec.get("type") not in ("integer", "number")):
-            fail(errors, where, "platform_bounds must name a declared numeric body field")
-            continue
-        if (not isinstance(bounds, dict) or set(bounds) != {"min", "max"}
-                or not _finite_number(bounds.get("min"))
-                or not _finite_number(bounds.get("max"))
-                or bounds["min"] > bounds["max"]):
-            fail(errors, where, "platform_bounds values require finite min <= max")
-            continue
-        declared_min, declared_max = spec.get("min"), spec.get("max")
-        if _finite_number(declared_min) and bounds["min"] < declared_min:
-            fail(errors, where, "platform_bounds min cannot be below the input min")
-        if _finite_number(declared_max) and bounds["max"] > declared_max:
-            fail(errors, where, "platform_bounds max cannot exceed the input max")
-
-
 def check_platform_auth(ep: dict, where: str, errors: list[str]) -> None:
     """Anonymous platform fallback is intentionally narrow: proven public GETs that cost zero."""
     mode = ep.get("platform_auth")
@@ -637,6 +611,7 @@ def check_managed_resource(rule: object, where: str, input_schema: object,
 
 
 def _credit_rate(provider: str | None) -> object:
+    """The provider credit rate used by async cost.settle: usage validation."""
     fx = yaml.safe_load((CATALOG / "fx.yaml").read_text()) or {}
     entry = (fx.get("credit_rates_usd") or {}).get(provider or "")
     return entry.get("usd") if isinstance(entry, dict) else entry
@@ -669,10 +644,8 @@ def check_cost(cost: dict, where: str, errors: list[str], warnings: list[str],
         if (not isinstance(reported, dict) or set(reported) != {"path", "unit"}
                 or not isinstance(reported.get("path"), str)
                 or not JSON_PATH.fullmatch(reported["path"])
-                or reported.get("unit") not in {"usd", "credit"}):
-            fail(errors, where, "cost.reported_charge requires a JSON path and unit: usd or credit")
-        if reported.get("unit") == "credit" and not _finite_number(_credit_rate(provider)):
-            fail(errors, where, "cost.reported_charge unit credit needs a numeric fx.yaml credit_rates_usd entry")
+                or reported.get("unit") != "usd"):
+            fail(errors, where, "cost.reported_charge requires a JSON path and unit: usd")
         if "settle" in cost or cost.get("type") == "free":
             fail(errors, where, "cost.reported_charge requires a paid price without cost.settle")
     if "display" in cost:
@@ -1057,8 +1030,6 @@ def main(argv: list[str]) -> int:
             check_platform_auth(ep, where, errors)
             if "platform_request" in ep:
                 check_platform_request(ep["platform_request"], inp, where, errors)
-            if "platform_bounds" in ep:
-                check_platform_bounds(ep["platform_bounds"], inp, where, errors)
             default_array_encoding = inp.get("queryArrayEncoding")
             if (default_array_encoding is not None
                     and default_array_encoding not in QUERY_ARRAY_ENCODINGS):
