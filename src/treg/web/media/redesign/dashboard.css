@@ -27,9 +27,7 @@ body:has(.redesign)::before { display:none; }
 .rd-top { position:sticky; top:0; z-index:50; display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:18px; min-height:57px; padding:9px 20px; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(14px); }
 .rd-identity,.rd-account,.rd-brand,.rd-navs,.rd-social { display:flex; align-items:center; min-width:0; }
 .rd-identity { gap:24px; }
-.rd-brand { gap:6px; flex:none; text-decoration:none; font-size:15px; font-weight:500; color:var(--ink); }
-.rd-brand img { width:23px; height:24px; object-fit:contain; mix-blend-mode:multiply; }
-[data-theme="dark"] .rd-brand img { filter:invert(1); mix-blend-mode:screen; }
+.rd-brand { gap:6px; flex:none; text-decoration:none; font-size:15px; font-weight:700; color:var(--ink); }
 .rd-top .orgblock { width:185px; min-width:0; margin:0; border-radius:10px; background:var(--surface); }
 .rd-top .orgmain { min-height:36px; font-size:13px; }
 .rd-top .orgname { font-weight:600; }
