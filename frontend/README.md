@@ -41,6 +41,7 @@ uv build
 ```
 
 Browser tests start their own server on :18791 with a disposable database and no dotenv file.
+They use full Chromium in headless mode so back/forward cache restoration is exercised.
 `PLAYWRIGHT_CHANNEL=chrome` can use an installed Chrome for local checks.
 
 Builds generate `src/treg/web/dashboard/`, which is ignored by Git and included in wheels/sdists.

@@ -8,7 +8,8 @@ export default defineConfig({
     viewport: { width: 1440, height: 1000 },
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
-    ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}),
+    // Use the full browser's headless mode: headless-shell does not exercise BFCache.
+    channel: process.env.PLAYWRIGHT_CHANNEL || 'chromium',
   },
   webServer: {
     command: 'bash ../scripts/frontend-e2e-server.sh',

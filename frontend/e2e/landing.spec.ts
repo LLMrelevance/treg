@@ -69,8 +69,15 @@ test('landing renders its local 3D assets and copies the serving-origin setup co
   await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'ready', { timeout: 20000 })
   await page.keyboard.press('Escape')
   await expect(page.locator('html')).not.toHaveClass(/opening-stage/)
+  // Record the short-lived announcement in the page, so a busy software WebGL renderer
+  // cannot make the test runner miss it between protocol round trips.
+  await page.getByRole('status').evaluate(status => {
+    new MutationObserver(() => {
+      if (status.textContent === 'Copied') status.setAttribute('data-copy-announced', 'true')
+    }).observe(status, { childList: true, characterData: true, subtree: true })
+  })
   await page.getByRole('button', { name: 'Copy agent command', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('Copied')
+  await expect(page.getByRole('status')).toHaveAttribute('data-copy-announced', 'true')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('set up treg - http://127.0.0.1:18791/llms.txt')
   await page.getByRole('button', { name: 'Next agent scenario' }).click()
   await expect(page.locator('#sc-tools button')).toHaveCount(6)
