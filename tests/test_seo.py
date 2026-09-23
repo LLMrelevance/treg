@@ -158,7 +158,7 @@ async def test_catalog_urls_serve_the_dashboard_spa(clients: AsyncClient):
     for path in ("/catalog", "/catalog/google"):
         body = (await clients.get(path)).text
         assert '<div id="app"' in body, path
-        assert "vue" in body.lower(), path
+        assert "/app/legacy/assets/" in body, path
 
 
 async def test_the_catalog_index_lists_shelves_without_javascript(clients: AsyncClient):
@@ -263,6 +263,25 @@ async def test_the_landing_offer_matches_the_page(clients: AsyncClient):
     assert "0%" in ld["offers"]["description"] and "0%" in r.text
 
 
+@pytest.mark.parametrize("endpoints,providers", [("3,600+", 89), ("4,200+", 103)])
+async def test_landing_headlines_follow_the_catalog(clients: AsyncClient, monkeypatch, endpoints, providers):
+    from treg.domain.catalog import store
+
+    monkeypatch.setattr(store, "headline_counts", lambda cat: (endpoints, providers))
+    body = (await clients.get("/")).text
+    assert f'{endpoints} endpoints · {providers} providers' in body
+    assert f'Browse all {endpoints} tools' in body
+    assert f'{providers} providers, <b>one credential</b>' in body
+    assert f'<b>{endpoints} endpoints</b> priced up front' in body
+    for name in ('description', 'og:description', 'twitter:description'):
+        tag = re.search(rf'<meta (?:name|property)="{name}" content="([^"]+)"', body)
+        assert tag and endpoints in tag[1] and f'{providers} providers' in tag[1]
+    schemas = [json.loads(block) for block in re.findall(r'application/ld\+json">(.*?)</script>', body, re.S)]
+    for schema in schemas:
+        assert endpoints in schema['description']
+    assert '{ENDPOINTS}' not in body and '{PROVIDERS}' not in body
+
+
 async def test_faq_schema_matches_the_visible_questions(clients: AsyncClient):
     r = await clients.get("/support")
     ld = next(json.loads(b) for b in re.findall(r'application/ld\+json">(.*?)</script>', r.text, re.S))
@@ -326,51 +345,6 @@ def test_no_shelf_is_published_that_the_app_grid_hides():
     assert not orphans, (
         f"{orphans} have endpoints but no capabilities.yaml `platforms:` entry — the sitemap will "
         "publish /catalog/<slug> for each while the app's tile grid hides them")
-
-
-# -------------------------------------------------------------------- public-mode chrome & CTAs
-# Markup assertions rather than behaviour: these live in index.html's Vue template, which the test
-# suite reads as text (see tests/test_dashboard_markup.py). Both were reported from the browser.
-
-def _spa() -> str:
-    from treg.routers.web import _WEB_DIR
-    return (_WEB_DIR / "index.html").read_text(encoding="utf-8")
-
-
-def test_public_catalog_drops_the_workspace_chrome():
-    """A catalog visitor is reading a website, not operating an app. The org switcher, the global
-    tool search and the member nav are furniture for a job they have not started."""
-    spa = _spa()
-    assert '<div class="pubnav" v-if="publicCatalog">' in spa      # marketing nav instead
-    assert '<div class="top" role="banner" v-else>' in spa          # app bar only for members
-    assert '<nav class="side"' in spa and 'v-if="!publicCatalog">' in spa  # no sidebar in public mode
-    assert '.layout.solo{grid-template-columns:minmax(0,1fr)}' in spa   # main spans the full width
-
-
-def test_no_public_cta_navigates_to_a_page_that_bounces():
-    """/app sends a logged-out visitor straight back to the landing (`location.replace('/')`), so a
-    CTA pointing there is a dead end that loses the page they were reading. Every one of them opens
-    the sign-in modal in place instead."""
-    spa = _spa()
-    assert "location.href='/app'" not in spa
-    assert spa.count("publicCatalog ? openSignin()") >= 5   # try-it, connect, byok ×3, chips
-
-
-def test_the_signin_modal_is_reachable_from_public_mode():
-    """It used to live inside the logged-out landing branch, which public mode does not render —
-    so there was nothing for a CTA to open."""
-    spa = _spa()
-    lp = spa.index('class="lp"')
-    modal = spa.index('<div class="lc-scrim"')
-    shell = spa.index("<template v-else>")
-    assert not (lp < modal < shell), "the modal is trapped inside the logged-out landing branch"
-
-
-def test_the_modal_does_not_talk_about_a_sandbox_on_the_catalog():
-    """Default copy is the sandbox's ('bring it into a real account') — nonsense to someone who
-    arrived from a search result."""
-    spa = _spa()
-    assert 'v-else-if="publicCatalog" class="sub">Verify your new account' in spa
 
 
 async def test_no_page_ships_an_unsubstituted_base(clients: AsyncClient):

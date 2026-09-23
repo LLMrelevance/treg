@@ -6556,7 +6556,7 @@
     },
     "/meta": {
       "get": {
-        "description": "Open: what the dashboard needs to render correct, shareable snippets — the public proxy URL\n(so copy/paste snippets use the real domain, not whatever origin the browser happens to be on)\n— plus the bundle version, so an open tab can detect a new deploy and offer a refresh.\n\n`treg_version` and `app_version` answer DIFFERENT questions and both are worth having.\n`app_version` is a hash of index.html: it changes whenever the dashboard bundle does, which is\nwhat an open tab compares to offer a refresh. `treg_version` is the released package version,\nwhich is what a release check needs — after publishing 0.9.0 there was no way to confirm from the\nlive path which version was actually serving, only the commit id.",
+        "description": "Open: what the dashboard needs to render correct, shareable snippets — the public proxy URL\n(so copy/paste snippets use the real domain, not whatever origin the browser happens to be on)\n— plus the bundle version, so an open tab can detect a new deploy and offer a refresh.\n\n`treg_version` and `app_version` answer DIFFERENT questions and both are worth having.\n`app_version` hashes the dashboard entry and rollout policy: it changes with either, which is\nwhat an open tab compares to offer a refresh. `treg_version` is the released package version,\nwhich is what a release check needs — after publishing 0.9.0 there was no way to confirm from the\nlive path which version was actually serving, only the commit id.",
         "operationId": "meta_meta_get",
         "responses": {
           "200": {

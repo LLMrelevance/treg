@@ -13,7 +13,9 @@ sources:
   - src/treg/infra/oauth_exchange.py
   - src/treg/infra/oauth_refresh.py
   - src/treg/oauth_providers.py
-  - src/treg/web/index.html
+  - frontend/src/state/session.js
+  - frontend/src/state/keys.js
+  - frontend/src/pages/TeamPage.vue
   - src/treg/health.py
   - src/treg/application/connect.py
   - src/treg/routers/connections.py
@@ -28,7 +30,6 @@ sources:
   - tests/test_oauth_refresh.py
   - tests/test_financialdatasets.py
   - tests/test_key_providers.py
-  - tests/test_dashboard_markup.py
   - src/treg/config.py
 related:
   - architecture/proxy-model.md

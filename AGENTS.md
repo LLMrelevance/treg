@@ -152,8 +152,18 @@ xdist is pulled via `--with`, not the lockfile — same as CI. The Postgres CI j
   `[server]` extra, the certificate authority is `[proxy]`. Never import a heavy dependency at the
   top of a CLI-path module; the "Lightweight CLI modules" import-linter contract lists them and
   fails the build.
-- **The dashboard** (`src/treg/web/index.html`) is a single-file Vue app with no build step, so a
-  broken view name fails silently. Verify in a browser.
+- **Frontend rollout.** `frontend/README.md` documents account assignment and rollback.
+  `src/treg/web/dashboard-legacy/` is **deprecated**, retained only for temporary rollout and
+  rollback. Never hand-edit it or mirror new features/fixes into it; `frontend/` is the only
+  maintained Dashboard source. Follow the retirement checklist in `frontend/README.md` to remove
+  it after rollout, including anonymous entries that still use legacy at 100%.
+- **The dashboard** lives in `frontend/` (Vue components, TypeScript entry/transport, Vite).
+  Build with `bash scripts/build-dashboard.sh`; generated assets in `src/treg/web/dashboard/`
+  ship with Python. Run `npm --prefix frontend test` and `npm --prefix frontend run test:e2e`.
+  Existing Options API use cases live in `frontend/src/state/`; preserve their session and
+  navigation behavior when narrowing component state. Never put dashboard logic back into HTML.
+  Manage third-party browser libraries through pinned npm packages or version-pinned CDN URLs;
+  do not commit copied library builds. Keep critical app runtimes available from the npm build.
 - **Schema.** Alembic owns it (`src/treg/alembic/versions/`); every schema change is a revision.
   Startup only verifies the revision and refuses to boot when behind; migrations run only via
   `python -m treg upgrade`.
