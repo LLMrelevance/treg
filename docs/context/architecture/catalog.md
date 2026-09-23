@@ -10,6 +10,8 @@ sources:
   - src/treg/domain/provider_resources.py
   - src/treg/routers/provider_resources.py
   - src/treg/catalog/tavily.yaml
+  - src/treg/catalog/keenable.yaml
+  - src/treg/catalog/olostep.yaml
   - src/treg/catalog/tinyfish.yaml
   - src/treg/catalog/examples/tinyfish.web.search.json
   - src/treg/catalog/examples/tinyfish.web.search.news.json
