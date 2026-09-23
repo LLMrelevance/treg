@@ -1961,9 +1961,13 @@ _AGENTS = [("ChatGPT", "openai.png"), ("Claude", "claude-color.png"),
 
 _AGENT_CDN = "https://unpkg.com/@lobehub/icons-static-png@latest/light/"
 
-# Own-account providers where GSC shows strong "{provider} mcp" impressions with near-zero clicks.
-# Their titles/H1s lead with MCP intent instead of the generic "connect your own account" pattern.
-_MCP_INTENT_PROVIDERS = {"google-search-console", "google-analytics", "semrush"}
+# Own-account providers where GSC shows strong "{provider} mcp" or "{provider} connector" impressions
+# with near-zero clicks. Their titles/H1s lead with MCP intent instead of the generic "connect your
+# own account" pattern.
+_MCP_INTENT_PROVIDERS = {
+    "google-search-console", "google-analytics", "semrush",  # SEO and analytics
+    "snapchat-ads", "pinterest-ads", "meta-ads", "tiktok-ads", "facebook",  # ads and social
+}
 
 
 def _agent_ptiles() -> str:

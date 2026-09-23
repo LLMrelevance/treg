@@ -128,12 +128,18 @@ async def test_unmetered_oauth_access_uses_account_language(clients, monkeypatch
     ("google-search-console", "Google Search Console"),
     ("google-analytics", "Google Analytics"),
     ("semrush", "Semrush"),
+    ("snapchat-ads", "Snapchat Ads"),
+    ("pinterest-ads", "Pinterest Ads"),
+    ("meta-ads", "Meta Ads"),
+    ("tiktok-ads", "TikTok Ads"),
+    ("facebook", "Facebook Pages"),
 ])
 async def test_mcp_intent_providers_lead_with_mcp(clients: AsyncClient, service: str, display: str):
     """Own-account providers in _MCP_INTENT_PROVIDERS lead with MCP in Title and H1.
 
-    GSC shows strong "{provider} mcp" impressions with near-zero clicks on these pages when
-    their titles said only "connect your own account". This test pins the MCP-leading format.
+    GSC shows strong "{provider} mcp" or "{provider} connector" impressions with near-zero clicks
+    on these pages when their titles said only "connect your own account". This test pins the
+    MCP-leading format.
     """
     html = (await clients.get(f"/tools/{service}")).text
     title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)

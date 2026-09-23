@@ -751,9 +751,11 @@ workflow is cross-linked the moment it is routed, and nothing is listed by hand.
   `{Provider}: {n} tools, platform + BYOK | treg.to` or `{Provider}: platform + BYOK | treg.to` past 65 characters)
 - Own-account: `{Provider}: connect your own account | treg.to`
 - **MCP-intent own-account providers** (`_MCP_INTENT_PROVIDERS`: google-search-console, google-analytics,
-  semrush) lead with MCP instead: `{Provider} MCP: connect your own account | treg.to` for Title and H1,
-  and the meta description names MCP plus connect-own-account plus treg.to as one MCP for the catalog.
-  The MCP-intent titles win over the generic own-account title pattern for these three providers.
+  semrush, snapchat-ads, pinterest-ads, meta-ads, tiktok-ads, facebook) lead with MCP instead:
+  `{Provider} MCP: connect your own account | treg.to` for Title and H1, and the meta description
+  names MCP plus connect-own-account plus treg.to as one MCP for the catalog. The set is the pages
+  where GSC shows `{provider} mcp` or `{provider} connector` impressions with near-zero clicks.
+  The MCP-intent titles win over the generic own-account title pattern for these providers.
 
 The price label carries its own billing unit ("$0.00245/result", "$0.0089/call"), so the copy
 never says "per call" beside it: a per-result or per-success rate is not a per-call one.
