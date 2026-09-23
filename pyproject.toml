@@ -278,14 +278,18 @@ exclude = [
   ".lavish",                # local visual review artifacts, not distributable product assets
   "frontend/node_modules", "frontend/test-results", "frontend/playwright-report",
   "videos",                 # git-excluded marketing renders
+  "/src/treg/web/media/**/*.mp4",  # hosted-page demos stay in Git deployments, not PyPI
   "*.db", "*.sqlite3", "scratch*", "body.json",   # stray local artifacts
   ".env", ".env.*",         # belt and braces: a credential file must never reach a tarball
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/treg"]
+exclude = [
+  "/src/treg/web/media/**/*.mp4",  # the light CLI must not carry hosted-page demo videos
+]
 # The web/ dir lives inside the treg package, so `packages` already ships every asset
-# (favicon.svg, index.html, tutorial.*, tour/, llms.txt, install.sh) — hatchling includes
+# needed at runtime (favicon.svg, index.html, tutorial.*, tour/, llms.txt, install.sh) — hatchling includes
 # non-.py data files under a package by default. A force-include here would add each a SECOND
 # time and break the wheel build (`A second file is being added ... at the same path`).
 

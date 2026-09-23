@@ -202,9 +202,11 @@ jobs:
           uv build
           python - <<'PYCODE'
           from pathlib import Path
+          from tarfile import open as open_tar
           from zipfile import ZipFile
           import re
           with ZipFile(next(Path('dist').glob('*.whl'))) as wheel:
+              assert not [name for name in wheel.namelist() if name.endswith('.mp4')]
               html = wheel.read('treg/web/dashboard/index.html').decode()
               assets = re.findall(r'/app/ui/(assets/[^"\s]+)', html)
               assert assets, 'Dashboard entry must reference compiled assets'
@@ -219,4 +221,7 @@ jobs:
               for asset in re.findall(r'src="(/vendor/vue-[^"\s]+)"', arena):
                   assert wheel.read('treg/web' + asset)
               assert wheel.read('treg/web/vendor/LICENSE')
+          with open_tar(next(Path('dist').glob('*.tar.gz'))) as source:
+              assert not [member.name for member in source.getmembers()
+                          if member.name.endswith('.mp4')]
           PYCODE

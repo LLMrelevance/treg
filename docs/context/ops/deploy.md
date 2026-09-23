@@ -245,6 +245,9 @@ Both frontends ship together; anonymous catalog/sign-in entries remain legacy ev
 See `frontend/README.md` for the full rollout and retirement contract.
 The frontend is authored in `frontend/` within the same repository. `GET /` retains the existing
 landing behavior. Dashboard assets, tutorials, agent files and installer assets ship with the wheel.
+Hosted-page MP4 demos remain in Git checkout deployments but are excluded from published wheels and
+source archives; a server installed from PyPI serves the product surfaces without those optional
+marketing videos.
 
 Run `bash scripts/build-dashboard.sh` before building a distributable Python package. Hatch's
 build hook rejects a wheel or sdist without the dashboard entry and includes the generated assets;
@@ -281,10 +284,10 @@ version that satisfies it. Upgrading a dependency is a `uv lock --upgrade-packag
 Installing the published wheel (`pip install "tools-registry[server]"`) is a different path: a wheel
 carries no lock, so that operator pins versions in their own requirements file.
 
-The published source archive is built by Hatchling from the checkout. The
-`tool.hatch.build.targets.sdist.exclude` rules in `pyproject.toml` keep local linked worktrees,
-root-level working plans and previews, evidence, databases and environment files out of that public
-artifact. Release validation inspects the archive itself; a clean Git diff alone is not sufficient.
+The published source archive is built by Hatchling from the checkout. The Hatch target exclusions in
+`pyproject.toml` keep local linked worktrees, root-level working plans and previews, evidence,
+databases, environment files and hosted-page MP4 demos out of public artifacts. Release validation
+inspects both archive contents; a clean Git diff alone is not sufficient.
 
 The example is deliberately not the treg.to production Blueprint. The hosted topology and settings
 are private operational state.
