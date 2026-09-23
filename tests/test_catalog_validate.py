@@ -209,7 +209,7 @@ def test_async_descriptor_accepts_both_poll_and_result_modes():
     (lambda d: d.update(status=[]), "async.status must be a mapping"),
     (lambda d: d["status"].update(path=""), "async.status.path must be a dotted JSON path"),
     (lambda d: d["status"].update(success=[]), "async.status.success must be a non-empty list"),
-    (lambda d: d["status"].update(failure=[]), "async.status.failure must be a non-empty list"),
+    (lambda d: d["status"].update(failure=[]), "needs failure or billed_failure terminal values"),
     (lambda d: d["status"].update(failure=["succeeded"]), "must not overlap"),
     (lambda d: d["status"].update(success=[{"done": True}]),
      "values must be non-empty strings or numbers"),
