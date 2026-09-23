@@ -63,11 +63,17 @@ body:has(.redesign)::before { display:none; }
 .rd-referral { position:fixed; z-index:40; right:24px; bottom:24px; display:flex; align-items:center; gap:10px; border:1px solid var(--line2); border-radius:999px; padding:12px 18px; background:var(--inverse); color:var(--inverse-ink); box-shadow:0 4px 16px #0002; font:500 13px var(--sans); text-decoration:none; }
 .rd-referral:hover { transform:translateY(-1px); }
 .rd-referral span { font-size:18px; }
-.redesign .rd-view-search { margin:0 0 22px auto; max-width:320px; background:var(--surface); box-shadow:none; border:1px solid var(--line); border-radius:999px; }
-.rd-view-search img { width:14px; height:14px; }
+.redesign .rd-view-search { margin:0 0 22px auto; max-width:320px; min-height:40px; padding:9px 14px; gap:10px; background:var(--surface); box-shadow:none; border:1px solid var(--line); border-radius:999px; }
+.redesign .rd-view-search:hover { border-color:var(--muted2); }
+.rd-view-search img { width:16px; height:16px; flex:none; opacity:.6; }
 .redesign .search input { min-width:0; font-family:var(--sans); }
-.redesign .search:focus-within { outline:2px solid var(--ink); outline-offset:2px; }
-.redesign .search input:focus-visible { outline:none; }
+.redesign .rd-view-search input { padding:0; line-height:20px; }
+.redesign .search:focus-within { outline:none; border-color:var(--muted); box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 12%,transparent); }
+/* The wrapper owns the focus indicator, including the global focus-visible shadow. */
+.redesign .search input:focus-visible { outline:none; box-shadow:none; }
+@media (forced-colors:active) {
+  .redesign .search:focus-within { outline:2px solid Highlight; outline-offset:2px; }
+}
 .redesign .tut-actions { flex-wrap:wrap; min-width:0; }
 .redesign .tabs { min-width:0; overflow-x:auto; scrollbar-width:none; }
 .redesign .tabs button { flex:none; white-space:nowrap; }
