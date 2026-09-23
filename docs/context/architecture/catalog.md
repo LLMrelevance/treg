@@ -12,6 +12,15 @@ sources:
   - src/treg/catalog/tavily.yaml
   - src/treg/catalog/exa.yaml
   - src/treg/catalog/anyapi.extended.yaml
+  - src/treg/catalog/adyntel.yaml
+  - src/treg/catalog/examples/adyntel.meta-ads.library.advertiser.json
+  - src/treg/catalog/examples/adyntel.meta-ads.library.search.json
+  - src/treg/catalog/examples/adyntel.linkedin.search.ads.company.json
+  - src/treg/catalog/examples/adyntel.linkedin.search.ads.keyword.json
+  - src/treg/catalog/examples/adyntel.google.ads.transparency.json
+  - src/treg/catalog/examples/adyntel.tiktok-ads.library.search.company.json
+  - src/treg/catalog/examples/adyntel.google.domain.keywords.overview.json
+  - src/treg/web/logos/adyntel.svg
   - src/treg/catalog/trestleiq.yaml
   - src/treg/catalog/financialdatasets.yaml
   - tests/test_financialdatasets.py
@@ -134,6 +143,40 @@ Instagram is also parameter-multiplexed: profile lookup and business discovery i
 `GET /{ig_user_id}`; the required `fields=business_discovery...` value selects the latter operation.
 
 ## Why
+
+### Adyntel ad intelligence (2026-09-22)
+
+`adyntel.yaml` catalogs seven synchronous POST tools across Meta, LinkedIn, Google, TikTok and domain-keyword
+analysis. Live balance deltas established one credit for ordinary result pages, two credits for
+domain keywords, and one additional credit for Google creative text extraction and TikTok influencer
+ads. The acquired pay-as-you-go rate is $55 / 5,000 credits, or
+$0.011 per credit. HTTP 204 misses and rejected requests used no credits; generic `per_success`
+settlement therefore treats 204 as unbilled.
+
+Every catalog row uses `body_allowlist`. Normal continuation tokens and documented filters remain,
+while `all_ads`, webhooks, provider-selection controls, and LinkedIn batch arrays are excluded from
+the shared-key contract. This prevents an unbounded auto-pagination request while preserving
+caller-controlled page-by-page access. An own raw tool is unaffected. Google Shopping submission
+and status polling are excluded. TikTok keyword search and ad-detail lookup are also excluded because
+repeated live requests, including the documented search shape and sample ad id, returned HTTP 204
+without a usable hit fixture.
+
+The seven retained rows were live-hit again and each has a sanitized response fixture. Their
+platform/capability pairs describe the returned dataset: Meta advertiser/search, LinkedIn ad
+search, Google Ads Transparency, TikTok ad search and Google domain overview. They are direct-only:
+none declares a routing adapter or enters Enrich Arena because none matches an existing shared
+response contract. Every row is both BYOK-callable and platform-callable; the own-key-first ladder
+keeps a team's credential unmetered and ahead of treg's key.
+
+The shared account is pay-as-you-go and is replenished manually in the provider dashboard. Adyntel
+does not expose an account balance endpoint, response charge field or remaining-capacity header, so
+capacity is manual/informational rather than API-observed. The catalog holds at most $0.011 for an
+ordinary page and $0.022 for the two-credit calls/modifiers, then settles successful results or
+releases HTTP 204 and failures. The provider asks clients to stay at or below 5 requests/second.
+An eight-request concurrent live burst returned eight HTTP 200 responses and no `Retry-After`
+header, so no enforced 429 signature was observed; treg still follows the published 5 rps guidance.
+HTTP 402 is documented for balance problems, but an insufficient-balance response was not forced
+against the funded account and is not treated as a unique exhaustion signal.
 
 The marketplace registry (`oauth_providers.py`) catalogs *credentials*: how to connect a provider.
 It says nothing about what you can DO once connected — which endpoints exist, what they cost, what

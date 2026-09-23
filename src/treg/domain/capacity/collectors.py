@@ -738,6 +738,9 @@ BALANCE_ROUTES = {
 # obtain. Kept explicit so the report names them instead of silently skipping, and so a future probe
 # has a list of what to re-check.
 NO_BALANCE_API = {
+    "adyntel": "no public balance or usage endpoint in the official API reference "
+                "(checked docs.adyntel.com 2026-09-22) — PAYG credits are visible in the "
+                "provider dashboard only",
     "aviato": "no public balance endpoint documented (checked docs.data.aviato.co 2026-08-31) — "
               "internal playbooks reference aviato_get_balance but it is not in the public API; "
               "dashboard only",

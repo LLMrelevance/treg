@@ -238,6 +238,16 @@ def check_strict_body(ep: dict, where: str, errors: list[str]) -> None:
             fail(errors, where, "strict_body array fields require valid integer min/max bounds")
 
 
+def check_body_allowlist(ep: dict, where: str, errors: list[str]) -> None:
+    if "body_allowlist" not in ep:
+        return
+    fields = (ep.get("input") or {}).get("body")
+    if ep["body_allowlist"] is not True:
+        fail(errors, where, "body_allowlist must be true when present")
+    elif ep.get("method") not in {"POST", "PUT", "PATCH"} or not isinstance(fields, dict) or not fields:
+        fail(errors, where, "body_allowlist requires a body method with declared body fields")
+
+
 def check_platform_request(rule: object, input_schema: object, where: str,
                            errors: list[str]) -> None:
     """Platform-only fixed request values; BYOK input remains an upstream contract."""
@@ -552,14 +562,17 @@ def check_resource_ownership(rule: object, where: str, input_schema: object,
         return
     required = rule.get("requires")
     if required is not None:
-        if (not isinstance(required, dict) or set(required) != {"kind", "param"}
+        if (not isinstance(required, dict) or set(required) not in ({"kind", "param"}, {"kind", "param", "in"})
                 or not all(isinstance(required.get(k), str) and required[k].strip()
-                           for k in ("kind", "param"))):
-            fail(errors, where, "resource_ownership.requires needs exactly non-empty kind and param")
+                           for k in ("kind", "param"))
+                or required.get("in", "query") not in {"query", "body"}):
+            fail(errors, where, "resource_ownership requires needs exactly kind, param, and optional in=query|body")
         else:
             fields = _input_fields(input_schema)
             name = required["param"]
-            if not any(field in fields for field in (f"pathParams.{name}", f"queryParams.{name}")):
+            locations = ((f"body.{name}",) if required.get("in") == "body"
+                         else (f"pathParams.{name}", f"queryParams.{name}"))
+            if not any(field in fields for field in locations):
                 fail(errors, where, f"resource_ownership requires undeclared parameter '{name}'")
     produced = rule.get("produces")
     if produced is not None:
@@ -1051,6 +1064,7 @@ def main(argv: list[str]) -> int:
             inp = ep.get("input") or {}
             check_strict_query(ep, where, errors)
             check_strict_body(ep, where, errors)
+            check_body_allowlist(ep, where, errors)
             check_platform_auth(ep, where, errors)
             if "platform_request" in ep:
                 check_platform_request(ep["platform_request"], inp, where, errors)
