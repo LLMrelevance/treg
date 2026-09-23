@@ -2682,7 +2682,7 @@ adapters:
   keenable.web.fetch:
     accepts: [[url]]
     in: {url: queryParams.url}
-    const: {queryParams.max_chars: 500, queryParams.live: false}
+    const: {queryParams.live: false}
     out: {pages: "list(.)", count: "len(list(.))"}
     miss: ". == null"
 
