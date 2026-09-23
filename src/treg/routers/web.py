@@ -1613,6 +1613,16 @@ async def _wf_steps(cat, observations: endpoint_stats.EndpointObservationReader,
     price per billing unit, how many providers do the step, and the observed stats when any."""
     out = []
     for name, cap, asks, ep_id, why in spec["steps"]:
+        if cap == "decision":
+            # A judgement on rows already fetched (jev), priced from DECISION_STEPS, not the catalog.
+            dec = agent_pages.DECISION_STEPS[ep_id]
+            out.append({
+                "name": name, "cap": cap, "asks": asks, "why": why, "ep": None, "ep_id": ep_id,
+                "provider": dec["provider"], "provider_name": dec["provider_name"],
+                "domain": dec["domain"], "usd": dec["usd"], "unit": dec["unit"], "providers": 1,
+                "ok_rate": None, "p50": None, "samples": 0, "link": dec["link"], "decision": True,
+            })
+            continue
         eps = [e for e in cat.for_capability(cap) if _pub(e)]
         used = next((e for e in eps if e["id"] == ep_id), None)
         cv = cat.cost_view(used.get("cost"), used.get("provider")) if used else None
@@ -1628,7 +1638,7 @@ async def _wf_steps(cat, observations: endpoint_stats.EndpointObservationReader,
             "ok_rate": st.get("ok_rate") if st.get("samples") else None,
             "p50": st.get("p50_ms") if st.get("samples") else None,
             "samples": st.get("samples") or 0,
-            "link": _wf_use_case_link(cap, agent_slug),
+            "link": _wf_use_case_link(cap, agent_slug), "decision": False,
         })
     return out
 
@@ -1716,7 +1726,8 @@ async def workflow_page(request: Request, slug: str,
                "| # | Step | What the agent asks | Provider used | Price | Success rate |", "|---|---|---|---|---|---|"]
         for i, s in enumerate(steps, 1):
             price = f"{money(s['usd'])} per {s['unit']}" if s["usd"] else "no dollar rate published"
-            rel = f"{pct(s['ok_rate'])} over {s['samples']} calls, {ms(s['p50'])} median" if s["samples"] else "not yet measured"
+            rel = (f"{pct(s['ok_rate'])} over {s['samples']} calls, {ms(s['p50'])} median" if s["samples"]
+                   else "a verdict on rows already fetched" if s["decision"] else "not yet measured")
             md.append(f"| {i} | {s['name']} | {s['asks']} | {s['provider_name']} (`{s['ep_id']}`, {s['providers']} providers, "
                       f"{base}{s['link']}) | {price} | {rel} |")
         md += [""] + [f"- {s['name']}: {s['why']}" for s in steps]
@@ -1770,6 +1781,8 @@ async def workflow_page(request: Request, slug: str,
         return '<span style="color:var(--muted2)">no dollar rate published</span>'
 
     def rel_cell(s: dict) -> str:
+        if s["decision"]:
+            return '<span style="color:var(--muted2)">a verdict on rows already fetched</span>'
         if not s["samples"]:
             return '<span style="color:var(--muted2)">not yet measured</span>'
         return (f'{pct(s["ok_rate"])} <span style="color:var(--muted2)">({s["samples"]} calls'

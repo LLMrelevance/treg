@@ -680,7 +680,13 @@ all, ending with `HTML version: …`. Hosted-only, sitemapped (hub 0.8, page 0.7
 the canonical slug with a 301, exactly like the use-case pages.
 
 The data lives in `agent_pages.WORKFLOWS`, one dict per slug: `steps` are
-`(name, capability, what the agent asks, endpoint the run used, why)` tuples; `run` holds the
+`(name, capability, what the agent asks, endpoint the run used, why)` tuples. A step whose
+capability is `decision` is a judgement on rows the earlier steps fetched, not a fetch: jev reads
+the row and returns a probability. jev is not a catalog capability (the run goes through the
+team's own TypeSafe key), so `_wf_steps` prices it from `agent_pages.DECISION_STEPS` (provider,
+domain, list rate per verdict, unit, link), the one place that rate lives, and the table's
+success-rate cell reads "a verdict on rows already fetched" instead of a measured rate. The
+`.md` twin and the hub's per-row price read the same dict. `run` holds the
 `date`, `rows_in` (and an optional `rows_noun`, default "companies", for the "N companies in"
 line), the `receipt` label/value pairs, `cost_usd`, the narrative paragraphs and the
 CSV path. **Prices are never written into the copy**: the step table prints the live catalog
@@ -702,6 +708,21 @@ Six workflows ship as of 2026-09-14: the lead list, and five from the SEO batch 
 discovery, creator screening, keyword demand to ad budget, competitor Meta ads, TikTok plus
 Xiaohongshu category intel), each with a run made through the treg CLI on 2026-09-14 and its
 CSV in `workflow_runs/`. Their CSVs carry row numbers and stats, never handles.
+
+The lead list was re-run on 2026-09-23 with two jev decision steps (the Jev × GTM plan: update
+the existing page, never add a route): an ICP gate after the Apollo list, on the list fields
+alone, with a 50% threshold, and an opener score after the news step. Same filter, same slug,
+seven steps. The receipt keeps the 2026-08-26 run's total and lead count in its narrative as the
+before, and says plainly that the dropped rows are the one thing the run cannot measure. The
+CSV gained `opener_score`, `jev_fit` and `gate` columns after the original prefix
+(`test_workflow_page_is_served_with_the_crawler_essentials` pins that prefix) and is sorted
+strongest opener first. The run was made with `httpx` against `/call/` directly (four in
+parallel, a browser-like `User-Agent`, since Tomba and Findymail 403 the Python default); the
+gate and opener went through the team's `typesafe` own tool at `/call/typesafe/v1/systemone`, so
+jev's cost is stated at list price and marked as not metered. Tomba was out of capacity on
+treg.to's key for the whole run, so Hunter served and Kitt took Hunter's misses; that is the
+"cheapest provider is out" failure mode with a new name on it. Its `extra_links` now open with
+`/jev`, the one link from a workflow page to the Jev landing.
 
 Tests: `test_workflow_page_is_served_with_the_crawler_essentials` (crawler plumbing, HowTo with the
 step count, `.md`, `.csv`, hub, 301, sitemap), `test_every_workflow_step_capability_and_endpoint_exist`,

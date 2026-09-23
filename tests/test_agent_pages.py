@@ -578,7 +578,7 @@ async def test_workflow_page_is_served_with_the_crawler_essentials(clients: Asyn
     assert "noindex" not in html
     ld = _ld(html)
     howto = next(b for b in ld if b["@type"] == "HowTo")
-    assert len(howto["step"]) == 5
+    assert len(howto["step"]) == 7  # five data steps and two jev decision steps
     assert any(b["@type"] == "FAQPage" for b in ld)
     spec = agent_pages.WORKFLOWS["find-and-verify-a-lead-list"]
     md = await clients.get(WORKFLOW + ".md")
@@ -624,6 +624,11 @@ def test_every_workflow_step_capability_and_endpoint_exist():
     cat = catalog_store.load()
     for key, spec in agent_pages.WORKFLOWS.items():
         for name, cap, _asks, ep_id, _why in spec["steps"]:
+            if cap == "decision":
+                # a judgement step is priced from DECISION_STEPS, the one table that carries its rate
+                dec = agent_pages.DECISION_STEPS[ep_id]
+                assert dec["usd"] and dec["unit"] and dec["link"].startswith("/"), (key, name, ep_id)
+                continue
             # the same filter the page applies: a routed meta-row would render as provider "treg"
             # with no price and drop out of the live total
             eps = [e for e in cat.for_capability(cap) if web._pub(e)]
