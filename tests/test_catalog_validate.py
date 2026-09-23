@@ -64,6 +64,48 @@ def test_adyntel_catalog_body_contract_rejects_unsafe_or_invalid_values():
         )
 
 
+def test_catalog_body_optional_arrays_are_optional_and_validate_each_item():
+    endpoint = {
+        "id": "example.items",
+        "method": "POST",
+        "body_allowlist": True,
+        "input": {"body": {
+            "name": {"type": "string", "required": True},
+            "formats": {
+                "type": "array[string]", "required": False,
+                "minItems": 1, "maxItems": 2, "enum": ["html", "markdown"],
+            },
+        }},
+    }
+
+    for body in ({"name": "example"}, {"name": "example", "formats": ["markdown"]}):
+        resolve._enforce_catalog_body(endpoint, json.dumps(body).encode())
+
+    for formats in ([], ["markdown", "text"], "markdown", None):
+        with pytest.raises(ResolutionFailed) as exc:
+            resolve._enforce_catalog_body(
+                endpoint, json.dumps({"name": "example", "formats": formats}).encode(),
+            )
+        assert exc.value.status_code == 400
+        assert exc.value.detail["parameter"] == "body.formats"
+
+
+def test_catalog_body_required_arrays_remain_required():
+    endpoint = {
+        "id": "example.items",
+        "method": "POST",
+        "strict_body": True,
+        "input": {"body": {
+            "items": {"type": "array[object]", "required": True, "min": 1, "max": 2},
+        }},
+    }
+
+    with pytest.raises(ResolutionFailed) as exc:
+        resolve._enforce_catalog_body(endpoint, b"{}")
+    assert exc.value.status_code == 400
+    assert exc.value.detail["parameter"] == "body.items"
+
+
 def test_cost_modifiers_accept_only_supported_declarative_credit_rules():
     base = {
         "type": "per_success", "value": 5, "currency": "credit", "per": 1,

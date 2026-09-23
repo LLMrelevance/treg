@@ -577,9 +577,11 @@ CLI output, boundaries, Range, disconnects, settlement evidence, archive and rep
 Catalog entries can opt into `strict_query`: `_enforce_catalog_query` rejects bodies,
 undeclared/duplicate query parameters, missing required inputs and unsupported enum values before
 credential selection. They can separately opt into `body_allowlist`: `_enforce_catalog_body`
-rejects undeclared top-level JSON fields, missing required fields and invalid declared scalar values.
-Both apply to catalog calls on every tier, leave unmarked entries unchanged and do not constrain
-arbitrary raw own-tool relays. Legacy `resource_ownership.requires` accepts a declared body
+rejects undeclared top-level JSON fields, missing required fields, invalid declared scalar values,
+and arrays outside their declared cardinality or item enum. An omitted optional array is allowed;
+its cardinality applies only when the caller supplies it. Both checks apply to catalog calls on every
+tier, leave unmarked entries unchanged and do not constrain arbitrary raw own-tool relays. Legacy
+`resource_ownership.requires` accepts a declared body
 parameter as well as path/query parameters, allowing a POST status utility to authorize an opaque
 shared-account task id.
 
