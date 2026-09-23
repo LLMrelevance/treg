@@ -1303,7 +1303,8 @@ def _enforce_catalog_body(ep: dict, body: bytes) -> None:
             declared = str(spec.get("type") or "")
             checker = scalar_types.get(declared)
             invalid = checker is not None and not checker(value)
-            if not invalid and spec.get("enum") is not None:
+            if (not invalid and not declared.startswith("array")
+                    and spec.get("enum") is not None):
                 invalid = value not in spec["enum"]
             if not invalid and declared in {"integer", "number"}:
                 minimum, maximum = spec.get("min"), spec.get("max")
@@ -1321,10 +1322,14 @@ def _enforce_catalog_body(ep: dict, body: bytes) -> None:
     for name, spec in fields.items():
         if not isinstance(spec, dict) or not str(spec.get("type") or "").startswith("array"):
             continue
+        if name not in document and not spec.get("required"):
+            continue
         value = document.get(name)
         minimum = spec.get("minItems", spec.get("min"))
         maximum = spec.get("maxItems", spec.get("max"))
         valid = isinstance(value, list)
+        if valid and spec.get("enum") is not None:
+            valid = all(item in spec["enum"] for item in value)
         if valid and isinstance(minimum, int):
             valid = len(value) >= minimum
         if valid and isinstance(maximum, int):
