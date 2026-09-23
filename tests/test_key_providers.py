@@ -32,7 +32,7 @@ def test_key_providers_are_offerable_without_deployment_credentials():
                 "icypeas", "leadsforge", "influencersclub", "crustdata", "aviato",
                 "spyfu", "apify", "meta-ad-library", "serpapi", "adyntel",
                 "coingecko", "polygon", "finnhub", "twelvedata", "fmp", "eodhd", "marketstack",
-                "tiingo", "financialdatasets", "tinyfish"):
+                "tiingo", "financialdatasets", "tinyfish", "keenable"):
         p = P.get(svc)
         assert p is not None, svc
         assert p.auth_kind == "key", svc
@@ -121,12 +121,31 @@ def test_key_providers_appear_in_the_marketplace_listing():
 
 def test_paid_key_verification_probe_is_typed_and_unique():
     paid = {p.service: p.probe_cost_micro for p in P.REGISTRY.values() if p.probe_cost_micro}
-    assert paid == {"trestleiq": 15_000}
+    assert paid == {"keenable": 4_000, "trestleiq": 15_000}
     assert all(isinstance(p.probe_cost_micro, int) and p.probe_cost_micro >= 0
                for p in P.REGISTRY.values())
     listing = {row["service"]: row for row in P.listing()}
     assert listing["trestleiq"]["probe_cost_micro"] == 15_000
     assert listing["wiza"]["probe_cost_micro"] == 0
+
+
+def test_keenable_registry_uses_the_billed_fetch_probe_and_x_api_key(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_KEENABLE", "PLATFORM-KEENABLE")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "keenable")
+    provider = P.get("keenable")
+    assert provider is not None
+    assert provider.base_url == "https://api.keenable.ai"
+    assert provider.probe_path == "/v1/fetch?url=https%3A%2F%2Fdocs.keenable.ai%2F&max_chars=1"
+    assert provider.probe_cost_micro == 4_000
+    assert provider.token_verify_field == "url"
+    assert Settings(_env_file=None).platform_key_for("keenable") == "PLATFORM-KEENABLE"
+    assert P.platform_bindings(provider) == [{
+        "platform_setting": "platform_key_keenable",
+        "injector": "env",
+        "location": "header",
+        "name": "X-API-Key",
+        "format": "{secret}",
+    }]
 
 
 def test_trestleiq_registry_uses_the_billed_sandbox_probe_and_lowercase_header(monkeypatch):

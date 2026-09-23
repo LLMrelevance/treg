@@ -427,9 +427,24 @@ def test_no_balance_api_includes_expected_providers():
     """Verify the vendors that have no free balance API are documented."""
     expected = {
         "adyntel", "aviato", "coresignal", "exa", "financialdatasets", "finnhub",
-        "justoneapi", "limadata", "marketstack", "scrubby", "tiingo", "trestleiq",
+        "justoneapi", "keenable", "limadata", "marketstack", "scrubby", "tiingo", "trestleiq",
     }
     assert expected == set(collectors.NO_BALANCE_API.keys())
+
+
+async def test_keenable_capacity_is_portal_only_with_documented_rate_limit(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_KEENABLE", "test")
+    collectors.get_settings.cache_clear()
+    try:
+        row = await collectors.provider_balance("keenable")
+        assert row["value"] is None and row["no_api"] is True
+        capacity = policy.default_policy("keenable", has_key=True)
+        assert capacity.capacity_type == "requests"
+        assert capacity.funding_mode == "manual"
+        assert capacity.source == "manual"
+        assert capacity.rate_limit == {"limit": 10, "window_s": 1, "source": "docs"}
+    finally:
+        collectors.get_settings.cache_clear()
 
 
 async def test_adyntel_capacity_is_dashboard_only_and_rate_limited(monkeypatch):

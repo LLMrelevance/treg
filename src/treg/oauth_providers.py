@@ -2483,6 +2483,36 @@ TAVILY = OAuthProvider(
     probe_path="/usage",
 )
 
+KEENABLE = OAuthProvider(
+    service="keenable",
+    display_name="Keenable",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="keen_…",
+    token_header="X-API-Key",
+    token_format="{secret}",
+    setup_url="https://app.keenable.ai/console",
+    setup_action_label="Get your Keenable API key",
+    setup_steps=(
+        "Sign in to Keenable and open the console.",
+        "Create or copy an API key.",
+    ),
+    setup_note=(
+        "Search and Fetch each spend one request from the Keenable organization. Connecting checks "
+        "the key with one $0.004 fetch because Keenable exposes no free authenticated account route."
+    ),
+    auth_uri="", token_uri="",
+    scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="SEO",
+    summary="Search the web and fetch indexed or live pages as clean Markdown.",
+    base_url="https://api.keenable.ai",
+    docs_url="https://docs.keenable.ai/api-reference",
+    probe_path="/v1/fetch?url=https%3A%2F%2Fdocs.keenable.ai%2F&max_chars=1",
+    token_verify_field="url",
+    probe_cost_micro=4_000,
+)
+
 CLORO = OAuthProvider(
     service="cloro",
     display_name="cloro",
@@ -3444,7 +3474,7 @@ REGISTRY: dict[str, OAuthProvider] = {
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,
         SCRAPECREATORS,
         # SEO API-key providers
-        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA, TAVILY, CLORO,
+        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA, TAVILY, KEENABLE, CLORO,
         # more Enrichment API-key providers
         LUSHA, CORESIGNAL, DIFFBOT, THECOMPANIESAPI, LEADMAGIC, FIBER_AI, CRUSTDATA, AVIATO,
         COMPANYENRICH, OCEANIO, ADYNTEL, TOMBA, TRESTLEIQ, PREDICTLEADS, FINDYMAIL, BRANDDEV, ICYPEAS, LEADSFORGE,

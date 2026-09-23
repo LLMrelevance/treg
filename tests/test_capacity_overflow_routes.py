@@ -275,6 +275,7 @@ _UNRECORDED_SIGNATURE = {
     "wiza",  # The funded grant was not exhausted; no provider-specific body was forced
     "limadata",  # Starter credits remain; no provider-specific empty-balance body was forced
     "getleadsio",  # promotional allocation was not exhausted; bare 402 remains the generic signal
+    "keenable",  # funded request balance remains; documented bare 402 was not forced
     "scrubby",  # funded account not exhausted; no provider-specific empty-balance body recorded
     "millionverifier",  # funded-account exhaustion not observed; trial still has credits
     "bounceban",  # verification credits remain; exhaustion was not forced and no overflow is claimed
