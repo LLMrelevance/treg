@@ -1014,12 +1014,13 @@ USE_CASE_PAGES["people-search"] = {
 
 USE_CASE_PAGES["enrich-a-company"] = {
     "label": "Enrich a company from its domain",
-    "sentence": "Clearbit alternative: company enrichment API from a domain",
-    "title": "Clearbit Alternative: Company Enrichment API | treg.to",
+    "sentence": "Company enrichment API: domain to firmographics, providers compared on price and fill",
+    "title": "Company Enrichment API: {n} Providers Compared | treg.to",
     "lede": (
-        "Clearbit alternative with {n} providers. Give your agent a domain and get firmographics: "
-        "industry, headcount, location, founding year, tech stack, funding. Clearbit pricing is per "
-        "record; here you compare providers and pay per call with no seat."),
+        "Turn a domain into firmographics: industry, headcount, location, founding year, tech stack, "
+        "funding. {n} providers do this job through one treg.to key, from {cheapest} a call, with no "
+        "seat fee and no annual contract. Your agent compares them on price and measured fill rate, "
+        "picks one, and you pay only for the calls it makes."),
     "prompt": "Using treg, enrich these 30 domains into a table: company name, industry, headcount, "
               "country, founded year and tech stack. Show me the price first, and mark any field that came back empty.",
     "prompt_why": [
@@ -1075,6 +1076,29 @@ USE_CASE_PAGES["enrich-a-company"] = {
          "r/Data_Enrichment", "https://www.reddit.com/r/Data_Enrichment/comments/1vrl2q4/data_enrichment_pricing_2026_august_update/",
          "Which is why every price on this page is in dollars per call, converted from each "
          "provider's own unit at their published rate, with the date we last verified it."),
+        ("Seat pricing kills small teams",
+         "For a 5-person team, they quoted 15k-30k/year minimum. The pricing games are brutal.",
+         "r/coldemail", "https://www.reddit.com/r/coldemail/comments/1tplckc/what_are_you_actually_paying_for_zoominfo_vs/",
+         "Seat-based enrichment tools bill whether or not you pull a record. Every provider here "
+         "bills per call with no seat, so a quiet month costs nothing and a busy one scales."),
+    ],
+    "failure_modes": [
+        ("Inferred headcount is often wrong",
+         "Most providers model employee count from job postings, LinkedIn, and traffic signals. "
+         "Subsidiaries, international companies, and fast-growing teams are frequently misclassified. "
+         "Treat headcount as a range, not a fact, and validate any record that will drive routing."),
+        ("Empty vs guessed fields",
+         "Some providers return a blank when they have no data; others return an inferred value with "
+         "no flag. A confidently wrong industry or revenue estimate does more damage than a gap. Ask "
+         "the agent to surface blanks, and know which providers distinguish observed from modelled."),
+        ("Fuzzy name match returns the wrong company",
+         "A company name like 'Acme' matches dozens of records; the provider picks one and you pay. "
+         "A domain is deterministic: one input, one company, no ambiguity. Use the by-domain route "
+         "when you have it."),
+        ("Billing units differ wildly",
+         "One provider charges per section of the record you request; another per company found; "
+         "another only when name, size and location all return. Compare in dollars per call, not in "
+         "credits, because a credit means something different at every vendor."),
     ],
     "faq": [
         ("What do I send in?",
@@ -1094,6 +1118,11 @@ USE_CASE_PAGES["enrich-a-company"] = {
     ],
     "related": ("Build a company list by industry, size or tech", "Hiring, headcount and news signals",
                 "Find people by role, company or location", "A company's funding rounds"),
+    "extra_links": (
+        ("Pricing", "/pricing", "How treg.to pricing works"),
+        ("Verified lead list workflow", "/workflows/find-and-verify-a-lead-list", "Build a list with the receipt from a real run"),
+        ("People search", "/people-search", "Find and enrich people by role, company or location"),
+    ),
 }
 
 
@@ -1833,13 +1862,11 @@ USE_CASE_PAGES["your-own-campaign-performance"] = {
 
 USE_CASE_PAGES["amazon-product-detail-by-asin"] = {
     "label": "Amazon product detail by ASIN",
-    "sentence": "Amazon product API: any product's detail by ASIN",
-    "title": "Amazon product API: {n} providers from {cheapest} | treg.to",
+    "sentence": "Pull any Amazon product by ASIN",
+    "title": "Amazon Product by ASIN: from {cheapest} | treg.to",
     "lede": (
-        "Give your agent an ASIN and get the listing back as data: title, current price, images, "
-        "specifications and the review summary. {n} providers do this through one treg.to key, from "
-        "{cheapest} a product, with no Amazon programme to be approved for first. That last part is "
-        "most of the reason this job has a price at all."),
+        "Get the price, title, images, specs and reviews for any ASIN. {n} providers through one "
+        "treg.to key, from {cheapest} per lookup. No Amazon affiliate account required."),
     "prompt": "Using treg, get the Amazon product detail for ASIN B08N5WRWNW on amazon.com. Show me "
               "the price first, then give me the title, current price, rating and review count.",
     "prompt_why": [
@@ -2745,14 +2772,11 @@ AGENTS["grok-bot"] = {
 
 USE_CASE_PAGES["tiktok-shop-products-and-reviews"] = {
     "label": "TikTok Shop products and reviews",
-    "sentence": "TikTok Shop API: search products by keyword and read a product's reviews, without a seller account",
-    "title": "TikTok Shop API: {n} providers compared, from {cheapest} | treg.to",
+    "sentence": "Search TikTok Shop products and reviews",
+    "title": "TikTok Shop Search: from {cheapest} | treg.to",
     "lede": (
-        "Give your agent a keyword and a region and get TikTok Shop's product results back as "
-        "rows: title, price, seller and product id, then the reviews on any of them by id or URL. "
-        "{n} providers read the public storefront through one treg.to key, from {cheapest} a call, "
-        "at the provider's own rate with no markup. None of them is the seller-side Partner API, "
-        "so there is no shop, no sandbox and no app review to get through first."),
+        "Search products by keyword, pull reviews by product. {n} providers through one treg.to "
+        "key, from {cheapest} per call. No TikTok seller account needed."),
     "prompt": "Using treg, search TikTok Shop US for \"matcha whisk\", show me the price per call "
               "first, then give me the top 20 products by sales with seller, price and rating, and "
               "pull the last 50 reviews on the best seller.",
@@ -4435,13 +4459,14 @@ USE_CASE_PAGES["keyword-volume-cpc-and-competition"] = {
 WORKFLOWS: dict[str, dict] = {}
 
 WORKFLOWS["find-and-verify-a-lead-list"] = {
-    "sentence": "AI lead generation: build a verified lead list from one prompt",
-    "title": "AI lead generation: a verified lead list in {n} calls | treg.to",
+    "sentence": "Verified lead list: company search, person finder, email, verify, news in one prompt",
+    "title": "Verified Lead List: Build One From a Single Prompt | treg.to",
     "lede": (
-        "Give your agent one prompt and get back a lead list with a named person, a verified work "
-        "email and a reason to write, for every company that matched. {steps} steps, each a "
-        "metered call through one treg.to key, with the price printed before the agent spends it. "
-        "The numbers on this page come from running it, not from a rate card."),
+        "One prompt, five steps, a CSV at the end: company list, person at each one, work email, "
+        "verification, and a news opener. {steps} calls through one treg.to key. The agent sees "
+        "every provider for each step with its price and success rate, picks the one that fits, "
+        "and you pay only for the calls it makes. The numbers on this page come from running it, "
+        "not from a rate card."),
     "prompt": (
         "Using treg, build me a lead list: 50 US software companies with 51 to 200 staff that raised "
         "a Series A. For each one find the VP or Head of Marketing, find their work email with the "
@@ -4529,8 +4554,10 @@ WORKFLOWS["find-and-verify-a-lead-list"] = {
          "LeadMagic's people search answered \"query too broad\" for a single domain with six titles, at no charge. Findymail by title returned a person for 27 of 47 companies and LeadMagic's role finder for 13 of the remaining 20. Nobody's database has a marketing lead for every 100-person company; the miss rate is the workflow, not a bug."),
         ("The cheapest provider is out of credit",
          "Akta answered all 31 news calls with an insufficient-credits error on treg.to's own key, at no charge, and the run fell back to PredictLeads at four times the price. A provider outage shows up as a price change, so ask the agent for the price before each step, not once at the start."),
-        ("Catch-all domains",
-         "A verifier cannot resolve an address on a domain that accepts everything. Expect a fifth of a B2B list to land in that bucket, and decide once, per campaign, whether to send to it."),
+        ("Catch-all domains pass verification but may still bounce",
+         "A verifier cannot resolve an address on a domain that accepts everything. Expect a fifth of a B2B list to land in the catch-all bucket. SMTP checks confirm domain acceptance, not that a specific inbox exists. Treat catch-alls as a separate risky segment and send them in small batches with dedicated monitoring."),
+        ("Verification is a separate step, not a side effect of finding",
+         "Most email finders return addresses without verifying them. An address that passes SMTP can still be recycled, role-based, or stale. Verification must happen at execution time, as a distinct call, to catch addresses that would pass find but fail send."),
     ],
     "faq": [
         ("How much does the whole workflow cost?",
@@ -4547,6 +4574,8 @@ WORKFLOWS["find-and-verify-a-lead-list"] = {
     "extra_links": (
         ("Run with your agent", "/people-search", "The people search launch page"),
         ("Waterfall enrichment", "/use-cases/lead-enrichment-for-ai-agents", "Find, enrich and verify in one agent run"),
+        ("Company enrichment", "/use-cases/enrich-a-company", "Turn a domain into firmographics"),
+        ("Pricing", "/pricing", "How treg.to pricing works"),
     ),
 }
 
@@ -4615,6 +4644,12 @@ WORKFLOWS["screen-instagram-creators-before-outreach"] = {
          "A renamed handle returns no user. The miss is free on this route; fix the handle and rerun that row."),
         ("Rate limits on bulk pulls",
          "Spread a few hundred handles over minutes, or the profile route starts answering slowly."),
+        ("Ban risk if you scrape from your own login",
+         "Do not point a logged-in personal or brand Instagram session at bulk pulls. Use a public-data route that does not need your cookies. If a provider asks for a session, use a throwaway account you can lose."),
+        ("Follower count is not proof of reach",
+         "Bought followers and engagement pods still show up as healthy looking profiles. Sample recent posts and compute engagement before you put someone on an outreach list."),
+        ("Manual sheet workflows do not scale",
+         "Opening profiles one by one is the common starting point and it breaks past a few dozen handles. Batch the profile and posts calls, then decide keep or skip in the CSV."),
     ],
     "faq": [
         ("What does a 20-creator screen cost?",
@@ -4625,6 +4660,10 @@ WORKFLOWS["screen-instagram-creators-before-outreach"] = {
          "Yes. TikHub has TikTok profile and post routes at the same price; change the handles and the platform in the prompt."),
         ("How is engagement calculated?",
          "Likes plus comments on the sampled posts, divided by followers, averaged over the sample. Above 3% is generally good; this list's median was 5.3%."),
+        ("Will this get my Instagram account banned?",
+         "This workflow screens public profile and post fields through a metered catalog route. It is not a follow, unfollow, or DM bot. Do not paste your own Instagram session into a scraper."),
+        ("What if engagement looks high but the audience is fake?",
+         "Treat engagement as a filter, not a guarantee. Look at comment quality and sudden follower spikes before you pay for a placement."),
     ],
     "related": (
         "Find creators by keyword",
@@ -4701,6 +4740,12 @@ WORKFLOWS["discover-creators-in-a-niche"] = {
          "The discovery index lags. A profile pull on a renamed handle misses; the miss is free on this route."),
         ("Country is inferred",
          "Creator location comes from language and hashtags. Verify before a geo-targeted campaign."),
+        ("Seat price hides the email cap",
+         "Many discovery products bill a monthly seat and then throttle how many contact emails you can open. Price the workflow on creators returned and emails verified, not on a seat."),
+        ("Database rows go stale or regional",
+         "A free trial can look empty or wrong for EU markets even when US coverage looks fine. Always re-pull the live profile before outreach."),
+        ("Authenticity is not in the discovery index",
+         "Follower count and tagged niche do not prove a real audience. Run an engagement sample before you negotiate."),
     ],
     "faq": [
         ("What does discovery cost?",
@@ -4711,6 +4756,10 @@ WORKFLOWS["discover-creators-in-a-niche"] = {
          "Set the platform in the same discovery call. Swap the profile step for the matching platform's profile route."),
         ("Why pull the profile at all?",
          "Discovery rows are a snapshot. The profile call returns today's follower count, the bio and whether the account went private."),
+        ("Why not just buy Modash or HypeAuditor?",
+         "Those products solve discovery plus a lot of campaign CRM. If you only need a niche list with live stats, a per-result discovery call is usually the cheaper shape."),
+        ("How do I avoid fake creators in the results?",
+         "Keep follower and engagement filters tight, then sample recent posts. Skip sudden spikes and empty comment threads."),
     ],
     "related": (
         "Find creators by keyword",
@@ -4784,6 +4833,12 @@ WORKFLOWS["keyword-demand-to-ad-budget"] = {
          "The trend route takes at most five keywords per call. Send the head terms, not the list."),
         ("CPC is a national average",
          "Local or tightly targeted campaigns see different auction prices."),
+        ("Suite pricing for a volume job",
+         "Paying a full Semrush or Ahrefs seat just to split a keyword list into ad budget buckets is a common mismatch. Prefer a flat per-request volume call for the list you already have."),
+        ("Providers disagree on the same keyword",
+         "Pull the same shortlist from two rows when the decision is expensive. Treat disagreement as the error bar, not as a bug in one provider."),
+        ("Minimum package surprise",
+         "Some keyword APIs effectively bill a large batch floor. Check whether your list length matches the billing unit before you send twenty keywords."),
     ],
     "faq": [
         ("What does a 50-keyword run cost?",
@@ -4794,6 +4849,10 @@ WORKFLOWS["keyword-demand-to-ad-budget"] = {
          "DataForSEO has Bing volume routes with the same shape. Ask for both and merge on keyword."),
         ("How current is the trend data?",
          "The trend series is weekly for the past twelve months and reflects past demand, not a forecast."),
+        ("Do I need a Google Ads account for this workflow?",
+         "Only if you route through your own Keyword Planner connection. The paid volume rows run on treg.to's keys and do not need your developer token."),
+        ("Why does Semrush or Ahrefs show a different number?",
+         "Every vendor models demand differently. Rank keywords against each other inside one source, then validate winners in Search Console and in your own campaigns."),
     ],
     "related": (
         "Keyword volume, CPC and competition",
@@ -4873,6 +4932,12 @@ WORKFLOWS["mine-competitor-meta-ads-as-creative-pack"] = {
          "The Google side keys on the advertiser's verified domain. A marketing subdomain returns nothing; use the root domain."),
         ("Creative fields shift",
          "Both routes read the public library pages. Field availability tracks whatever Meta and Google currently render."),
+        ("Creative media URLs expire",
+         "Meta's public media links go stale within days. If you need a lasting creative pack, download the creative assets into your own storage on the same run, not later."),
+        ("Official Library API is the wrong product for ecommerce spy",
+         "ads_archive is built around transparency rules and identity checks. It will not mirror the full commercial Ad Library UI. Use a public-library scrape route when you want active brand creatives."),
+        ("Spy SaaS seat for a one-off pack",
+         "Paying a monthly ad-spy subscription only to export a competitor's current ads is a common overbuy. Cap the ad count and bill per ad returned."),
     ],
     "faq": [
         ("What does a competitor pull cost?",
@@ -4883,6 +4948,8 @@ WORKFLOWS["mine-competitor-meta-ads-as-creative-pack"] = {
          "Yes. The catalog has routes for both; the competitor-ads hub page compares them."),
         ("What about the landing pages?",
          "Ask the agent to scrape the link URLs from the CSV with a web-scrape route as a follow-up step."),
+        ("Why did the image or video link die overnight?",
+         "Meta rotates public CDN URLs. Save the file during the pull if you want a durable swipe file."),
     ],
     "related": (
         "Ads a competitor is running now",
@@ -4955,6 +5022,12 @@ WORKFLOWS["category-content-intel-tiktok-xiaohongshu"] = {
          "Xiaohongshu's publish-time filter is documented as approximate and can include older notes."),
         ("Region shapes the TikTok page",
          "TikTok search is regional. Pass the region you sell in."),
+        ("Homegrown scrapers rot",
+         "TikTok and Xiaohongshu change signed endpoints often. A script that worked last month can return empty pages this week. Prefer a maintained catalog route over owning the signer."),
+        ("Xiaohongshu is not TikTok with Chinese text",
+         "There is no public developer API. Signed headers and captchas are normal. Expect thinner coverage and higher maintenance than TikTok on the same vendor."),
+        ("Hours of scrolling is the silent cost",
+         "Manual category research feels free until you count the hours. Batch keyword search on both platforms and keep the CSVs so you can diff week to week."),
     ],
     "faq": [
         ("What does the dual-platform search cost?",
@@ -4965,6 +5038,10 @@ WORKFLOWS["category-content-intel-tiktok-xiaohongshu"] = {
          "Add those searches to the prompt. The catalog has keyword search on both."),
         ("How do I track this over time?",
          "Run the same prompt weekly and keep the CSVs. The agent can diff the top posts between runs."),
+        ("Why did my DIY TikTok scraper die?",
+         "Endpoints and anti-bot checks move. That is expected. This workflow uses maintained providers so the maintenance sits with them."),
+        ("Can one scraper cover both TikTok and Xiaohongshu?",
+         "Often not well. Many social scrapers are TikTok-first and lag on RedNote. Treat them as separate steps with separate failure modes."),
     ],
     "related": (
         "Search posts by keyword",

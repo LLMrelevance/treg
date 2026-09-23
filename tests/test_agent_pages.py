@@ -418,7 +418,8 @@ async def test_non_canonical_casing_redirects_to_the_one_spelling(clients: Async
 @pytest.mark.parametrize("key", list(agent_pages.USE_CASE_PAGES))
 def test_no_use_case_page_ships_with_an_empty_section(key):
     """The template renders whatever the spec holds, so a missing field is a heading with nothing
-    under it rather than an error. The counts are the house shape: 4 reasons, 3 notes, 4 FAQ."""
+    under it rather than an error. The counts are the house shape: 4 reasons, 3 notes, 4 FAQ,
+    and, when a page carries failure modes, at least 4 of them."""
     spec = agent_pages.USE_CASE_PAGES[key]
     for field in ("label", "sentence", "title", "lede", "prompt", "what_is"):
         assert spec.get(field), (key, field)
@@ -426,6 +427,8 @@ def test_no_use_case_page_ships_with_an_empty_section(key):
     assert len(spec["notes"]) == 3, (key, "notes")
     assert len(spec["faq"]) == 4, (key, "faq")
     assert len(spec["related"]) == 4, (key, "related")
+    if "failure_modes" in spec:
+        assert len(spec["failure_modes"]) >= 4, (key, "failure_modes")
     # the voices section is optional, but half of one is a heading over nothing
     assert bool(spec.get("voices")) == bool(spec.get("voices_intro")), (key, "voices without intro")
     for v in spec.get("voices") or ():
@@ -638,8 +641,10 @@ def test_no_workflow_ships_with_an_empty_section(key):
     assert spec["run"]["receipt"], (key, "receipt")
     assert spec["run"]["narrative"], (key, "narrative")
     assert spec["run"].get("date") and spec["run"].get("csv"), (key, "run date/csv")
+    # A workflow page carries more "where it goes wrong" and FAQ copy than a use-case page: at
+    # least four failure modes, four to six FAQ entries (the use-case shape is exactly four).
     assert len(spec["failure_modes"]) >= 4, (key, "failure_modes")
-    assert len(spec["faq"]) == 4, (key, "faq")
+    assert 4 <= len(spec["faq"]) <= 6, (key, "faq")
     assert len(spec["related"]) == 4, (key, "related")
     menu = {lbl for _c, jobs in agent_pages.USE_CASES for lbl, _ in jobs}
     for lbl in spec["related"]:
