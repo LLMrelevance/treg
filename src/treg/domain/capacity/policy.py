@@ -25,6 +25,7 @@ _KNOWN: dict[str, tuple[str, str, str]] = {
     "harvestapi": ("cash", "auto_recharge", "api"),  # Owner will enable vendor auto top-up for production.
     "dataforseo": ("cash", "auto_recharge", "api"),
     "tikhub": ("cash", "auto_recharge", "api"),
+    "tinyfish": ("cash", "manual", "api"),
     "lusha": ("credits", "auto_recharge", "api"),
     "scrapecreators": ("credits", "manual", "api"),
     "contactout": ("credits", "unknown", "api"),  # independent pools; overages unconfirmed
@@ -88,6 +89,10 @@ _QUOTAS: dict[str, dict] = {
 }
 _RATE_LIMITS: dict[str, dict] = {
     "adyntel": {"limit": 5, "window_s": 1, "source": "docs"},
+    # Search's documented burst allowance is the strictest request-count limit shared by these
+    # hosts. Fetch additionally meters URLs and Agent limits concurrency; upstream remains the
+    # authority for those differently-shaped limits.
+    "tinyfish": {"limit": 30, "window_s": 60, "source": "docs"},
     # The only platform-served tool is standard single verification, documented at 100/s. Keep
     # the shared key at one quarter of that allowance; BYOK calls bypass this limiter.
     "bounceban": {"limit": 25, "window_s": 1, "source": "docs"},

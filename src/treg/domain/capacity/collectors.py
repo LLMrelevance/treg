@@ -41,6 +41,29 @@ async def _tikhub(c, key):
     return {"value": (d.get("user_data") or {}).get("balance"), "unit": "USD", "note": ""}
 
 
+async def _tinyfish(c, key):
+    d = await _get(c, "https://agent.tinyfish.ai/v1/wallet",
+                   headers={"X-API-Key": key})
+    raw = d.get("available_balance")
+    try:
+        balance = Decimal(str(raw)) if not isinstance(raw, bool) and raw is not None else None
+    except InvalidOperation:
+        balance = None
+    if balance is None or not balance.is_finite() or balance < 0:
+        raise ValueError("TinyFish wallet returned an invalid available_balance")
+    reload_state = d.get("auto_reload")
+    if isinstance(reload_state, dict) and isinstance(reload_state.get("state"), str):
+        note = f"vendor auto-reload {reload_state['state']}"
+    elif reload_state is True:
+        note = "vendor auto-reload enabled"
+    elif reload_state is False:
+        note = "vendor auto-reload not enabled"
+    else:
+        note = "vendor auto-reload state unavailable"
+    return {"value": float(balance), "unit": str(d.get("currency") or "USD").upper(),
+            "note": note}
+
+
 async def _fishaudio(c, key):
     workspace_id = get_settings().platform_fishaudio_workspace_id.strip()
     if not workspace_id:
@@ -703,6 +726,7 @@ BALANCE_ROUTES = {
     "tomba": _tomba,
     "dataforseo": _dataforseo,
     "tikhub": _tikhub,
+    "tinyfish": _tinyfish,
     "fishaudio": _fishaudio,
     "tavily": _tavily,
     "scrapecreators": _scrapecreators,

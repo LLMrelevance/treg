@@ -93,6 +93,8 @@ credit_rates_usd:
 # sales-gated. Majestic's three pools share ONE subscription price, so each pool's rate divides the
 # WHOLE subscription by that pool's allowance -- an upper bound per pool; never sum pools per call.
 unit_rates_usd:
+  tinyfish:
+    step: {usd: 0.016, basis: "TinyFish Agent is billed at $0.016 for each agent step reported as num_of_steps on the terminal run", source: "https://www.tinyfish.ai/pricing", checked: "2026-09-23"}
   semrush:
     api_unit: {usd: null, basis: "units are pre-purchased in packages (2M / 5M / 10M / 20M) whose prices Semrush does not list publicly; every route says contact sales", source: "https://developer.semrush.com/api/get-started/api-access/", checked: "2026-07-31"}
   majestic:

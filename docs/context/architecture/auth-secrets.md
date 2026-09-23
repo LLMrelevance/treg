@@ -107,7 +107,12 @@ POST Contact Finder probe rejects invalid keys with HTTP 401 and does not requir
 balance to accept a successful probe. `platform_key_quickenrich` supplies the separate server-held platform credential.
 No OAuth app or special injector is needed. See the QuickEnrich section in [catalog](catalog.md).
 
-Tier 4 has explicit platform-key slots for MiniMax, OpenRouter, Replicate, reAPI and PiAPI. The web and async cron
+TinyFish uses a pasted `X-API-Key`. Its primary Agent host supplies the free `/v1/wallet` probe,
+while `CatalogTarget` approves the separate Search and Fetch hosts for the same credential. The
+wallet remains connection/capacity evidence rather than a public tool. `TREG_PLATFORM_KEY_TINYFISH`
+supplies the optional shared binding; a team's own key retains priority and is never metered.
+
+Tier 4 has explicit platform-key slots for MiniMax, OpenRouter, Replicate, reAPI, PiAPI and TinyFish. The web and async cron
 receive them as environment secrets, and the worker constructs the same platform bindings as the call
 path. Key values are never copied into task records, logs or archive evidence.
 
