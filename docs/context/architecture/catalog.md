@@ -504,19 +504,25 @@ A `cost.table` also prices out as a range: at load time `_table_floor` computes 
 (a `times` row at its field's declared `min`) into `cost.table_min`, and `cost_view` exposes it as
 `usd_min` beside `usd`, which stays the validated ceiling (what reserve and eligibility read). Every
 price surface - the wall, `treg catalog search`, the dashboard, `/access` - shows `$low-$high` for a
-table rather than the worst case alone. A table whose every row multiplies by a `duration` field is
-a video model sold per second, and `$0.47-$13.9/success` (shortest clip at the cheapest resolution
+table rather than the worst case alone. A table whose every row multiplies by a recognized meter
+field is quoted at that unit rate: `duration` is displayed in seconds and `max_steps` in steps.
+For example, a video's `$0.47-$13.9/success` (shortest clip at the cheapest resolution
 up to the longest at the dearest) reads as nonsense beside a vendor page saying `$0.12/s`; so
 `_table_rate` records the row span as `cost.table_rate`, `cost_view` serves it as `rate_usd_min`,
-`rate_usd`, `rate_unit: s`, and the dashboard and CLI quote `$0.119-$0.462/s` for those rows while
+`rate_usd`, and the derived `rate_unit`, and the dashboard and CLI quote `$0.119-$0.462/s` for those rows while
 `usd`/`usd_min` keep pricing the whole call for reserve. `type: per_success` on these rows is the
 billing rule (a failed generation is not charged), not the display unit.
 
-The validator checks the effective descriptor. Dotted JSON paths are syntactically valid; success and
-failure are non-empty, disjoint lists; `interval` is positive; poll has exactly one of `endpoint`
+The validator checks the effective descriptor. Dotted JSON paths are syntactically valid; success
+is non-empty; failure may be empty only when optional, non-empty `billed_failure` supplies the
+terminal failure values; optional `progress` names expected non-terminal values so the CLI can
+distinguish them from a new undocumented provider state; all status lists are pairwise disjoint. `interval` is positive; poll has exactly one of `endpoint`
 or `url_from`; result has exactly one of `path` or `fetch`; every descriptor block rejects unknown
 keys. Status values are compared after string coercion on both sides; a missing or unrecognized value
-means still in progress, in both the CLI awaiter and the settlement worker. Static poll/fetch ids must
+means still in progress, in both the CLI awaiter and the settlement worker, but the CLI warns once
+when a value is neither terminal nor declared in `progress`. A `billed_failure`
+remains a CLI failure but settles terminal usage instead of releasing the hold (for providers that
+charge work completed before cancellation). Static poll/fetch ids must
 be same-provider GET utility endpoints. Their mapping is explicit:
 poll `param` is exactly `{in, name}`, while result `fetch_param` is exactly `{in, name, value_from}`
 so a terminal field such as MiniMax's `file_id` is not confused with the utility request parameter.
@@ -825,8 +831,9 @@ fallback, so a request cannot reserve zero or bill past the ceiling. With `settl
 matched row is reserved and settled (fallback when unmatched). With `settle: usage`, the matched
 row is reserved as the rate-card estimate and the terminal `usage.path` figure settles, which may
 exceed the reserve (OpenRouter's unpublished minimums); `settle: usage` therefore requires an async
-descriptor, exactly a dotted `usage.path` and a supported `usage.unit` (`usd`, or `credit` when
-fx.yaml prices that provider's credit), and `settle: table` rejects a stray usage block. A `times`
+descriptor, exactly a dotted `usage.path` and a supported `usage.unit` (`usd`; `credit` when
+fx.yaml prices that provider's credit; or a provider-native meter with a numeric
+`unit_rates_usd[provider][unit]` entry), and `settle: table` rejects a stray usage block. A `times`
 value is never non-positive, whatever minimum the field declares, so a field that admits a sentinel
 such as `-1` cannot multiply a rate by it; the sentinel is priced by a flat row that pins it, and
 that row is left out of the advertised per-second rate span. The money fragment describes the settlement itself.

@@ -83,7 +83,7 @@ ASYNC_PARAM_LOCATIONS = {"pathParams", "queryParams"}
 JSON_PATH = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_-]*|[0-9]+)(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|[0-9]+))*")
 # Only the unit real traffic has settled (OpenRouter's `usage.cost` in dollars). A token unit
 # returns with the first metered token-priced listing, together with its fx rule and a live test.
-USAGE_UNITS = {"usd", "credit"}  # credit: the provider's fx.yaml credit_rates_usd rate
+USAGE_UNITS = {"usd", "credit"}  # plus provider-native meters declared in unit_rates_usd
 # the section heading an endpoint files under on its platform page — one lowercase word
 DOMAIN = re.compile(r"[a-z][a-z0-9_]*")
 HOST = re.compile(
@@ -422,11 +422,15 @@ def check_cost_table(cost: dict, input_schema: object, where: str, errors: list[
     if settle == "usage":
         if not isinstance(usage, dict) or set(usage) != {"path", "unit"} \
                 or not isinstance(usage.get("path"), str) or not JSON_PATH.fullmatch(usage["path"]) \
-                or usage.get("unit") not in USAGE_UNITS:
+                or not isinstance(usage.get("unit"), str) or not usage["unit"].strip():
             fail(errors, where, "cost.settle 'usage' requires usage.path and usage.unit")
         elif usage.get("unit") == "credit" and not _finite_number(_credit_rate(provider)):
             fail(errors, where, f"usage.unit 'credit' needs a numeric fx.yaml credit_rates_usd entry "
                                 f"for '{provider}'")
+        elif usage.get("unit") not in USAGE_UNITS \
+                and not _finite_number(_unit_rate(provider, usage.get("unit"))):
+            fail(errors, where, f"usage.unit '{usage.get('unit')}' needs a numeric "
+                                f"fx.yaml unit_rates_usd entry for '{provider}'")
     elif usage is not None:
         fail(errors, where, "cost.usage is only valid with settle: usage")
 
@@ -509,20 +513,30 @@ def check_async_descriptor(descriptor: object, where: str, provider: str,
     if not isinstance(status, dict):
         fail(errors, where, "async.status must be a mapping")
     else:
-        if set(status) != {"path", "success", "failure"}:
-            fail(errors, where, "async.status requires exactly path, success, and failure")
+        if set(status) - {"path", "progress", "success", "failure", "billed_failure"} \
+                or not {"path", "success", "failure"}.issubset(status):
+            fail(errors, where, "async.status requires path, success, failure, and optionally progress and billed_failure")
         if not isinstance(status.get("path"), str) or not JSON_PATH.fullmatch(status["path"]):
             fail(errors, where, "async.status.path must be a dotted JSON path")
         success, failure = status.get("success"), status.get("failure")
-        for name, values in (("success", success), ("failure", failure)):
-            if not isinstance(values, list) or not values:
+        progress, billed_failure = status.get("progress"), status.get("billed_failure")
+        for name, values in (("progress", progress), ("success", success), ("failure", failure),
+                             ("billed_failure", billed_failure)):
+            if name in {"progress", "billed_failure"} and values is None:
+                continue
+            if not isinstance(values, list) or (name == "success" and not values) \
+                    or (name in {"progress", "billed_failure"} and not values):
                 fail(errors, where, f"async.status.{name} must be a non-empty list")
             elif any(isinstance(value, (dict, list, bool)) or value is None
                      or not str(value).strip() for value in values):
                 fail(errors, where, f"async.status.{name} values must be non-empty strings or numbers")
-        if isinstance(success, list) and isinstance(failure, list) \
-                and {str(value) for value in success} & {str(value) for value in failure}:
-            fail(errors, where, "async.status.success and failure must not overlap")
+        groups = [values for values in (progress, success, failure, billed_failure)
+                  if isinstance(values, list)]
+        if sum(len({str(value) for value in values}) for values in groups) != \
+                len(set().union(*({str(value) for value in values} for values in groups))):
+            fail(errors, where, "async.status groups must not overlap")
+        if isinstance(failure, list) and not failure and not billed_failure:
+            fail(errors, where, "async.status needs failure or billed_failure terminal values")
 
     result = descriptor.get("result")
     if not isinstance(result, dict):
@@ -651,6 +665,13 @@ def _credit_rate(provider: str | None) -> object:
     """The provider credit rate used by async cost.settle: usage validation."""
     fx = yaml.safe_load((CATALOG / "fx.yaml").read_text()) or {}
     entry = (fx.get("credit_rates_usd") or {}).get(provider or "")
+    return entry.get("usd") if isinstance(entry, dict) else entry
+
+
+def _unit_rate(provider: str | None, unit: object) -> object:
+    """The provider-scoped native-meter rate used by async usage settlement."""
+    fx = yaml.safe_load((CATALOG / "fx.yaml").read_text()) or {}
+    entry = ((fx.get("unit_rates_usd") or {}).get(provider or "") or {}).get(str(unit or ""))
     return entry.get("usd") if isinstance(entry, dict) else entry
 
 
@@ -1082,7 +1103,7 @@ def main(argv: list[str]) -> int:
                 if not isinstance(cost, dict):
                     fail(errors, where, f"cost.type missing or not one of {sorted(COST_TYPES)}")
                 else:
-                    check_cost(cost, where, errors, warnings, inp, provider)
+                    check_cost(cost, where, errors, warnings, inp, service)
                     if service == "tavily":
                         check_tavily_rates(eid, cost, where, errors)
             effective_async = effective_async_descriptor(data.get("async"), ep.get("async"))
