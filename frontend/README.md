@@ -42,6 +42,9 @@ npm --prefix frontend run test:e2e
 uv build
 ```
 
+Test behavior, not template source strings, CSS class names or component arrangement. Keep transport
+unit tests and HTTP rollout/packaging checks; use browser tests for user interactions.
+
 Browser tests start their own server on :18791 with a disposable database and no dotenv file.
 They use full Chromium in headless mode so back/forward cache restoration is exercised.
 `PLAYWRIGHT_CHANNEL=chrome` can use an installed Chrome for local checks.

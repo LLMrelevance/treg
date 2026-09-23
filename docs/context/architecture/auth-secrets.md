@@ -30,7 +30,6 @@ sources:
   - tests/test_oauth_refresh.py
   - tests/test_financialdatasets.py
   - tests/test_key_providers.py
-  - tests/test_dashboard_markup.py
   - src/treg/config.py
 related:
   - architecture/proxy-model.md

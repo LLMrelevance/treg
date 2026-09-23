@@ -242,11 +242,8 @@ on a public shelf renders as its bare slug and the whole action chain collapses 
 `mkOauth` has no public fallback — the open response carries no `auth_kind` — so the public branch
 offers BYOK, which is true for every provider, rather than guessing Connect.
 
-**Each action is ONE button whose handler forks on `publicCatalog`**, not a duplicated public
-template. `tests/test_dashboard_markup.py` asserts the member chain's exact shape
-(`v-else-if="mkOauth(e.provider)" class="btn sm primary"`, `openProvider(e.provider)`, …), and a
-fork keeps those substrings intact where a parallel branch drifts. That test reads a fixed-size
-window of the markup and has already been outgrown once by these forks.
+Each catalog action chooses sign-in or the member flow based on `publicCatalog`. Browser coverage
+in `frontend/e2e/dashboard.spec.ts` checks public catalog navigation and reachable sign-in.
 
 ### The no-JS fallback
 

@@ -47,17 +47,10 @@ async def test_auth_me_user_hash_is_hmac_of_the_email(clients, monkeypatch):
     assert "s3cret" not in r.text  # the secret itself never leaves the server
 
 
-def test_pages_gate_on_meta_app_id():
-    from dashboard_source import FRONTEND
-    assert "intercom_app_id" in (FRONTEND / "state/analytics.js").read_text()
-    # each Intercom-bearing page keys its loader off /meta's intercom_app_id (empty = inert)
-    for page in ("landing.html", "support.html"):
-        assert "intercom_app_id" in (WEB / page).read_text(), page
-
-
 def test_no_hardcoded_workspace_id_anywhere():
     # the only allowed form of the widget URL is the config-driven concatenation
     pat = re.compile(r"widget\.intercom\.io/widget/(?!'\+app)")
-    for f in WEB.rglob("*"):
-        if "dashboard" not in f.relative_to(WEB).parts and f.is_file() and f.suffix in {".html", ".js", ".md", ".txt"}:
+    sources = [*WEB.rglob("*"), *(WEB.parents[2] / "frontend" / "src").rglob("*")]
+    for f in sources:
+        if "dashboard" not in f.parts and f.is_file() and f.suffix in {".html", ".js", ".md", ".txt"}:
             assert not pat.search(f.read_text()), f"hardcoded Intercom workspace id in {f.name}"

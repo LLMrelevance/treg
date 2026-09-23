@@ -988,32 +988,10 @@ line rather than an empty table. `.prm-t` explicitly resets the global `table`/`
 background, border, radius, filled header bar), which otherwise reads as a stray highlight inside the
 `.prm` box and clips the first column against the table's own border. Navigation runs both ways: an integration page carries a
 **Covered in the catalog** chip row (`mkPlatforms`) into the platform pages, and each platform page
-header links back out to the providers that serve it (`platProviders`). `tests/test_dashboard_markup.py`
-pins this provider navigation to the platform response itself; it does not disappear while the
-separate OAuth connection registry is still loading. The same test
-locks the structure (top-level view, the row/detail `<template>` pair inside the `.ttable`, the
-`v-if`'d tab bar and its `platform` fallback, the derived tab list and category order, tiles wearing the
-platform's own logo with the generated-initial fallback, the `Platform` tab still carrying the provider
-shelves and their connect flow, the category heading being a real heading, the card's four regions
-(mark + name + category, the connected-state corner, the count/price footer — and NO summary
-paragraph, with the name wrapping instead of ellipsising), the
-unified-USD price rule (server `usd`, no local FX constant, native suffix, `{}`-normalisation,
-`quota_rows` excluded first) and its unmetered-OAuth-only "free with your account" branch,
-the runnable green on all three of its surfaces, the stacked platform header, the always-both
-provider/endpoint counts, the credit-priced fallback ranking ahead of "price not published",
-the parameters block sitting before the example
-toggle with its query/path/body order and its no-params fallback,
-the featured-shelf split and its two guards, the ledger being one table
-with `other`-last domain sections that need a visible row to exist, the single platform-wide Actions
-section holding every management endpoint, and merged-before-single rows, a row title that is a name or a clipped
-summary and never a paragraph, the collapsed merged row's non-wrapping three-pills-and-a-count strip, its pills being per-provider,
-sorted cheapest-first and priced only when the price is a real number,
-the two-level expansion (provider sub-rows, then one detail block shared with the single-row path), the
-long metered phrasing never reaching a collapsed line, the filter bar's three controls and their chip
-counts, both sticky layers and the overflow rules that let them stick, the two-tab expansion (Request first, no response tab at
-all without an example, both panes capped at 320px), the prominent Connect in the tab bar with its
-Connected state, the `treg call` line and the provider facts, the cross-currency cheapest rules, the credit-priced "see provider" fallback, the scope
-chips, and lazy examples). `tests/test_catalog_api.py` locks the server half: the section order, the
+header links back out to the providers that serve it (`platProviders`). Provider navigation derives
+from the platform response itself, so it remains available while the separate OAuth connection
+registry loads. Browser tests in `frontend/e2e/` cover navigation and interactions; they do not pin
+CSS classes or template source spelling. `tests/test_catalog_api.py` locks the server half: the section order, the
 merged/single split, the domain resolution ladder, and a delivery-mode path segment never becoming a
 subject.
 
