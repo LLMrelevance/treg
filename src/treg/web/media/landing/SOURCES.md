@@ -9,14 +9,15 @@ Local integration covers authentication, setup commands, tracking and support ch
 WebGL failure shows the monochrome treg mark; BFCache restores animation and layout.
 See `docs/context/interface/seo.md` for landing behavior.
 
-## Third-party files
+## Third-party dependencies
 
-| Files | Version | Source and license |
+| Dependency | Version | Delivery and license |
 |---|---|---|
-| `vendor/three/three.module.js`, `three.core.js` | 0.180.0 | Unmodified `three@0.180.0` npm build; MIT, `vendor/three/LICENSE` |
-| `vendor/three/RoomEnvironment.js`, `FontLoader.js`, `helvetiker_regular.typeface.json` | Reference revision above | Three.js helpers and font from the design repository; retained license and font metadata |
-| `vendor/lenis.min.js`, `lenis.css` | 1.3.26 | Design repository's vendored Lenis; MIT, `vendor/LICENSE` |
+| Three.js, RoomEnvironment, FontLoader and Helvetiker font | 0.180.0 | jsDelivr npm CDN, pinned together by the import map in `landing.html`; MIT (font license in its metadata) |
+| Lenis JavaScript and CSS | 1.3.26 | jsDelivr npm CDN, pinned in `landing.html`; MIT |
 | `assets/*` | Reference revision above | Agent marks; `assets/LOBEHUB-LICENSE` retained. The prototype's orange treg mark is omitted. |
 
-Compare updates against the pinned source and run landing E2E, SEO and tracking tests.
-Copy library builds verbatim.
+Use the [Three.js import-map installation](https://threejs.org/manual/pages/installation.html)
+with one exact version and CDN for the full module graph. No third-party library builds are
+committed here. A failed Three.js module download activates the static fallback; missing Lenis
+leaves native scrolling available. Run landing E2E, SEO and tracking checks after upgrades.

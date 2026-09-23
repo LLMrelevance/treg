@@ -215,4 +215,8 @@ jobs:
               assert legacy_assets
               for asset in legacy_assets:
                   assert wheel.read('treg/web/dashboard-legacy/' + asset)
+              arena = wheel.read('treg/web/enrich-arena.html').decode()
+              for asset in re.findall(r'src="(/vendor/vue-[^"\s]+)"', arena):
+                  assert wheel.read('treg/web' + asset)
+              assert wheel.read('treg/web/vendor/LICENSE')
           PYCODE

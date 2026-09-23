@@ -49,6 +49,10 @@ Browser tests start their own server on :18791 with a disposable database and no
 They use full Chromium in headless mode so back/forward cache restoration is exercised.
 `PLAYWRIGHT_CHANNEL=chrome` can use an installed Chrome for local checks.
 
+Builds also copy the npm-installed Vue global runtime and license for standalone pages and the
+legacy snapshot; these generated files are packaged but never committed. Page runtime versions
+must match the npm lockfile. Three.js and Lenis on the landing page use pinned CDN URLs.
+
 Builds generate `src/treg/web/dashboard/`, which is ignored by Git and included in wheels/sdists.
 Do not edit generated files. Distributable package builds fail if these assets are absent; editable
 Python installs and background workers do not require Node. The Web build script is

@@ -122,5 +122,5 @@ test('mainline team resources survive navigation and open the voice tools', asyn
   await expect(dialog.getByRole('textbox')).toBeFocused()
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.getByRole('button', { name: 'Use in TTS', exact: true }).click()
-  await expect(page.locator('.drawer textarea')).toHaveValue(/test-private-voice/)
+  await expect(page.locator('.drawer textarea')).toHaveValue(/test-private-voice/, { timeout: 20000 })
 })

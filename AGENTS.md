@@ -162,6 +162,8 @@ xdist is pulled via `--with`, not the lockfile — same as CI. The Postgres CI j
   ship with Python. Run `npm --prefix frontend test` and `npm --prefix frontend run test:e2e`.
   Existing Options API use cases live in `frontend/src/state/`; preserve their session and
   navigation behavior when narrowing component state. Never put dashboard logic back into HTML.
+  Manage third-party browser libraries through pinned npm packages or version-pinned CDN URLs;
+  do not commit copied library builds. Keep critical app runtimes available from the npm build.
 - **Schema.** Alembic owns it (`src/treg/alembic/versions/`); every schema change is a revision.
   Startup only verifies the revision and refuses to boot when behind; migrations run only via
   `python -m treg upgrade`.

@@ -1,6 +1,6 @@
 import * as T from 'three';
-import {RoomEnvironment} from './vendor/three/RoomEnvironment.js';
-import {FontLoader} from './vendor/three/FontLoader.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import {createGateway} from './gateway-model.js';
 import {createIntro} from './gateway-intro.js';
 
@@ -29,7 +29,7 @@ export async function mountGateway(host,{studio=false}={}){
  const key=new T.DirectionalLight(0xfffdf8,3);key.position.set(1,3,6);scene.add(key);
  const upper=new T.SpotLight(0xf3fff9,85,14,.29,1,2);upper.position.set(4,-.3,4.5);upper.target.position.set(0,.88,.66);scene.add(upper,upper.target);
  const rim=new T.DirectionalLight(0xc9f4e4,2.5);rim.position.set(4,1,-2);scene.add(rim);
- let font;try{font=new FontLoader().parse(await (await fetch(new URL('./vendor/three/helvetiker_regular.typeface.json', import.meta.url))).json());}catch{}
+ let font;try{font=new FontLoader().parse(await (await fetch(import.meta.resolve('three/fonts/helvetiker_regular.typeface.json'))).json());}catch{}
  const {root,materials}=createGateway(T,font);scene.add(root);
  const layers=root.children.filter(o=>o.name.startsWith('Glass cassette')).map((group,index)=>{
   group.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.userData.baseEmission=o.material.emissiveIntensity;o.material.emissive.set(0x64e5b8);}});

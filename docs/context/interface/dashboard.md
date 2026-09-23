@@ -87,7 +87,7 @@ sources:
   - src/treg/web/media/redesign/dashboard.css
   - src/treg/web/media/redesign/SOURCES.md
   - src/treg/web/vendor/README.md
-  - src/treg/web/vendor/vue-3.5.41.global.prod.js
+  - frontend/scripts/copy-runtime.mjs
   - src/treg/web/tutorial.js
   - src/treg/web/tutorial.html
   - src/treg/web/tour/tour.js
@@ -234,8 +234,8 @@ and Vite, using a local-only development entry for hot updates. See `CONTRIBUTIN
 
 Vue is pinned in the npm lockfile and bundled from the same origin, so a blocked CDN cannot
 prevent startup. The shared onboarding widgets in `/agent-setup.js` still serve both Dashboard and
-Arena; their templates use Vue's bundled compiler. The existing vendored global Vue remains for
-standalone pages. Agent icons and Google Fonts remain optional external presentation assets.
+Arena; their templates use Vue's bundled compiler. The global Vue runtime for standalone pages and the legacy snapshot is
+copied from the npm package at build time, with its license; generated copies are not committed. Agent icons and Google Fonts remain optional external presentation assets.
 The unmounted entry displays a loading message and a reload link rather than hiding a raw template.
 The authenticated redesign follows the root `design.md`.
 

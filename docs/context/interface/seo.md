@@ -83,8 +83,8 @@ form is visible before login; submission is authenticated and metered against te
 
 The root landing remains server-rendered from `web/landing.html`. Its visual implementation lives
 under `web/media/landing/`: a Three.js gateway in the hero, a scroll-driven catalog, particle
-backgrounds and the dark closing section. `SOURCES.md` pins the design reference and vendored
-libraries. The assets ship through the existing media mount without a separate build. Reduced
+backgrounds and the dark closing section. `SOURCES.md` pins the design reference and library versions. Three.js and Lenis load from the
+version-pinned jsDelivr npm CDN; our own animation modules ship through the existing media mount. Reduced
 motion uses static presentation; WebGL failure releases the opening sequence and shows the treg
 mark. BFCache preserves animation resources; `pageshow` resumes animation and refreshes layout.
 The setup command uses `{BASE}`, and sign-in, local navigation, structured data, attribution

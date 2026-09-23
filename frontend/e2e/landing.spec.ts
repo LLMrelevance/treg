@@ -4,7 +4,9 @@ import { expect, test } from '@playwright/test'
 test.use({ launchOptions: { ignoreDefaultArgs: ['--disable-back-forward-cache'] } })
 
 test.describe('browser history', () => {
-  test('restores the 3D scene and catalog scrolling from the back/forward cache', async ({ page }, testInfo) => {
+  test('restores the 3D scene and catalog scrolling from the back/forward cache', async ({ page }) => {
+    // Software WebGL on CI renders the scene much more slowly than a desktop GPU.
+    test.setTimeout(120000)
     // Allow BFCache on local HTTP; production cache headers stay unchanged.
     await page.route('http://127.0.0.1:18791/', async route => {
       const response = await route.fetch()
@@ -28,7 +30,6 @@ test.describe('browser history', () => {
       await expect(page.locator('.gateway-webgl')).toBeVisible()
       await expect(page.locator('.gateway-webgl')).toHaveCount(1)
       await expect(page.locator('.hero-particles')).toHaveCount(1)
-      await page.screenshot({ path: testInfo.outputPath(`history-restored-${cycle}.png`) })
       await expect(page.locator('.command-beam')).toHaveCount(1)
       await page.evaluate(() => window.scrollTo({ top: document.querySelector<HTMLElement>('#catalog')!.offsetTop + 200, behavior: 'instant' }))
       const track = page.locator('#catalog .catwrap')
@@ -57,12 +58,13 @@ test('the hero does not flash a placeholder while the 3D module loads', async ({
   await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'ready', { timeout: 20000 })
 })
 
-test('landing renders its local 3D assets and copies the serving-origin setup command', async ({ page, context }) => {
+test('landing renders its CDN-backed 3D scene and copies the serving-origin setup command', async ({ page, context }) => {
+  test.setTimeout(120000)
   const errors: string[] = []
   const failedAssets: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('response', response => {
-    if (response.url().includes('/media/landing/') && !response.ok()) failedAssets.push(response.url())
+    if ((response.url().includes('/media/landing/') || response.url().includes('cdn.jsdelivr.net/npm/')) && !response.ok()) failedAssets.push(response.url())
   })
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.goto('/')
@@ -125,12 +127,14 @@ test('mobile reduced-motion landing remains usable when WebGL is unavailable', a
 })
 
 
-test('landing falls back when a Three.js dependency cannot download', async ({ page }) => {
-  await page.route('**/vendor/three/three.core.js', route => route.abort('failed'))
+test('landing keeps native scrolling and sign-in when the library CDN is unavailable', async ({ page }) => {
+  await page.route('https://cdn.jsdelivr.net/npm/**', route => route.abort('failed'))
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'fallback')
   await expect(page.locator('.hcore')).toBeVisible()
   await expect(page.locator('html')).not.toHaveClass(/opening-stage/)
+  await page.mouse.wheel(0, 450)
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0)
   await page.getByRole('link', { name: 'Sign in', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Sign in', exact: true })).toBeVisible()
 })
