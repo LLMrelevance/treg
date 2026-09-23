@@ -122,5 +122,9 @@ test('mainline team resources survive navigation and open the voice tools', asyn
   await expect(dialog.getByRole('textbox')).toBeFocused()
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.getByRole('button', { name: 'Use in TTS', exact: true }).click()
-  await expect(page.locator('.drawer textarea')).toHaveValue(/test-private-voice/, { timeout: 20000 })
+  // The disposable server has no provider credentials; verify the prepared request
+  // through the API tab, which is available without enabling paid execution.
+  const drawer = page.getByRole('dialog').filter({ hasText: 'Try “fishaudio.tts.s2-1-pro”' })
+  await drawer.getByRole('button', { name: 'API', exact: true }).click()
+  await expect(drawer.locator('pre')).toContainText('"reference_id": "test-private-voice"')
 })

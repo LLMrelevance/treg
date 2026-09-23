@@ -60,7 +60,7 @@ body:has(.redesign)::before { display:none; }
 .rd-email { overflow:hidden; text-overflow:ellipsis; margin:4px 10px 10px; font-size:12px; color:var(--muted); }
 .rd-account-panel button,.rd-account-panel a { display:block; width:100%; border:0; border-radius:10px; padding:10px; background:none; text-align:left; color:var(--ink); font:13px var(--sans); text-decoration:none; }
 .rd-account-panel button:hover,.rd-account-panel a:hover { background:var(--hover); }
-.rd-referral { position:fixed; z-index:40; right:24px; bottom:24px; display:flex; align-items:center; gap:10px; border:1px solid var(--line2); border-radius:999px; padding:12px 18px; background:var(--inverse); color:var(--inverse-ink); box-shadow:0 4px 16px #0002; font:500 13px var(--sans); text-decoration:none; }
+.rd-referral { position:fixed; z-index:40; left:24px; right:auto; bottom:24px; display:flex; align-items:center; gap:10px; border:1px solid var(--line2); border-radius:999px; padding:12px 18px; background:var(--inverse); color:var(--inverse-ink); box-shadow:0 4px 16px #0002; font:500 13px var(--sans); text-decoration:none; }
 .rd-referral:hover { transform:translateY(-1px); }
 .rd-referral span { font-size:18px; }
 .redesign .rd-view-search { margin:0 0 22px auto; max-width:320px; min-height:40px; padding:9px 14px; gap:10px; background:var(--surface); box-shadow:none; border:1px solid var(--line); border-radius:999px; }
@@ -194,7 +194,7 @@ body:has(.redesign)::before { display:none; }
   .rd-start .try-cat { gap:6px; }
   .rd-build .seg { display:flex; flex-wrap:wrap; border-radius:16px; }
   .rd-build .seg button { flex:1; white-space:normal; }
-  .rd-referral { bottom:16px; right:16px; padding:11px 16px; }
+  .rd-referral { bottom:16px; left:16px; padding:11px 16px; }
   .rd-account-panel { position:fixed; top:54px; left:12px; right:12px; width:auto; }
   .rd-start > details { padding:0 8px; }
   .redesign .rd-view-search { max-width:none; }

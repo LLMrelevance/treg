@@ -1155,8 +1155,9 @@ one double-adds each file and breaks the wheel build).
 
 ## The Referrals view
 
-A top-level `<template v-if="view==='referrals'">`, plus a nav button and a second entry point under
-the balance chip (where someone is already thinking about what treg costs them).
+`ReferralsPage.vue` renders the referrals view. The maintained Dashboard exposes a fixed
+`Refer a friend` link at the bottom left, leaving the bottom right for the support messenger.
+`dashboard.css` keeps this placement on desktop and mobile.
 
 **`'referrals'` must appear in BOTH view whitelists** — `viewFromHash()` and the `popstate` handler.
 `go('referrals')` works on click regardless of them; those two lists are what make the view survive
