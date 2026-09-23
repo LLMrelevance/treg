@@ -1150,8 +1150,10 @@ OAuth-connect in-browser (the hosted consent + poll flow, `/oauth/*`) **has now 
 Marketplace section above. Everything in DASHBOARD-PLAN (org lifecycle, resource registration incl.
 multi-binding + edit, skill bundles, super-admin mutations, OAuth connect, shareable detail pages) has
 shipped. Packaging: `src/treg/web` lives inside the `treg` package, so the wheel's `packages`
-inclusion ships every asset (incl. `tutorial.js`/`tutorial.html`) — no `force-include` (a redundant
-one double-adds each file and breaks the wheel build).
+inclusion ships its runtime assets (incl. `tutorial.js`/`tutorial.html`) without a `force-include`
+(a redundant one double-adds each file and breaks the wheel build). Hosted-page MP4 demos are the
+deliberate exception: Hatch exclusions keep them out of PyPI artifacts while Git deployments retain
+them.
 
 ## The Referrals view
 

@@ -39,8 +39,11 @@ Everything else in this file is guidance; these are the contract, and they win o
 3. A request holds zero database connections while upstream or object-storage I/O is in flight.
    Keep `reserve` and `settle` separate; read archive pointers, close the session, then fetch bytes.
 4. Plain `/call/` is a faithful relay: the injected credential, the transport headers listed in
-   `src/treg/infra/upstream/relay.py`, and (on treg's shared key only) the per-org and, for pinned agents, per-pin re-scoping of the
-   caller's `Idempotency-Key` are the only rewrites. Never add upstream-specific modeling.
+   `src/treg/infra/upstream/relay.py`, and (on treg's shared key only) the per-org and, for pinned
+   agents, per-pin re-scoping of the caller's `Idempotency-Key` are the only rewrites. A credential
+   binding with `location: "json"` explicitly parses and reserializes the top-level JSON object; it
+   is not byte-faithful and must never be used with an upstream that signs or hashes the raw body.
+   Never add upstream-specific modeling.
    A live-verified free catalog endpoint may declare an anonymous fallback; its empty binding list
    omits credential injection but does not strip or rewrite caller headers.
    Routed endpoints and overflow wrap the child's answer and say so; they never alter it. Responses needing settlement or ownership evidence are buffered by the application

@@ -19,6 +19,7 @@ AGGREGATORS = ("orthogonal", "monid")
 # capacity_type / funding_mode / source. Anything not listed imports as unknown/unknown and is
 # flagged by the sweep — a policy row must be classified by a person, never guessed by code.
 _KNOWN: dict[str, tuple[str, str, str]] = {
+    "adyntel": ("credits", "manual", "manual"),
     "dropleads": ("credits", "manual", "api"),
     "trykitt": ("cash", "manual", "api"),
     "harvestapi": ("cash", "auto_recharge", "api"),  # Owner will enable vendor auto top-up for production.
@@ -86,6 +87,7 @@ _QUOTAS: dict[str, dict] = {
     "aiark": {"limit": 15000, "period": "billing", "resets_at_rule": "monthly subscription; date not reported by API"},
 }
 _RATE_LIMITS: dict[str, dict] = {
+    "adyntel": {"limit": 5, "window_s": 1, "source": "docs"},
     # The only platform-served tool is standard single verification, documented at 100/s. Keep
     # the shared key at one quarter of that allowance; BYOK calls bypass this limiter.
     "bounceban": {"limit": 25, "window_s": 1, "source": "docs"},
