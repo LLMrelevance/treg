@@ -44,6 +44,7 @@ _KNOWN: dict[str, tuple[str, str, str]] = {
     # reads nor changes that setting, so the observation source remains manual.
     "trestleiq": ("cash", "auto_recharge", "manual"),
     "tavily": ("credits", "manual", "api"),
+    "keenable": ("requests", "manual", "manual"),
     "getleadsio": ("credits", "manual", "api"),
     "sumble": ("monthly_quota", "quota_reset", "api"),
     "moltsets": ("rolling_quota", "subscription", "api"),
@@ -116,6 +117,7 @@ _RATE_LIMITS: dict[str, dict] = {
     # documented tier until the shared key's environment is verified. Crawl has the same 100/minute
     # ceiling on both tiers, so this provider-wide pace is safe for all four catalog tools.
     "tavily": {"limit": 100, "window_s": 60, "source": "docs"},
+    "keenable": {"limit": 10, "window_s": 1, "source": "docs"},
     # Routing-friendly shared-key pace. The 5,000-request/5h rolling allowance is capacity, not a
     # burst rate; encoding it here would make the spacer add 3.6s before every routed attempt.
     "moltsets": {"limit": 10, "window_s": 1, "source": "policy"},

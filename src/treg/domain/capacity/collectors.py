@@ -780,6 +780,9 @@ NO_BALANCE_API = {
                          "prepaid Credits are visible in the vendor dashboard only",
     "justoneapi": "balance available only via MCP server (get_account_balance tool), no public REST "
                   "endpoint documented (checked docs.justoneapi.com 2026-08-31) — dashboard only",
+    "keenable": "no public REST balance or usage endpoint in the official OpenAPI document "
+                "(checked docs.keenable.ai 2026-09-23) — the console shows remaining credits and "
+                "authenticated MCP calls report only per-call usage",
     "limadata": "no free standalone balance or usage endpoint in the official Basic v2 API "
                 "(checked api.limadata.com/docs/basic_v2 2026-09-17) — dashboard only",
     "trestleiq": "no public balance or usage endpoint in the official API reference "
