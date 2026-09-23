@@ -1,0 +1,78 @@
+import { expect, test } from '@playwright/test'
+
+test('the hero does not flash a placeholder while the 3D module loads', async ({ page }) => {
+  let release!: () => void
+  const loading = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/media/landing/gateway-3d.js', async route => {
+    await loading
+    await route.continue()
+  })
+  try {
+    await page.goto('/', { waitUntil: 'commit' })
+    await expect(page.locator('.gateway-sculpture')).toBeAttached()
+    await expect(page.locator('.hcore')).toBeHidden()
+  } finally {
+    release()
+  }
+  await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'ready', { timeout: 20000 })
+})
+
+test('landing renders its local 3D assets and copies the serving-origin setup command', async ({ page, context }) => {
+  const errors: string[] = []
+  const failedAssets: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('response', response => {
+    if (response.url().includes('/media/landing/') && !response.ok()) failedAssets.push(response.url())
+  })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/')
+  await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'ready', { timeout: 20000 })
+  await page.keyboard.press('Escape')
+  await expect(page.locator('html')).not.toHaveClass(/opening-stage/)
+  await page.getByRole('button', { name: 'Copy agent command', exact: true }).click()
+  await expect(page.getByRole('status')).toHaveText('Copied')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('set up treg - http://127.0.0.1:18791/llms.txt')
+  await page.getByRole('button', { name: 'Next agent scenario' }).click()
+  await expect(page.locator('#sc-tools button')).toHaveCount(6)
+  expect(failedAssets).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('landing email sign-in reaches the dashboard', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Sign in', exact: true })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('link', { name: 'Continue with GitHub' })).toHaveAttribute('href', '/auth/github')
+  await dialog.getByPlaceholder('you@work.com').fill(`landing-${Date.now()}@example.com`)
+  await dialog.getByRole('button', { name: 'Email me a sign-in code' }).click()
+  await expect(dialog.locator('#em-err')).toContainText('dev mode')
+  await dialog.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByPlaceholder('Team name, e.g. Superdesign')).toBeVisible()
+})
+
+test('mobile reduced-motion landing remains usable when WebGL is unavailable', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
+      if (type.includes('webgl')) return null
+      return getContext.apply(this, [type, ...args] as Parameters<typeof getContext>)
+    } as typeof getContext
+  })
+  await page.goto('/')
+  await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'fallback')
+  await expect(page.locator('.hcore')).toBeVisible()
+  await expect(page.locator('html')).not.toHaveClass(/opening-stage/)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) },
+  }))
+  await page.getByRole('button', { name: 'Copy agent command', exact: true }).click()
+  await expect(page.getByRole('status')).toHaveText('Copy failed, please retry')
+  await page.locator('footer').scrollIntoViewIfNeeded()
+  await expect(page.getByRole('link', { name: 'Enrich Arena' })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('landing-mobile-fallback.png'), fullPage: true })
+})

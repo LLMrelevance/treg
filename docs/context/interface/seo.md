@@ -13,6 +13,20 @@ sources:
   - frontend/src/components/PublicNavigation.vue
   - frontend/src/state/boot.js
   - src/treg/web/landing.html
+  - src/treg/web/media/landing/product-theme.css
+  - src/treg/web/media/landing/refinement.css
+  - src/treg/web/media/landing/gateway.css
+  - src/treg/web/media/landing/hero-opening.js
+  - src/treg/web/media/landing/refinement.js
+  - src/treg/web/media/landing/catalog-drum.js
+  - src/treg/web/media/landing/gateway.js
+  - src/treg/web/media/landing/gateway-3d.js
+  - src/treg/web/media/landing/gateway-model.js
+  - src/treg/web/media/landing/gateway-intro.js
+  - src/treg/web/media/landing/hero-particles.js
+  - src/treg/web/media/landing/command-beam.js
+  - src/treg/web/media/landing/SOURCES.md
+  - frontend/e2e/landing.spec.ts
   - src/treg/web/terms.html
   - src/treg/web/usecase-seo.html
   - src/treg/web/usecase-company.html
@@ -65,6 +79,15 @@ a new signup grant. Actual eligibility and migration behavior live in
 
 The landing footer links to the public standalone [Enrich Arena](enrich-arena.md) page. Its query
 form is visible before login; submission is authenticated and metered against team credits.
+
+The root landing remains server-rendered from `web/landing.html`. Its visual implementation lives
+under `web/media/landing/`: a Three.js gateway in the hero, a scroll-driven catalog, particle
+backgrounds and the dark closing section. `SOURCES.md` pins the design reference and vendored
+libraries. The assets ship through the existing media mount without a separate build. Reduced
+motion uses static presentation; WebGL failure releases the opening sequence and shows the treg
+mark. The setup command uses `{BASE}`, and sign-in, local navigation, structured data, attribution
+and deployment-configured support chat retain their existing contracts. Browser coverage lives in
+`frontend/e2e/landing.spec.ts`.
 
 `/gpt6` is the launch-film destination, served by `gpt6_page` as bundled,
 no-cache HTML and included in the sitemap and route ownership manifest. `/astra` redirects
