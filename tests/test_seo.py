@@ -416,6 +416,16 @@ async def test_every_surface_links_the_three_hubs(clients: AsyncClient):
             assert hub in html, f"{path} does not link {hub}"
 
 
+async def test_every_surface_links_the_blog(clients: AsyncClient):
+    """The blog was reachable only through the sitemap: no footer on the site linked it. Every
+    footer now does, on the hosted deployment (the route 404s off-host, like the hubs)."""
+    for path in ("/", "/catalog", "/tools/hunter", "/use-cases/verify-an-email",
+                 "/workflows/find-and-verify-a-lead-list", "/agents/claude-code",
+                 "/people-search", "/jev", "/use-cases/lead-enrichment-for-ai-agents"):
+        html = (await clients.get(path)).text
+        assert 'href="/blog"' in html, f"{path} does not link the blog"
+
+
 async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
     """The job, workflow and agent pages exist on treg.to only (`_hosted`), so a self-hosted
     registry's footer and catalog must not point at three 404s. The IndexNow key file is generic
@@ -431,6 +441,7 @@ async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
                 html = (await c.get(path)).text
                 for hub in HUBS:
                     assert hub not in html, f"{path} links {hub} off-host"
+                assert 'href="/blog"' not in html, f"{path} links the blog off-host"
             assert (await c.get(f"/{INDEXNOW_KEY}.txt")).status_code == 200
     finally:
         get_settings.cache_clear()
