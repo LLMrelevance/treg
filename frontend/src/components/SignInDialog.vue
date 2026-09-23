@@ -1,13 +1,14 @@
 <script>
 import { useDashboard } from '../state/context'
-export default { setup: useDashboard }
+import BrandMark from './BrandMark.vue'
+export default { components: { BrandMark }, setup: useDashboard }
 </script>
 
 <template>
 <div class="lc-scrim" :class="{open:demo.signin}" @click.self="demo.signin=false">
     <div class="lc-modal" role="dialog" aria-modal="true" aria-label="Sign in">
       <button class="cls" @click="demo.signin=false" aria-label="Close">✕</button>
-      <div style="font-size:26px">▚</div>
+      <div style="font-size:22px;line-height:1"><BrandMark/></div>
       <h2 style="margin:8px 0 2px;font-family:var(--mono)">{{oauthSignin?'Sign in to continue connecting Treg':(invitePrefill?'Accept your invite':(shareGate?'Sign in to view it':(publicCatalog?'Start calling':'Make it yours')))}}</h2>
       <p v-if="oauthSignin" class="sub">After sign-in, review the requested access before you approve it.</p>
       <p v-else-if="invitePrefill" class="sub">Sign in with <b>{{invitePrefill}}</b> and you'll drop straight into the team.</p>

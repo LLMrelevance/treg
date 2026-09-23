@@ -1,12 +1,13 @@
 <script>
 import { useDashboard } from '../state/context'
-export default { setup: useDashboard }
+import BrandMark from './BrandMark.vue'
+export default { components: { BrandMark }, setup: useDashboard }
 </script>
 
 <template>
   <div class="lp">
     <header class="lp-nav">
-      <a href="/" class="brand">▚ treg</a>
+      <a href="/" class="brand"><BrandMark/>treg</a>
       <nav class="lp-links">
         <a href="/tutorial">Docs</a>
         <button class="iconbtn" @click="toggleTheme" :aria-label="theme==='dark'?'Light theme':'Dark theme'">{{theme==='dark'?'◐':'◑'}}</button>
