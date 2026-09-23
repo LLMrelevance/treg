@@ -14,8 +14,10 @@ This is an incremental extraction. The old use cases still share per-application
 `state/context.ts`; their JavaScript and the shared onboarding widgets are not fully typed.
 New isolated components should use typed props and events. Existing hash navigation and deep links
 remain in the navigation/catalog/details modules; this change does not replace their URL contract.
-The frozen rollback artifact lives in `src/treg/web/dashboard-legacy/`; it is not a second
-development source. Do not edit it. The server selects the frontend by authenticated user ID.
+The deprecated, frozen rollback artifact lives in `src/treg/web/dashboard-legacy/` and exists
+only during rollout. `frontend/` is the only maintained Dashboard source. Do not backport features
+or routine fixes, or refresh the snapshot when syncing main. The server selects the frontend by
+authenticated user ID.
 
 ## Develop
 
@@ -71,5 +73,21 @@ rollback needs no frontend rebuild. Existing tabs switch on reload, and configur
 also change the app-version stamp so open tabs can offer a refresh.
 
 The local dev script enables 100% for signed-in accounts by default. Override its rollout variables
-to rehearse production settings. Once the rollout is complete, remove legacy and the temporary
-selection mechanism in a separate change; even 100% currently leaves anonymous visitors on legacy.
+to rehearse production settings.
+
+## Retire the deprecated Dashboard
+
+Legacy is temporary, not a permanently supported version. Remove it in a follow-up change once
+the new Dashboard is validated at full account rollout and the release no longer needs the frozen
+fallback. Setting the percentage to 100 is not retirement: anonymous and token-only visitors still
+use legacy under the current policy.
+
+- Route every Dashboard entry to the compiled app, including anonymous catalog, shared links,
+  token-only entries and sign-in. Verify those flows and authenticated account flows in the browser.
+- Remove `src/treg/web/dashboard-legacy/`, `/app/legacy/assets/{path:path}`, the account-selection
+  branch, all three `TREG_DASHBOARD_ROLLOUT_*` settings and their app-version stamp inputs.
+- Remove obsolete rollout tests, local defaults and packaging checks; retain coverage for the
+  surviving entry routes, sessions and compiled assets. Update build/deployment documentation and
+  remove the retired settings from the private deployment configuration in a paired change.
+- Remove the deprecation instructions from `AGENTS.md` and context docs once removal ships.
+  Deployment rollback remains the recovery path after the in-process fallback is removed.

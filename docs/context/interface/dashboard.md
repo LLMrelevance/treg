@@ -212,6 +212,13 @@ shared-link and catalog entries use this decision and `private, no-store` plus `
 Environment changes require restarting Web processes. Existing tabs switch on reload; the version
 stamp also incorporates rollout settings to offer a refresh when assignment policy changes.
 
+The legacy snapshot is deprecated and scheduled for removal after rollout, not a second maintained
+Dashboard. New features and routine fixes belong only in `frontend/`; normal main-branch syncs must
+not refresh the frozen artifact. `frontend/README.md` owns the retirement checklist: migrate
+anonymous and token-only entries as well as signed-in accounts, then remove the snapshot, legacy
+asset route, selection settings and obsolete rollout plumbing. A 100% account rollout alone does
+not retire legacy.
+
 `GET /app` serves the selected document same-origin from the Python package, preserving local
 sign-in and parked OAuth authorization. Catalog and shared-link handlers modify that same document's
 metadata as before. `_app_version()` hashes the built entry, whose asset filenames change with
