@@ -215,7 +215,7 @@ endpoints:
       source_url: https://docs.olostep.com/features/crawls
       checked: '2026-09-23'
       confidence: verified
-      note: "Crawl costs one credit per completed page. treg reserves max_pages, then the terminal status response's credits_consumed settles the exact charge and releases the rest. A live one-page crawl completed with pages_count: 1 and credits_consumed: 1; its upstream-reported cost_usd was 0.00125, while treg values that credit at the configured $0.002 platform price."
+      note: "Crawl costs one credit per completed page. treg reserves max_pages, then the terminal status response's credits_consumed settles the exact charge and releases the rest. A live one-page crawl completed with pages_count: 1 and credits_consumed: 1; the account's actual purchase cost is $0.002 per credit."
     verified: '2026-09-23'
     docs_url: https://docs.olostep.com/api-reference/crawls/create
     example_response: examples/olostep.web.crawl.json
