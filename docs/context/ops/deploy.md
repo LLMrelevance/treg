@@ -228,6 +228,9 @@ database is local SQLite. Hosted deployments must still leave it false.
 
 ## Web service and generic Render example
 
+The redesigned homepage ships to all homepage visitors independently of Dashboard rollout.
+Its rollback requires a code rollback/revert; the Dashboard master switch does not change it.
+
 `GET /app` selects either the frozen legacy artifact or the Vite-built Vue application.
 The rollout defaults to legacy. Set `TREG_DASHBOARD_ROLLOUT_ENABLED=true` with a JSON array in
 `TREG_DASHBOARD_ROLLOUT_USER_IDS` for an account allowlist, then increase

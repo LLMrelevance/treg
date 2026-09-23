@@ -263,6 +263,25 @@ async def test_the_landing_offer_matches_the_page(clients: AsyncClient):
     assert "0%" in ld["offers"]["description"] and "0%" in r.text
 
 
+@pytest.mark.parametrize("endpoints,providers", [("3,600+", 89), ("4,200+", 103)])
+async def test_landing_headlines_follow_the_catalog(clients: AsyncClient, monkeypatch, endpoints, providers):
+    from treg.domain.catalog import store
+
+    monkeypatch.setattr(store, "headline_counts", lambda cat: (endpoints, providers))
+    body = (await clients.get("/")).text
+    assert f'{endpoints} endpoints · {providers} providers' in body
+    assert f'Browse all {endpoints} tools' in body
+    assert f'{providers} providers, <b>one credential</b>' in body
+    assert f'<b>{endpoints} endpoints</b> priced up front' in body
+    for name in ('description', 'og:description', 'twitter:description'):
+        tag = re.search(rf'<meta (?:name|property)="{name}" content="([^"]+)"', body)
+        assert tag and endpoints in tag[1] and f'{providers} providers' in tag[1]
+    schemas = [json.loads(block) for block in re.findall(r'application/ld\+json">(.*?)</script>', body, re.S)]
+    for schema in schemas:
+        assert endpoints in schema['description']
+    assert '{ENDPOINTS}' not in body and '{PROVIDERS}' not in body
+
+
 async def test_faq_schema_matches_the_visible_questions(clients: AsyncClient):
     r = await clients.get("/support")
     ld = next(json.loads(b) for b in re.findall(r'application/ld\+json">(.*?)</script>', r.text, re.S))

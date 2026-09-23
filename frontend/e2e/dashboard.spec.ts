@@ -35,6 +35,17 @@ test('sign in, create team, switch pages, refresh and navigate back', async ({ p
   expect(errors).toEqual([])
 })
 
+test('signed-in users can visit the homepage and return to the dashboard', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await signIn(page)
+  await page.getByRole('link', { name: 'treg home' }).click()
+  await expect(page).toHaveURL('http://127.0.0.1:18791/')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('OpenRouter for agent tools')
+  await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toHaveCount(0)
+  await page.locator('.nav').getByRole('button', { name: 'Open dashboard' }).click()
+  await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible()
+})
+
 test('onboarding controls and images work on mobile and dark theme', async ({ page }, testInfo) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))

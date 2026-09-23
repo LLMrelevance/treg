@@ -2658,56 +2658,51 @@ def _esc_html(s: str) -> str:
 @app.get("/", include_in_schema=False)
 async def landing(request: Request, treg_session: str = Cookie(default=""),
                   db: AsyncSession = Depends(get_session)):
-    """Serve the marketing landing at the root. Any query string (invite links, OAuth returns,
-    tour deep-links) belongs to the SPA, so those requests fall through to the dashboard —
-    the landing is only the clean, parameterless front door. A signed-in visitor belongs on
-    the dashboard, so a live session redirects to /app instead of re-showing the pitch.
+    """Serve the homepage with session-aware entry points.
 
-    `?ref=<code>` is the ONE exception, and it has to be: a referral link's whole job is to show a
-    stranger the pitch. Falling through to the SPA would send someone who has never heard of treg
-    to an empty dashboard shell — so a lone `ref` counts as parameterless, and the code is parked in
-    a cookie on the way past. It is only redeemed much later, when they create their first team.
+    Query links go to the SPA, except a lone referral code retained for signup.
     """
     page = _WEB_DIR / "landing.html"
     ref = referrals.normalize_code(request.query_params.get("ref", ""))
-    # Only `ref` may be present. Anything else alongside it belongs to the SPA, and a referral code
-    # is not a reason to hijack an invite or an OAuth return.
     ref_only = set(request.query_params.keys()) <= {"ref"}
     if page.exists() and (not request.query_params or (ref and ref_only)):
-        if treg_session and await _user_from_session(treg_session, db):
-            return RedirectResponse("/app", status_code=302)
-        # Read-and-substitute rather than a bare FileResponse: the canonical, og:url and og:image
-        # are `{BASE}`-templated so they name the serving host. Hardcoded, a self-hosted registry
-        # would tell crawlers its front page really lives on treg.to.
-        html = page.read_text(encoding="utf-8").replace(
+        signed_in = bool(treg_session and await _user_from_session(treg_session, db))
+        # Canonical and social URLs use the serving origin.
+        html = _fill_headline(page.read_text(encoding="utf-8")).replace(
             "{BASE}", get_settings().public_url.rstrip("/"))
+        html = html.replace("{SIGNED_IN}", "true" if signed_in else "false")
+        html = html.replace("{START_LABEL}", "Open dashboard" if signed_in else "Start free")
+        if signed_in:
+            html = re.sub(r"<!--signed-out-->.*?<!--/signed-out-->", "", html, flags=re.S)
         # The footer's hub links point at hosted-only pages; a self-hosted landing drops them.
         if not _hosted():
             html = re.sub(r"<!--hosted-->.*?<!--/hosted-->", "", html, flags=re.S)
-        resp = HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+        resp = HTMLResponse(html, headers={"Cache-Control": "private, no-store", "Vary": "Cookie"})
         if ref:
             _remember_referral(resp, request, ref)
         return resp
     return await dashboard(request, treg_session, db)
 
 
-@app.get("/app/legacy/assets/{path:path}", include_in_schema=False)
-async def legacy_dashboard_asset(path: str):
-    directory = (_WEB_DIR / "dashboard-legacy" / "assets").resolve()
-    asset = (directory / path).resolve()
-    if not asset.is_relative_to(directory) or not asset.is_file():
+def _dashboard_asset(directory: Path, name: str) -> FileResponse:
+    # Select a file discovered inside the build directory; never construct a path from a URL.
+    root = directory.resolve()
+    assets = {p.relative_to(root).as_posix(): p for p in root.rglob("*")
+              if p.is_file() and p.resolve().is_relative_to(root)}
+    asset = assets.get(name)
+    if asset is None:
         raise HTTPException(404)
     return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@app.get("/app/legacy/assets/{path:path}", include_in_schema=False)
+async def legacy_dashboard_asset(path: str):
+    return _dashboard_asset(_WEB_DIR / "dashboard-legacy" / "assets", path)
 
 
 @app.get("/app/ui/assets/{name}", include_in_schema=False)
 async def dashboard_asset(name: str):
-    """Only serve build artifacts from the dashboard's flat asset directory."""
-    directory = (_WEB_DIR / "dashboard" / "assets").resolve()
-    asset = (directory / name).resolve()
-    if asset.parent != directory or not asset.is_file():
-        raise HTTPException(404)
-    return FileResponse(asset, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    return _dashboard_asset(_WEB_DIR / "dashboard" / "assets", name)
 
 
 @app.get("/app", include_in_schema=False)

@@ -20,6 +20,7 @@ sources:
   - src/treg/web/media/landing/refinement.js
   - src/treg/web/media/landing/catalog-drum.js
   - src/treg/web/media/landing/gateway.js
+  - src/treg/web/media/landing/gateway-loader.js
   - src/treg/web/media/landing/gateway-3d.js
   - src/treg/web/media/landing/gateway-model.js
   - src/treg/web/media/landing/gateway-intro.js
@@ -85,9 +86,13 @@ under `web/media/landing/`: a Three.js gateway in the hero, a scroll-driven cata
 backgrounds and the dark closing section. `SOURCES.md` pins the design reference and vendored
 libraries. The assets ship through the existing media mount without a separate build. Reduced
 motion uses static presentation; WebGL failure releases the opening sequence and shows the treg
-mark. The setup command uses `{BASE}`, and sign-in, local navigation, structured data, attribution
+mark. BFCache preserves animation resources; `pageshow` resumes animation and refreshes layout.
+The setup command uses `{BASE}`, and sign-in, local navigation, structured data, attribution
 and deployment-configured support chat retain their existing contracts. Browser coverage lives in
 `frontend/e2e/landing.spec.ts`.
+Headline totals use `_fill_headline` and `catalog_store.headline_counts` in copy and metadata.
+Signed-in visitors see **Open dashboard** on `/`; the dashboard logo links back here.
+Session-dependent HTML uses `private, no-store` and `Vary: Cookie`. Query deep links keep SPA routing.
 
 `/gpt6` is the launch-film destination, served by `gpt6_page` as bundled,
 no-cache HTML and included in the sitemap and route ownership manifest. `/astra` redirects
@@ -814,3 +819,9 @@ inventories (up to 50) list every tool. Prices use the display units from `Catal
 notes explain composite or rounded billing. Only platform-eligible prices inform the platform
 starting price. OAuth rows use account-connection language; configured billed OAuth calls are
 labeled metered. The sample uses `call_template`, including the upstream method and inputs.
+
+The landing redesign is released to all homepage visitors and is independent of Dashboard account
+rollout. It has no old/new landing experiment. Logged-in visitors can revisit `/` and use Open
+dashboard. The classic `gateway-loader.js` catches failed module downloads outside the Three.js
+module graph and reveals the monochrome fallback. BFCache page transitions retain the scene and
+resume the shared animation clock on restoration.

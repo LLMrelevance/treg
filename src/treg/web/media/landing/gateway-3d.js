@@ -112,7 +112,8 @@ export async function mountGateway(host,{studio=false}={}){
  canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();host.classList.remove('model-ready');host.dataset.modelState='context-lost';},{signal});canvas.addEventListener('webglcontextrestored',()=>{dirty=true;host.classList.add('model-ready');host.dataset.modelState='ready';},{signal});
  intro?.apply();renderer.render(scene,camera);host.classList.add('model-ready');host.dataset.modelState='ready';host.dataset.modelMeshes=String(countMeshes(root));
  function dispose(){disposed=true;intro?.stop();events.abort();resize.disconnect();observe.disconnect();prefs.disconnect();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>ms.add(m));});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());brush.dispose();environment.dispose();renderer.dispose();canvas.remove();host.classList.remove('model-ready');}
- window.addEventListener('pagehide',dispose,{once:true});
+ window.addEventListener('pagehide',event=>{if(!event.persisted)dispose();},{signal});
+ window.addEventListener('pageshow',event=>{if(event.persisted){last=0;dirty=true;size();}},{signal});
  return {tick,reset,setSpread:v=>{targetSpread=v;dirty=true;},setAuto:v=>{auto=v;dirty=true;},dispose};
 }
 function countMeshes(root){let n=0;root.traverse(o=>{if(o.isMesh)n++;});return n;}

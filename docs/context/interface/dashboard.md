@@ -258,7 +258,7 @@ and opens the sign-in modal. It never calls `sbxInit` or `POST /demo/sandbox`. A
 `/app` visit still redirects to `/`.
 
 The authenticated shell uses the top navigation from the designer's Figma `12:596` reference.
-The left side holds the treg mark and the existing team switcher; the middle exposes Getting started,
+The left side holds the treg mark (a link to the public homepage) and the existing team switcher; the middle exposes Getting started,
 Catalog (member+), **Your own tools**, Activity and Team; the right side holds community links,
 the admin-gated balance and an account disclosure with appearance, billing, Admin (when authorized),
 help and sign-out. **Refer a friend** is a persistent bottom-right link, available to every signed-in

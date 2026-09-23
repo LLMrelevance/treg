@@ -47,5 +47,6 @@
   motionOff=next;measure();
  }).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
  document.fonts.ready.then(measure);window.addEventListener('load',measure,{once:true});
+ window.addEventListener('pageshow',event=>{if(event.persisted)measure();});
  window.tregCatalog={tick};measure();
 })();

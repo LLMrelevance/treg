@@ -45,5 +45,6 @@
  window.addEventListener('scroll',()=>{if(canMove()&&!coarse.matches)object.style.setProperty('--gy',Math.max(-9,Math.min(9,-scrollY*.025))+'px');},{passive:true,signal});
  window.addEventListener('treg:rolechange',sync,{signal});window.addEventListener('resize',schedule,{signal});document.addEventListener('visibilitychange',motionState,{signal});reduced.addEventListener('change',motionState,{signal});
  const size=new ResizeObserver(schedule);size.observe(scene);const visibility=new IntersectionObserver(es=>{visible=es[0].isIntersecting;motionState();});visibility.observe(scene);const pref=new MutationObserver(motionState);pref.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
- sync();motionState();document.fonts.ready.then(schedule);window.addEventListener('pagehide',()=>{events.abort();size.disconnect();visibility.disconnect();pref.disconnect();cancelAnimationFrame(layoutFrame);},{once:true});
+ sync();motionState();document.fonts.ready.then(schedule);window.addEventListener('pagehide',event=>{if(event.persisted)return;events.abort();size.disconnect();visibility.disconnect();pref.disconnect();cancelAnimationFrame(layoutFrame);},{signal});
+ window.addEventListener('pageshow',event=>{if(event.persisted){schedule();motionState();}},{signal});
 })();

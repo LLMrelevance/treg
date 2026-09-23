@@ -40,5 +40,6 @@
   }
  }
  const observer=new ResizeObserver(resize);observer.observe(host);resize();
- window.addEventListener('pagehide',()=>{observer.disconnect();svg.remove();},{once:true});
+ window.addEventListener('pagehide',event=>{if(!event.persisted){observer.disconnect();svg.remove();}});
+ window.addEventListener('pageshow',event=>{if(event.persisted)resize();});
 })();

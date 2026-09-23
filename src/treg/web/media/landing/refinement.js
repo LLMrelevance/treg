@@ -79,5 +79,11 @@
  document.querySelector('.bens').addEventListener('focusin',e=>{const node=e.target.closest('.ben');if(node){seen.add(node);node.classList.remove('entrance-waiting');benefitParts(node).forEach(finish);}},{signal});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(frame);frame=0;document.querySelectorAll('.keywall').forEach(n=>n.classList.remove('motion-visible'));}else configure();},{signal});
  const scrim=document.querySelector('#signin-scrim');const modalObserver=new MutationObserver(()=>{if(scrim.classList.contains('open'))lenis?.stop();else lenis?.start();});if(scrim)modalObserver.observe(scrim,{attributes:true,attributeFilter:['class']});
- configure();window.addEventListener('pagehide',()=>{clear();events.abort();modalObserver.disconnect();},{once:true});
+ configure();
+ // BFCache restores without rerunning initialization.
+ window.addEventListener('pagehide',event=>{
+  if(event.persisted){cancelAnimationFrame(frame);frame=0;lenis?.stop();return;}
+  clear();events.abort();modalObserver.disconnect();
+ },{signal});
+ window.addEventListener('pageshow',event=>{if(event.persisted)configure();},{signal});
 })();

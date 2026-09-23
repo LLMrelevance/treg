@@ -229,7 +229,8 @@
   const lit=String(trail.length);if(canvas.dataset.trail!==lit)canvas.dataset.trail=lit;
  }
  function dispose(){disposed=true;events.abort();resize.disconnect();observe.disconnect();prefs.disconnect();textObserver.disconnect();gl.deleteBuffer(buffer);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs);canvas.remove();}
- window.addEventListener('pagehide',dispose,{once:true});size();
+ window.addEventListener('pagehide',event=>{if(!event.persisted)dispose();},{signal});
+ window.addEventListener('pageshow',event=>{if(event.persisted){last=0;dirty=true;textDirty=true;size();}},{signal});size();
  const api={tick,dispose,setOpening:(time,x=.5,y=.43)=>{opening=time;openingX=x;openingY=y;dirty=true;}};
  if(benefits){window.tregBenefitParticles=api;}
  else if(closing){window.tregEndingParticles=api;hero.classList.add('has-particles');}

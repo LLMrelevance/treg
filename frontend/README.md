@@ -50,7 +50,11 @@ Python installs and background workers do not require Node. The Web build script
 
 ## Gradual rollout
 
-Production defaults to the frozen legacy frontend. Configure the Web service:
+The homepage (`/`) uses the new landing page for all visitors; it has no experiment or rollout
+switch. The settings below apply only to the Dashboard, catalog and shared-link entries.
+Disabling Dashboard rollout does not revert the homepage.
+
+Production defaults to the frozen legacy Dashboard frontend. Configure the Web service:
 
 - `TREG_DASHBOARD_ROLLOUT_ENABLED=true` enables rollout; `false` forces legacy for everyone.
 - `TREG_DASHBOARD_ROLLOUT_USER_IDS='[123,456]'` is the JSON array of allowed numeric user IDs.

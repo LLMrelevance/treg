@@ -1,5 +1,45 @@
 import { expect, test } from '@playwright/test'
 
+// Enable BFCache for history regression coverage.
+test.use({ launchOptions: { ignoreDefaultArgs: ['--disable-back-forward-cache'] } })
+
+test.describe('browser history', () => {
+  test('restores the 3D scene and catalog scrolling from the back/forward cache', async ({ page }, testInfo) => {
+    // Allow BFCache on local HTTP; production cache headers stay unchanged.
+    await page.route('http://127.0.0.1:18791/', async route => {
+      const response = await route.fetch()
+      await route.fulfill({ response, headers: { ...response.headers(), 'cache-control': 'private, no-cache' } })
+    })
+    await page.goto('/')
+    await page.unrouteAll()
+    await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'ready', { timeout: 20000 })
+    await page.keyboard.press('Escape')
+    await page.evaluate(() => {
+      window.addEventListener('pageshow', event => {
+        document.documentElement.dataset.historyRestored = String(event.persisted)
+      })
+    })
+    for (let cycle = 0; cycle < 2; cycle++) {
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+      await page.locator('.nav').getByRole('link', { name: 'Catalog', exact: true }).click()
+      await expect(page).toHaveURL(/\/catalog$/)
+      await page.evaluate(() => history.back())
+      await expect(page.locator('html')).toHaveAttribute('data-history-restored', 'true')
+      await expect(page.locator('.gateway-webgl')).toBeVisible()
+      await expect(page.locator('.gateway-webgl')).toHaveCount(1)
+      await expect(page.locator('.hero-particles')).toHaveCount(1)
+      await page.screenshot({ path: testInfo.outputPath(`history-restored-${cycle}.png`) })
+      await expect(page.locator('.command-beam')).toHaveCount(1)
+      await page.evaluate(() => window.scrollTo({ top: document.querySelector<HTMLElement>('#catalog')!.offsetTop + 200, behavior: 'instant' }))
+      const track = page.locator('#catalog .catwrap')
+      await expect.poll(() => track.evaluate(el => getComputedStyle(el).transform)).not.toBe('none')
+      const before = await track.evaluate(el => getComputedStyle(el).transform)
+      await page.mouse.wheel(0, 450)
+      await expect.poll(() => track.evaluate(el => getComputedStyle(el).transform)).not.toBe(before)
+    }
+  })
+})
+
 test('the hero does not flash a placeholder while the 3D module loads', async ({ page }) => {
   let release!: () => void
   const loading = new Promise<void>(resolve => { release = resolve })
@@ -75,4 +115,15 @@ test('mobile reduced-motion landing remains usable when WebGL is unavailable', a
   await page.locator('footer').scrollIntoViewIfNeeded()
   await expect(page.getByRole('link', { name: 'Enrich Arena' })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('landing-mobile-fallback.png'), fullPage: true })
+})
+
+
+test('landing falls back when a Three.js dependency cannot download', async ({ page }) => {
+  await page.route('**/vendor/three/three.core.js', route => route.abort('failed'))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.gateway-sculpture')).toHaveAttribute('data-model-state', 'fallback')
+  await expect(page.locator('.hcore')).toBeVisible()
+  await expect(page.locator('html')).not.toHaveClass(/opening-stage/)
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Sign in', exact: true })).toBeVisible()
 })

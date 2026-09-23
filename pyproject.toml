@@ -273,6 +273,7 @@ exclude = [
   "docs/*-PLAN.md",         # ditto: plan docs live locally
   ".import_linter_cache",   # build cache (nested .gitignore hides it from git, not from hatchling)
   ".codegraph",
+  ".lavish",                # local visual review artifacts, not distributable product assets
   "frontend/node_modules", "frontend/test-results", "frontend/playwright-report",
   "videos",                 # git-excluded marketing renders
   "*.db", "*.sqlite3", "scratch*", "body.json",   # stray local artifacts

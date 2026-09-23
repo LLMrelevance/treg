@@ -4,13 +4,10 @@ The landing layout, styles, motion modules and agent marks come from
 [treg-design/landing](https://github.com/l527497426-cyber/treg-design/tree/484066dd9d37a85eba24257ac9edb401b7710357/landing),
 revision `484066dd9d37a85eba24257ac9edb401b7710357`, supplied as the implementation reference.
 
-`../../landing.html` remains the server-rendered entry. These assets use the existing `/media`
-mount, with no separate frontend build or runtime CDN dependency for the animation libraries.
-Integration retains same-origin authentication and navigation, serving-origin setup instructions,
-current signup-credit semantics, attribution scripts and deployment-configured support chat.
-The Three.js font URL resolves relative to its module; failed WebGL initialization releases the
-opening sequence and shows the existing monochrome treg mark. The mark stays hidden during
-normal module loading, and the page retains the registry favicon.
+`../../landing.html` is server-rendered; assets ship via `/media` without a separate build.
+Local integration covers authentication, setup commands, tracking and support chat.
+WebGL failure shows the monochrome treg mark; BFCache restores animation and layout.
+See `docs/context/interface/seo.md` for landing behavior.
 
 ## Third-party files
 
@@ -21,6 +18,5 @@ normal module loading, and the page retains the registry favicon.
 | `vendor/lenis.min.js`, `lenis.css` | 1.3.26 | Design repository's vendored Lenis; MIT, `vendor/LICENSE` |
 | `assets/*` | Reference revision above | Agent marks; `assets/LOBEHUB-LICENSE` retained. The prototype's orange treg mark is omitted. |
 
-To update the design, compare against the pinned source before importing changes. Keep the
-production integration behavior described above and run `frontend/e2e/landing.spec.ts` plus the
-SEO and site-tracking tests. Copy library builds verbatim; do not hand-edit them.
+Compare updates against the pinned source and run landing E2E, SEO and tracking tests.
+Copy library builds verbatim.
