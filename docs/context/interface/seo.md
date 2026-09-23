@@ -8,8 +8,26 @@ sources:
   - src/treg/web/robots.txt
   - src/treg/web/catalog.css
   - src/treg/web/usecase.css
-  - src/treg/web/index.html
+  - frontend/index.html
+  - frontend/src/App.vue
+  - frontend/src/components/PublicNavigation.vue
+  - frontend/src/state/boot.js
   - src/treg/web/landing.html
+  - src/treg/web/media/landing/product-theme.css
+  - src/treg/web/media/landing/refinement.css
+  - src/treg/web/media/landing/gateway.css
+  - src/treg/web/media/landing/hero-opening.js
+  - src/treg/web/media/landing/refinement.js
+  - src/treg/web/media/landing/catalog-drum.js
+  - src/treg/web/media/landing/gateway.js
+  - src/treg/web/media/landing/gateway-loader.js
+  - src/treg/web/media/landing/gateway-3d.js
+  - src/treg/web/media/landing/gateway-model.js
+  - src/treg/web/media/landing/gateway-intro.js
+  - src/treg/web/media/landing/hero-particles.js
+  - src/treg/web/media/landing/command-beam.js
+  - src/treg/web/media/landing/SOURCES.md
+  - frontend/e2e/landing.spec.ts
   - src/treg/web/terms.html
   - src/treg/web/usecase-seo.html
   - src/treg/web/usecase-company.html
@@ -62,6 +80,19 @@ a new signup grant. Actual eligibility and migration behavior live in
 
 The landing footer links to the public standalone [Enrich Arena](enrich-arena.md) page. Its query
 form is visible before login; submission is authenticated and metered against team credits.
+
+The root landing remains server-rendered from `web/landing.html`. Its visual implementation lives
+under `web/media/landing/`: a Three.js gateway in the hero, a scroll-driven catalog, particle
+backgrounds and the dark closing section. `SOURCES.md` pins the design reference and library versions. Three.js and Lenis load from the
+version-pinned jsDelivr npm CDN; our own animation modules ship through the existing media mount. Reduced
+motion uses static presentation; WebGL failure releases the opening sequence and shows the treg
+mark. BFCache preserves animation resources; `pageshow` resumes animation and refreshes layout.
+The setup command uses `{BASE}`, and sign-in, local navigation, structured data, attribution
+and deployment-configured support chat retain their existing contracts. Browser coverage lives in
+`frontend/e2e/landing.spec.ts`.
+Headline totals use `_fill_headline` and `catalog_store.headline_counts` in copy and metadata.
+Signed-in visitors see **Open dashboard** on `/`; the dashboard logo links back here.
+Session-dependent HTML uses `private, no-store` and `Vary: Cookie`. Query deep links keep SPA routing.
 
 `/gpt6` is the launch-film destination, served by `gpt6_page` as bundled,
 no-cache HTML and included in the sitemap and route ownership manifest. `/astra` redirects
@@ -181,9 +212,9 @@ competing providers merged onto it** (Majestic $0.0008 · Serpstat $0.0025 · SE
 the comparison *is* the product — while the hand-built page listed each endpoint separately. Same
 data, different axis, two things to maintain.
 
-So `/catalog` and `/catalog/<slug>` now serve **`index.html`**, and the Vue app renders the same
+So `/catalog` and `/catalog/<slug>` serve the **compiled Dashboard entry**, and the Vue app renders the same
 platform views a member sees. This works because the catalog API is unauthenticated; `publicCatalog`
-in `index.html` is the flag, set from `catalogFromPath()` before the `/auth/me` check so the first
+in `frontend/src/state/data.js` is the flag, set from `catalogFromPath()` before the `/auth/me` check so the first
 paint is already in public mode.
 
 What public mode changes, and why each one:
@@ -211,11 +242,8 @@ on a public shelf renders as its bare slug and the whole action chain collapses 
 `mkOauth` has no public fallback — the open response carries no `auth_kind` — so the public branch
 offers BYOK, which is true for every provider, rather than guessing Connect.
 
-**Each action is ONE button whose handler forks on `publicCatalog`**, not a duplicated public
-template. `tests/test_dashboard_markup.py` asserts the member chain's exact shape
-(`v-else-if="mkOauth(e.provider)" class="btn sm primary"`, `openProvider(e.provider)`, …), and a
-fork keeps those substrings intact where a parallel branch drifts. That test reads a fixed-size
-window of the markup and has already been outgrown once by these forks.
+Each catalog action chooses sign-in or the member flow based on `publicCatalog`. Browser coverage
+in `frontend/e2e/dashboard.spec.ts` checks public catalog navigation and reachable sign-in.
 
 ### The no-JS fallback
 
@@ -245,8 +273,7 @@ skips `Other` outright — so the sitemap would publish `/catalog/<slug>` while 
 links to nothing. `test_no_shelf_is_published_that_the_app_grid_hides` fails the build if that
 happens.
 
-**UI changes to the shared views reach the public pages automatically** — it is the same
-`index.html`. Three things do NOT follow along:
+**UI changes to the shared views reach the public pages automatically** — they use the same Dashboard components. Three things do NOT follow along:
 
 1. **Anything reading member-only state.** `providers`, `connCount`, `billing` and `sessionMode` are
    all empty without a session, so a new element built on them renders blank publicly. Three helpers
@@ -283,13 +310,13 @@ asserted to appear in its body. Edit one, edit the other, same commit.
 
 **The catalog page and the app must ask for the same population.** See `include_hidden` above.
 
-**A promo banner on `index.html` is a catalog-page edit.** `/catalog` and `/catalog/<slug>` render
-from `index.html`, so anything added to that file lands on all ~80 crawlable shelves unless it is
+**A promo banner in `App.vue` is a catalog-page edit.** `/catalog` and `/catalog/<slug>` render
+from the same Vue app, so anything added to its shell lands on all ~80 crawlable shelves unless it is
 gated. The one banner this app has carried — the Product Hunt launch strip, since removed — sat
 inside the Vue app behind `v-if="…&& !publicCatalog"` for exactly this reason; anything similar needs
 the same gate, plus a test that the catalog's `#prerender` block never carries it. Note also that
 `landing.html` **is** `{BASE}`-substituted
-and `index.html` **is not** (`dashboard()` returns a plain `FileResponse`), so a placeholder that is
+and `index.html` **is not** (`dashboard()` returns the compiled document without that substitution), so a placeholder that is
 safe in one half ships literally in the other — hardcode absolute URLs on the app side.
 
 **Prices need `_usd_short`, not `%g`.** `%g` flips to scientific notation below `1e-4`, and a shelf
@@ -759,8 +786,8 @@ What links what now, and where it is generated:
 
 | From | To | Where |
 |---|---|---|
-| footer of every server-rendered page (Explore / Build / Company columns; the nav is unchanged by request) | `/use-cases`, `/workflows`, `/agents/claude-code` — **hosted only**: those pages 404 on a self-hosted registry, so the links are gated by `_hosted()` (the landing wraps them in `<!--hosted-->` markers the route strips off-host) | `_page()` in `routers/web.py` |
-| the landing footer (`landing.html`; the public catalog SPA has no footer and links the hubs from its prerender) | same three | hand-kept markup, so `test_every_surface_links_the_three_hubs` walks `/` and `/catalog` |
+| footer of every server-rendered page (Explore / Build / Company columns; the nav is unchanged by request) | `/use-cases`, `/workflows`, `/agents/claude-code`, and `/blog` — **hosted only**: those pages 404 on a self-hosted registry, so the links are gated by `_hosted()` (the landing wraps them in `<!--hosted-->` markers the route strips off-host) | `_page()` in `routers/web.py` |
+| the landing footer (`landing.html`; the public catalog SPA has no footer and links the hubs from its prerender) | same four; the people-search, jev and use-case landings carry `/blog` in their hand-kept footers too | hand-kept markup, so `test_every_surface_links_the_three_hubs` walks `/` and `/catalog` |
 | `/catalog` prerender | both hubs, in a sentence | `catalog_index` |
 | `/tools/<provider>` "Used in" | every job page whose capabilities the provider answers | `_jobs_by_provider()`, cached per process from `USE_CASE_PAGES` × the catalog |
 | `/use-cases/<job>` "Run the full sequence" | every workflow with a step on one of the job's capabilities | `_workflows_by_capability()`, cached from `WORKFLOWS[*].steps` |
@@ -830,3 +857,9 @@ inventories (up to 50) list every tool. Prices use the display units from `Catal
 notes explain composite or rounded billing. Only platform-eligible prices inform the platform
 starting price. OAuth rows use account-connection language; configured billed OAuth calls are
 labeled metered. The sample uses `call_template`, including the upstream method and inputs.
+
+The landing redesign is released to all homepage visitors and is independent of Dashboard account
+rollout. It has no old/new landing experiment. Logged-in visitors can revisit `/` and use Open
+dashboard. The classic `gateway-loader.js` catches failed module downloads outside the Three.js
+module graph and reveals the monochrome fallback. BFCache page transitions retain the scene and
+resume the shared animation clock on restoration.

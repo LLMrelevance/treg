@@ -425,8 +425,28 @@ async def test_akta_collector_marks_enterprise_accounts():
 
 def test_no_balance_api_includes_expected_providers():
     """Verify the vendors that have no free balance API are documented."""
-    expected = {"aviato", "coresignal", "exa", "financialdatasets", "finnhub", "justoneapi", "limadata", "marketstack", "scrubby", "tiingo", "trestleiq"}
+    expected = {
+        "adyntel", "aviato", "coresignal", "exa", "financialdatasets", "finnhub",
+        "justoneapi", "limadata", "marketstack", "scrubby", "tiingo", "trestleiq",
+    }
     assert expected == set(collectors.NO_BALANCE_API.keys())
+
+
+async def test_adyntel_capacity_is_dashboard_only_and_rate_limited(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_ADYNTEL", "PLATFORM-ADYNTEL")
+    collectors.get_settings.cache_clear()
+    try:
+        row = await collectors.provider_balance("adyntel")
+        assert row["no_api"] is True and row["value"] is None
+        assert "dashboard only" in row["note"]
+        capacity = policy.default_policy("adyntel", has_key=True)
+        assert capacity.capacity_type == "credits"
+        assert capacity.funding_mode == "manual"
+        assert capacity.auto_funding_enabled is False
+        assert capacity.source == "manual"
+        assert capacity.rate_limit == {"limit": 5, "window_s": 1, "source": "docs"}
+    finally:
+        collectors.get_settings.cache_clear()
 
 
 def test_limadata_policy_uses_auto_recharge_and_the_documented_rate():

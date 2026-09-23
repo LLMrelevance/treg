@@ -13,7 +13,9 @@ sources:
   - src/treg/infra/oauth_exchange.py
   - src/treg/infra/oauth_refresh.py
   - src/treg/oauth_providers.py
-  - src/treg/web/index.html
+  - frontend/src/state/session.js
+  - frontend/src/state/keys.js
+  - frontend/src/pages/TeamPage.vue
   - src/treg/health.py
   - src/treg/application/connect.py
   - src/treg/routers/connections.py
@@ -28,7 +30,6 @@ sources:
   - tests/test_oauth_refresh.py
   - tests/test_financialdatasets.py
   - tests/test_key_providers.py
-  - tests/test_dashboard_markup.py
   - src/treg/config.py
 related:
   - architecture/proxy-model.md
@@ -43,6 +44,17 @@ rejects invalid credentials and validates both team-owned and optional platform 
 exposing usage as a catalog tool. `TREG_PLATFORM_KEY_TAVILY` supplies the server-held fallback; the
 existing own-key-first ladder means a team's key always wins and remains unmetered. The public
 surface is limited to Search, Extract, Map, and Crawl.
+
+`ADYNTEL` is the first pasted-key provider whose two credentials ride in the JSON request body.
+The primary `api_key` and second `email` are ordinary declarative bindings with `location: json`;
+the relay contains no Adyntel branch. Tier 4 reads `TREG_PLATFORM_KEY_ADYNTEL` and
+`TREG_PLATFORM_EMAIL_ADYNTEL`, while a team connection stores its own pair and remains unmetered.
+The first connect step can only receive the key, so the provider's declared HTTP 422 probe outcome
+leaves it explicitly unchecked until the email is added; it is never labelled verified from that
+partial probe. JSON injection requires a JSON object, overwrites only the named top-level fields,
+rejects duplicate object keys, emits non-ASCII text as UTF-8, and recalculates Content-Length after
+serialization. It is deliberately not byte-faithful and must not be used for APIs that sign raw
+body bytes. Providers without a JSON binding retain the existing streamed-body path.
 
 `TRESTLEIQ` uses a pasted raw `x-api-key` header. Its connection probe calls a provider-owned
 invalid-number sandbox fixture. The typed `probe_cost_micro=15000` marks the first paid key probe;
@@ -169,15 +181,18 @@ The hard part: match every credential shape a real skill uses, keep it encrypted
 alive, without the proxy ever branching on shape.
 
 ## Injectors — the seam (`infra/upstream/injectors.py`)
-The proxy calls `inject(headers, params, binding, secret)`, which dispatches on `binding["injector"]`
-through the `INJECTORS` registry (populated by the `@register(name)` decorator). Four shapes, two
+The proxy calls `inject(headers, params, binding, secret, json_body=...)`, which dispatches on
+`binding["injector"]` through the `INJECTORS` registry (populated by the `@register(name)` decorator). Four shapes, two
 mechanics:
 - **place a string:** `env_injector`, `cli_auth_injector` → `_place()` renders `binding["format"]` (with
-  `{secret}`) into a header or query param per `binding["location"]`/`["name"]`.
+  `{secret}`) into a header, query parameter, or top-level JSON field per
+  `binding["location"]`/`["name"]`.
 - **pull a field from a JSON blob:** `secret_file_injector`, `oauth_injector` → `_token_from_json(blob,
   binding["secret_field"])` extracts a token (default field `access_token`) then `_place()`s it.
 
-`_place()` overwrites a same-named caller param for query bindings so the injected credential wins.
+`_place()` overwrites a same-named caller value for query and JSON bindings so the injected
+credential wins. Binding validation accepts only `header`, `query`, or `json`, and rejects duplicate
+target names within each location.
 Adding a shape is one function; the proxy never changes.
 
 ## Encryption + tokens (`crypto.py`)

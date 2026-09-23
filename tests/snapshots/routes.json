@@ -463,6 +463,24 @@
       "GET",
       "HEAD"
     ],
+    "name": "legacy_dashboard_asset",
+    "path": "/app/legacy/assets/{path:path}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "dashboard_asset",
+    "path": "/app/ui/assets/{name}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "dashboard",
     "path": "/app"
   },

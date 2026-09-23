@@ -490,8 +490,8 @@ validated before resolving the shared HTTP client. `/auth/logout` remains an HTT
   `tutorial_js` (`GET /tutorial.js` - shared `window.TREG_TUTORIAL` + `hl()`), `tutorial_page`
   (`GET /tutorial` - standalone CLI tutorial). The **dashboard tour** is a `StaticFiles(html=True)` mount
   at `/dashboard-tour/` (serves `web/tour/` - `tour.js`, the standalone `index.html`, and the WebP
-  `img/`). **Vendored front-end libraries** are an `_ImmutableStatic` mount at `/vendor/` (serves
-  `web/vendor/` - today just Vue, version-pinned in the filename, hence `Cache-Control: immutable`):
+  `img/`). **Package-generated front-end runtimes** are an `_ImmutableStatic` mount at `/vendor/` (serves
+  `web/vendor/` - Vue copied from the npm lockfile at build time, version-pinned in the filename, hence `Cache-Control: immutable`):
   the dashboard must not depend on a CDN a visitor's network may not reach, see
   [dashboard](dashboard.md). `favicon` (`GET /favicon.svg` + `/favicon.ico`). `llms_txt` (`GET /llms.txt`) serves
   `web/llms.txt` as `text/plain` with `{BASE}` templated from `public_url` - the [llms.txt](https://llmstxt.org)
