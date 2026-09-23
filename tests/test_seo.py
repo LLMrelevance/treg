@@ -417,6 +417,15 @@ async def test_every_surface_links_the_blog(clients: AsyncClient):
         assert 'href="/blog"' in html, f"{path} does not link the blog"
 
 
+async def test_catalog_shelf_title_leads_with_api_pricing(clients: AsyncClient):
+    """`{platform} api pricing` is the non-brand phrasing that reaches the site; the shelf title
+    leads with it, names the brand as treg.to and carries no em-dash."""
+    html = (await clients.get("/catalog/reddit")).text
+    title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
+    assert title.startswith("Reddit API pricing: ") and title.endswith(" | treg.to"), title
+    assert "\u2014" not in title
+
+
 async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
     """The job, workflow and agent pages exist on treg.to only (`_hosted`), so a self-hosted
     registry's footer and catalog must not point at three 404s. The IndexNow key file is generic

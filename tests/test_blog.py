@@ -5,6 +5,7 @@ Each post is a thin announcement with measured numbers that must match the sourc
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -35,6 +36,19 @@ async def test_blog_index_canonical(clients: AsyncClient):
 async def test_work_email_finding_bench_returns_200(clients: AsyncClient):
     r = await clients.get("/blog/work-email-finding-bench")
     assert r.status_code == 200
+
+
+@pytest.mark.parametrize("slug", ["work-email-finding-bench", "people-search-bench"])
+async def test_blog_posts_are_dated_bylined_articles(clients: AsyncClient, slug: str):
+    """Each post carries BlogPosting schema with a date and a named author, next to the breadcrumbs:
+    a measured receipt with no byline or date reads as a page, not a piece of writing."""
+    html = (await clients.get(f"/blog/{slug}")).text
+    blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+    posting = next((b for b in (json.loads(x) for x in blocks) if b.get("@type") == "BlogPosting"), None)
+    assert posting, f"/blog/{slug} has no BlogPosting schema"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", posting["datePublished"])
+    assert posting["author"]["@type"] == "Person" and posting["author"]["name"]
+    assert posting["mainEntityOfPage"] == f"{_base()}/blog/{slug}"
 
 
 async def test_work_email_finding_bench_canonical(clients: AsyncClient):
