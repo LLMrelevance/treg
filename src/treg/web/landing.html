@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>treg — turn your coding agent into an SEO expert, a media buyer, an SDR</title>
-<meta name="description" content="Give your agent the tool catalog for the job. 2,630 endpoints across 47 providers — premium SEO, social, enrichment and ads data, pay as you go. Plus your own keys &amp; skills, and an identity per agent."/>
+<title>treg.to: OpenRouter for agent tools and data, pay per call</title>
+<meta name="description" content="One MCP server, one key, the whole catalog: SEO, enrichment, ads, social and scraping data at the provider's own rate, no markup. Your own keys too."/>
 <!-- {BASE}, not a hardcoded treg.to: this file is also served by every self-hosted registry, and a
      canonical pointing at someone else's domain tells a crawler the real page is not here. -->
 <link rel="canonical" href="{BASE}/"/>
@@ -13,15 +13,15 @@
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="treg"/>
 <meta property="og:url" content="{BASE}/"/>
-<meta property="og:title" content="treg — the tool catalog for your agent"/>
-<meta property="og:description" content="2,630 endpoints across 47 providers — SEO, social, enrichment and ads data your agent can call with one key, priced per call. Plus your own keys &amp; skills."/>
+<meta property="og:title" content="treg.to: OpenRouter for agent tools and data, pay per call"/>
+<meta property="og:description" content="One MCP server, one key, the whole catalog: SEO, enrichment, ads, social and scraping data at the provider's own rate, no markup. Your own keys too."/>
 <meta property="og:image" content="{BASE}/media/og.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
 <meta property="og:image:alt" content="treg — one unified key for 2,600+ agent tools, priced per call, open source"/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="treg — the tool catalog for your agent"/>
-<meta name="twitter:description" content="2,630 endpoints across 47 providers, callable with one key and priced per call. No provider signup."/>
+<meta name="twitter:title" content="treg.to: OpenRouter for agent tools and data, pay per call"/>
+<meta name="twitter:description" content="One MCP server, one key, the whole catalog: SEO, enrichment, ads, social and scraping data at the provider's own rate, no markup. Your own keys too."/>
 <meta name="twitter:image" content="{BASE}/media/og.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -523,12 +523,12 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
   "applicationCategory": "DeveloperApplication",
   "applicationSubCategory": "API gateway for AI agents",
   "operatingSystem": "Any (HTTP API, CLI, MCP)",
-  "description": "The tool catalog for your agent: 2,630 API endpoints across 47 providers — SEO, social, enrichment, ads and scraping data — callable with one key and priced per call, with no provider signup. Bring your own API keys and skills alongside them.",
+  "description": "The tool catalog for your agent: {ENDPOINTS} API endpoints across {PROVIDERS} providers — SEO, social, enrichment, ads and scraping data — callable with one key and priced per call, with no provider signup. Bring your own API keys and skills alongside them.",
   "image": "{BASE}/media/og.png",
   "license": "https://www.gnu.org/licenses/agpl-3.0.html",
   "isAccessibleForFree": true,
   "featureList": [
-    "2,630 curated API endpoints across 47 providers",
+    "{ENDPOINTS} curated API endpoints across {PROVIDERS} providers",
     "Credentials injected server-side — the caller never holds a key",
     "Per-call pricing shown before the call, with no markup",
     "Your own API keys and SKILL.md files as callable tools",
@@ -551,7 +551,7 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
   "name": "treg",
   "url": "{BASE}/",
   "logo": "{BASE}/media/brand/logo.png",
-  "description": "The tool catalog for AI agents — one key for 2,630 API endpoints, plus your own keys and skills.",
+  "description": "The tool catalog for AI agents — one key for {ENDPOINTS} API endpoints, plus your own keys and skills.",
   "sameAs": ["https://github.com/superdesigndev/treg"]
 }
 </script>
@@ -578,7 +578,7 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
 <!-- ================= HERO ================= -->
 <section class="hero">
   <div class="wrap">
-    <span class="kicker rv"><a href="/catalog">2,630 endpoints · 47 providers</a> · <a href="https://github.com/superdesigndev/treg" target="_blank" rel="noopener">open source ↗</a></span>
+    <span class="kicker rv"><a href="/catalog">{ENDPOINTS} endpoints · {PROVIDERS} providers</a> · <a href="https://github.com/superdesigndev/treg" target="_blank" rel="noopener">open source ↗</a></span>
 
     <h1 class="hero-h1 rv">
       <span class="grad">OpenRouter for agent tools</span><br>
@@ -630,7 +630,7 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
 <!-- ================= THE CATALOG — sub-sections only ================= -->
 <section class="roles" id="catalog">
   <div class="wrap">
-    <div class="seclab rv">the catalog · 2,630 endpoints · one key</div>
+    <div class="seclab rv">the catalog · {ENDPOINTS} endpoints · one key</div>
     <div class="catwrap">
           <div class="pcat rv">Keyword &amp; rank tracking</div>
           <div class="pgrid">
@@ -745,7 +745,7 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
             </div>
           </div>
           <div class="moreline rv">+2,500 more expert tools in the catalog<br>
-            <button class="ghostbtn sm" onclick="openSignin()">Browse all 2,630 tools</button></div>
+            <button class="ghostbtn sm" onclick="openSignin()">Browse all {ENDPOINTS} tools</button></div>
     </div>
   </div>
 </section>
@@ -760,7 +760,7 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
         <div class="bennum">01</div>
         <h3>One <i>unified key.</i></h3>
         <p>Forty-two providers, <b>one credential</b>. No per-provider signups, no key files scattered across machines — your agent holds a single treg token and every tool in the catalog answers to it.</p>
-        <div class="benmeta"><span>one signup, 47 providers</span><span>revoke it in one place</span><span>works in any agent</span></div>
+        <div class="benmeta"><span>one signup, {PROVIDERS} providers</span><span>revoke it in one place</span><span>works in any agent</span></div>
       </div>
       <div class="keywall">
         <div class="kw-key"><span class="kg">▚</span><code>trg_live_</code><span class="kdots">••••••••••••••••</span></div>
@@ -881,7 +881,7 @@ footer{margin-top:150px;border-top:1px solid var(--line);position:relative;overf
     </div>
     <div class="trustline rv">
       <span><b>100% open source</b> · AGPL</span>
-      <span><b>2,630 endpoints</b> priced up front</span>
+      <span><b>{ENDPOINTS} endpoints</b> priced up front</span>
       <span>credentials injected server-side, <b>never on a machine</b></span>
     </div>
   </div>

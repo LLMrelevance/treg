@@ -734,8 +734,14 @@ receipt with no file behind it is exactly the fabricated-run failure these pages
 
 ## Counts
 
-`2,630 endpoints / 47 providers / 80 platforms`, from `catalog_store.load()`. The landing, `llms.txt`
-and the schema all state them and had drifted apart (2,617/42 and ~2,600/~48). Note the catalog index
+The two headline numbers come from `catalog_store.headline_counts` (direct endpoints rounded down
+to the hundred, and their providers) and are never typed: `llms.txt`, `skill.md`, the landing (title,
+descriptions, JSON-LD, kicker, CTA) and `/docs` all read `{ENDPOINTS}` / `{PROVIDERS}` through
+`_fill_headline` or the same call. The landing once carried eight typed copies that had drifted to
+2,630/47 against a catalog of 3,600+/91; `test_landing_and_docs_quote_the_live_counts` pins that
+none remain. The landing title is `treg.to: OpenRouter for agent tools and data, pay per call`
+(58 characters, matching the H1's positioning line) and its description names one MCP server, one
+key and the data categories, with no count to go stale. Note the catalog index
 shows the **whole** catalog, not the sum of its tiles: a tile counts only its browse surface, so the
 account/utility endpoints — real inventory, listed on each shelf page — are excluded from tile counts
 by `catalog_store.HIDDEN_KINDS`.

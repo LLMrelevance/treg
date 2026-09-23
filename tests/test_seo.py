@@ -416,6 +416,21 @@ async def test_every_surface_links_the_three_hubs(clients: AsyncClient):
             assert hub in html, f"{path} does not link {hub}"
 
 
+async def test_landing_and_docs_quote_the_live_counts(clients: AsyncClient):
+    """The landing carried eight typed endpoint/provider counts and /docs three; all had drifted a
+    year stale. They now read the same generated headline numbers as llms.txt."""
+    from treg.domain.catalog import store as catalog_store
+    endpoints, providers = catalog_store.headline_counts(catalog_store.load())
+    for path in ("/", "/docs"):
+        html = (await clients.get(path)).text
+        assert "{ENDPOINTS}" not in html and "{PROVIDERS}" not in html, f"{path} left a placeholder unfilled"
+        assert "2,630" not in html and "47 providers" not in html, f"{path} still quotes a typed count"
+        assert endpoints in html, f"{path} does not quote the live endpoint count {endpoints}"
+    landing = (await clients.get("/")).text
+    assert f"{providers} providers" in landing
+    assert "<title>treg.to: OpenRouter for agent tools and data, pay per call</title>" in landing
+
+
 async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
     """The job, workflow and agent pages exist on treg.to only (`_hosted`), so a self-hosted
     registry's footer and catalog must not point at three 404s. The IndexNow key file is generic

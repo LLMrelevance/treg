@@ -2680,12 +2680,13 @@ async def docs_page():
                 + (f'<div class="params">{_esc_html(params)}</div>' if params else "")
                 + "</div>")
 
+    n_endpoints, _ = catalog_store.headline_counts(catalog_store.load())
     body = f"""<main class="wrap">
 <div class="phead">
   <div class="crumbs"><a href="/">treg</a> / api</div>
   <h1>API reference</h1>
   <p class="lede">One base URL, one token. Call any of {len(ops)} documented operations, or proxy a
-  real request to any of 2,630 catalogued provider endpoints through <code>/call/</code>.</p>
+  real request to any of {n_endpoints} catalogued provider endpoints through <code>/call/</code>.</p>
   <div class="facts">
     <span>base <b>{_esc_html(base)}</b></span>
     <span><b>Bearer</b> token auth</span>
@@ -2700,10 +2701,10 @@ async def docs_page():
 </main>"""
     ld = [{"@context": "https://schema.org", "@type": "TechArticle",
            "headline": "treg API reference",
-           "description": "How to call 2,630 provider API endpoints through one treg token.",
+           "description": f"How to call {n_endpoints} provider API endpoints through one treg.to token.",
            "url": f"{base}/docs"}]
     return _page("API reference — call any tool through one endpoint | treg",
-                 "The treg HTTP API: proxy a real request to any of 2,630 catalogued provider "
+                 f"The treg.to HTTP API: proxy a real request to any of {n_endpoints} catalogued provider "
                  "endpoints through /call/, with the credential injected server-side. Plus the "
                  "catalog, org, billing and tool-management routes.",
                  "/docs", body, ld, nav_current="/docs")
@@ -2748,8 +2749,10 @@ async def landing(request: Request, treg_session: str = Cookie(default=""),
         # Read-and-substitute rather than a bare FileResponse: the canonical, og:url and og:image
         # are `{BASE}`-templated so they name the serving host. Hardcoded, a self-hosted registry
         # would tell crawlers its front page really lives on treg.to.
-        html = page.read_text(encoding="utf-8").replace(
-            "{BASE}", get_settings().public_url.rstrip("/"))
+        # `{ENDPOINTS}` / `{PROVIDERS}` come from the loaded catalog, like llms.txt: the landing
+        # quoted a typed count in eight places and every one of them was stale within a month.
+        html = _fill_headline(page.read_text(encoding="utf-8").replace(
+            "{BASE}", get_settings().public_url.rstrip("/")))
         # The footer's hub links point at hosted-only pages; a self-hosted landing drops them.
         if not _hosted():
             html = re.sub(r"<!--hosted-->.*?<!--/hosted-->", "", html, flags=re.S)
