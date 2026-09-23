@@ -55,7 +55,7 @@ endpoints:
     test_request:
       body: {url_to_scrape: "https://example.com", formats: [markdown], max_age: 604800}
     cost: &one_credit
-      type: per_success
+      type: per_call
       value: 1
       currency: credit
       per: 1
@@ -64,7 +64,7 @@ endpoints:
       source_url: https://docs.olostep.com/features/scrapes
       checked: '2026-09-23'
       confidence: verified
-      note: "A standard scrape costs one credit. A live cached-eligible scrape returned credits_consumed: 1 and reduced the account balance by one credit; BYOK calls remain unmetered by treg."
+      note: "A standard scrape costs one credit per request. A live cached-eligible scrape returned credits_consumed: 1 and reduced the account balance by one credit; no evidence says rejected requests are free. BYOK calls remain unmetered by treg."
     verified: '2026-09-23'
     docs_url: https://docs.olostep.com/api-reference/scrapes/create
     example_response: examples/olostep.web.scrape.json
@@ -92,7 +92,7 @@ endpoints:
     test_request:
       body: {query: "Olostep API documentation", limit: 3, fast_mode: true}
     cost:
-      type: per_success
+      type: per_call
       value: 5
       currency: credit
       per: 1
@@ -101,7 +101,7 @@ endpoints:
       source_url: https://docs.olostep.com/features/search
       checked: '2026-09-23'
       confidence: verified
-      note: "Base Search costs five credits. A live fast-mode, three-result request reported credits_consumed: 5. Search page-scraping add-ons are not accepted by this catalog tool."
+      note: "Base Search costs five credits per request. A live fast-mode, three-result request reported credits_consumed: 5; no evidence says rejected requests are free. Search page-scraping add-ons are not accepted by this catalog tool."
     verified: '2026-09-23'
     docs_url: https://docs.olostep.com/api-reference/searches/create
     example_response: examples/olostep.web.search.json
@@ -125,7 +125,7 @@ endpoints:
     test_request:
       body: {task: "What is the title of https://example.com? Return the title and source URL."}
     cost:
-      type: per_success
+      type: per_call
       value: 20
       currency: credit
       per: 1
@@ -134,7 +134,7 @@ endpoints:
       source_url: https://docs.olostep.com/features/answers
       checked: '2026-09-23'
       confidence: verified
-      note: "Answers cost twenty credits per request. The response does not report a charge field; a live successful request reduced the account balance by exactly twenty credits, so the fixed documented price is the settlement amount."
+      note: "Answers cost twenty credits per request. The response does not report a charge field; a live request reduced the account balance by exactly twenty credits, and no evidence says rejected requests are free, so the fixed documented price is the settlement amount."
     verified: '2026-09-23'
     docs_url: https://docs.olostep.com/api-reference/answers/create
     example_response: examples/olostep.web.answer.json
@@ -165,7 +165,7 @@ endpoints:
     cost:
       <<: *one_credit
       source_url: https://docs.olostep.com/features/maps
-      note: "A map costs one credit through 1,000 returned URLs. This row requires a relevance query and top_n <= 1,000; a live one-URL map reduced the account balance by one credit even though the immediate response's credits_consumed and cost_usd fields were null."
+      note: "A map request costs one credit through 1,000 returned URLs. This row requires a relevance query and top_n <= 1,000; a live one-URL map reduced the account balance by one credit even though the immediate response's credits_consumed and cost_usd fields were null, and no evidence says rejected requests are free."
     verified: '2026-09-23'
     docs_url: https://docs.olostep.com/api-reference/maps/create
     example_response: examples/olostep.web.map.search.json
