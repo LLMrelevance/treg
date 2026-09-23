@@ -1,11 +1,12 @@
 <script>
 import { useDashboard } from '../state/context'
-export default { setup: useDashboard }
+import BrandMark from './BrandMark.vue'
+export default { components: { BrandMark }, setup: useDashboard }
 </script>
 
 <template>
 <div class="pubnav" >
-      <a class="brand" href="/">▚ treg</a>
+      <a class="brand" href="/"><BrandMark/>treg</a>
       <nav class="pubnav-links">
         <a href="/catalog" aria-current="page">Catalog</a>
         <a href="/tutorial">Tutorial</a>

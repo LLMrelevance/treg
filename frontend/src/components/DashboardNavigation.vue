@@ -1,12 +1,13 @@
 <script>
 import { useDashboard } from '../state/context'
-export default { setup: useDashboard }
+import BrandMark from './BrandMark.vue'
+export default { components: { BrandMark }, setup: useDashboard }
 </script>
 
 <template>
 <header class="rd-top" >
       <div class="rd-identity">
-        <a class="rd-brand brand" href="/" aria-label="treg home">▚ treg</a>
+        <a class="rd-brand brand" href="/" aria-label="treg home"><BrandMark/>treg</a>
         <div class="orgblock" v-if="authed">
           <div class="orgmain" :ref="el => setElement('orgmain', el)" @click="toggleOrgMenu" role="button" tabindex="0" @keydown.enter="toggleOrgMenu" @keydown.space.prevent="toggleOrgMenu" aria-haspopup="true" :aria-expanded="orgMenu" aria-label="Teams">
             <span class="role" :class="activeRole">{{activeRole}}</span>

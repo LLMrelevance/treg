@@ -1,6 +1,7 @@
 <script>
 import { useDashboard } from '../state/context'
-export default { setup: useDashboard }
+import BrandMark from '../components/BrandMark.vue'
+export default { components: { BrandMark }, setup: useDashboard }
 </script>
 
 <template>
@@ -8,14 +9,14 @@ export default { setup: useDashboard }
       <div class="modal" :style="{width: welcome.step===0?'min(470px,94vw)':(welcome.step===3?'min(680px,94vw)':'min(560px,94vw)')}">
         <div style="padding:26px 26px 22px">
           <template v-if="welcome.step===0">
-            <div style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px">▚ treg</div>
+            <div class="brand" style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px"><BrandMark/>treg</div>
             <h2 style="margin:0 0 8px;font-size:20px">Welcome{{me?', '+me.split('@')[0]:''}} 👋</h2>
             <p class="sub" style="margin:0 0 18px">Create your team — it's where you keep API keys and skills so your teammates and their agents can call them <b>without holding the keys</b>. You can invite people and add secrets right after.</p>
             <div class="field"><input v-model="welcome.name" placeholder="Team name, e.g. Superdesign" @keyup.enter="welcomeCreate"/></div>
             <button class="btn primary" style="width:100%;margin-top:4px" @click="welcomeCreate" :disabled="welcome.busy">{{welcome.busy?'Creating…':'Create team →'}}</button>
           </template>
           <template v-else-if="welcome.step===1">
-            <div style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px">▚ treg</div>
+            <div class="brand" style="color:var(--accent);font-size:15px;letter-spacing:.5px;margin-bottom:12px"><BrandMark/>treg</div>
             <h2 style="margin:0 0 8px;font-size:20px">Which agent are you using?</h2>
             <p class="sub" style="margin:0 0 18px">Choose your agent for the best setup instructions.</p>
             <treg-agent-picker v-model="welcome.agent" :icon="agentIcon"></treg-agent-picker>
