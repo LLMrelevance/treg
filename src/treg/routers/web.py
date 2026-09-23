@@ -2764,6 +2764,15 @@ def _esc_html(s: str) -> str:
     return _html.escape(str(s), quote=True)
 
 
+def _resume_parked_authorization(request: Request) -> RedirectResponse | None:
+    """Send a signed-in browser back to its parked `/oauth/authorize` request, consuming the cookie."""
+    if (parked := _take_oauth_return(request)) is None:
+        return None
+    resume = RedirectResponse(parked, status_code=302)
+    resume.delete_cookie(OAUTH_RETURN_COOKIE)
+    return resume
+
+
 @app.get("/", include_in_schema=False)
 async def landing(request: Request, treg_session: str = Cookie(default=""),
                   db: AsyncSession = Depends(get_session)):
@@ -2776,6 +2785,10 @@ async def landing(request: Request, treg_session: str = Cookie(default=""),
     ref_only = set(request.query_params.keys()) <= {"ref"}
     if page.exists() and (not request.query_params or (ref and ref_only)):
         signed_in = bool(treg_session and await _user_from_session(treg_session, db))
+        # The email-code door signs in on the page that opened it and reloads there, and the
+        # OAuth sign-in modal opens on `/`, so a parked authorization must resume here as well.
+        if signed_in and (resume := _resume_parked_authorization(request)) is not None:
+            return resume
         # Canonical and social URLs use the serving origin.
         html = _fill_headline(page.read_text(encoding="utf-8")).replace(
             "{BASE}", get_settings().public_url.rstrip("/"))
@@ -2834,9 +2847,7 @@ async def dashboard(
     signed_in = await _user_from_session(treg_session, db)
     # A parked authorization resumes here, but ONLY once the user is actually signed in — otherwise
     # this would bounce them back to /oauth/authorize, which would bounce them here again.
-    if signed_in and (parked := _take_oauth_return(request)) is not None:
-        resume = RedirectResponse(parked, status_code=302)
-        resume.delete_cookie(OAUTH_RETURN_COOKIE)
+    if signed_in and (resume := _resume_parked_authorization(request)) is not None:
         return resume
     owner = await _local_owner(db) if not signed_in else None
     index = _dashboard_index(signed_in or owner)
