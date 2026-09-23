@@ -32,7 +32,7 @@ def test_key_providers_are_offerable_without_deployment_credentials():
                 "icypeas", "leadsforge", "influencersclub", "crustdata", "aviato",
                 "spyfu", "apify", "meta-ad-library", "serpapi", "adyntel",
                 "coingecko", "polygon", "finnhub", "twelvedata", "fmp", "eodhd", "marketstack",
-                "tiingo", "financialdatasets", "tinyfish", "keenable"):
+                "tiingo", "financialdatasets", "tinyfish", "keenable", "olostep"):
         p = P.get(svc)
         assert p is not None, svc
         assert p.auth_kind == "key", svc
@@ -145,6 +145,24 @@ def test_keenable_registry_uses_the_billed_fetch_probe_and_x_api_key(monkeypatch
         "location": "header",
         "name": "X-API-Key",
         "format": "{secret}",
+    }]
+
+
+def test_olostep_registry_uses_free_credit_probe_and_bearer_auth(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_OLOSTEP", "PLATFORM-OLOSTEP")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "olostep")
+    provider = P.get("olostep")
+    assert provider is not None
+    assert provider.base_url == "https://api.olostep.com"
+    assert provider.probe_path == "/user/credits/info"
+    assert provider.probe_cost_micro == 0
+    assert Settings(_env_file=None).platform_key_for("olostep") == "PLATFORM-OLOSTEP"
+    assert P.platform_bindings(provider) == [{
+        "platform_setting": "platform_key_olostep",
+        "injector": "env",
+        "location": "header",
+        "name": "Authorization",
+        "format": "Bearer {secret}",
     }]
 
 
