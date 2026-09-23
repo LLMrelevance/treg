@@ -2560,12 +2560,12 @@ async def pricing_page():
             "<p>These figures are what the ledger settled, not rate-card estimates.</p>"
             '<div class="pv-receipts">'
             '<div class="pv-receipt"><h4>Enrichment: verified lead list</h4>'
-            '<div class="date">2026-08-26 · <a href="/workflows/find-and-verify-a-lead-list">workflow</a></div>'
-            "<ul><li>50 companies in, 27 verified deliverable leads out</li>"
-            "<li>$3.62 total metered ($0.13 per deliverable lead)</li>"
-            "<li>Miss handling: Hunter and LeadMagic's role finder settled 23 calls at $0.00 "
-            "(per-success, no hit); Findymail and Tomba billed all calls at list rate</li></ul>"
-            '<div class="total">Multi-step cost: $0.07 per row, $0.13 per usable lead</div></div>'
+            '<div class="date">2026-09-23 · <a href="/workflows/find-and-verify-a-lead-list">workflow</a></div>'
+            "<ul><li>50 companies in, 27 kept by a jev gate before any paid step, 20 verified deliverable leads out</li>"
+            "<li>$2.33 total metered ($0.12 per deliverable lead); the first run of the same filter without the gate was $3.62 for 27</li>"
+            "<li>Miss handling: Hunter, Kitt and LeadMagic settled every miss at $0.00 "
+            "(per-success, no hit); Findymail billed all 27 calls at list rate, 7 misses included</li></ul>"
+            '<div class="total">Multi-step cost: $0.05 per row, $0.12 per usable lead</div></div>'
             '<div class="pv-receipt"><h4>SEO: keyword demand</h4>'
             '<div class="date">2026-09-14 · <a href="/workflows/keyword-demand-to-ad-budget">workflow</a></div>'
             "<ul><li>50 keywords expanded, volume and trend priced</li>"
@@ -3578,7 +3578,7 @@ async def blog_work_email_finding_bench():
         '<table style="width:100%;margin:24px 0;border-collapse:collapse;font-size:0.95em">'
         '<thead><tr style="border-bottom:1px solid var(--border)">'
         '<th style="text-align:left;padding:8px 0"></th>'
-        '<th style="text-align:right;padding:8px 12px">treg</th>'
+        '<th style="text-align:right;padding:8px 12px">treg.to</th>'
         '<th style="text-align:right;padding:8px 12px">Clay</th>'
         '<th style="text-align:right;padding:8px 12px">Monid</th>'
         '<th style="text-align:right;padding:8px 12px">Freckle</th>'
@@ -3647,15 +3647,15 @@ async def blog_work_email_finding_bench():
         'Clay dollars are at Clay&#x27;s Launch data-credit list price ($0.05/credit on 2026-09-16).</p>'
         '<h2 style="margin-top:32px;font-size:1.1em">What the numbers say</h2>'
         '<ul style="margin:16px 0;padding-left:24px">'
-        '<li style="margin:8px 0"><strong>Quality is a tie.</strong> treg, Clay and Freckle land at '
+        '<li style="margin:8px 0"><strong>Quality is a tie.</strong> treg.to, Clay and Freckle land at '
         '264, 262 and 263 exact matches; the difference is noise.</li>'
         '<li style="margin:8px 0"><strong>Different-from-published is mostly not invalid.</strong> '
         'Many returned addresses are valid aliases. Exact-match is a floor, not a ceiling.</li>'
         '<li style="margin:8px 0"><strong>Cost is structural.</strong> Credit-based waterfalls run '
-        '7x to 16x treg per correct row. Deepline is an outlier because ZeroBounce fires on every '
+        '7x to 16x treg.to per correct row. Deepline is an outlier because ZeroBounce fires on every '
         'pattern guess.</li>'
         '<li style="margin:8px 0"><strong>Latency only matters for per-call paths.</strong> '
-        'treg (0.44s) and Monid (2.0s) are per-call; do not rank batch tools on speed.</li>'
+        'treg.to (0.44s) and Monid (2.0s) are per-call; do not rank batch tools on speed.</li>'
         '<li style="margin:8px 0"><strong>Aggregator columns are routes, not products.</strong> '
         'Each column represents how that aggregator dispatched the query to its underlying providers.</li>'
         '</ul>'
@@ -3671,8 +3671,8 @@ async def blog_work_email_finding_bench():
         'email, so find rates are inflated vs. a cold list.</li>'
         '<li style="margin:6px 0"><strong>MillionVerifier re-verify:</strong> we re-verified addresses '
         'with MillionVerifier after Kitt ran out of credits. MV served 0 cache hits. Kitt is also in '
-        'the treg catalog, so its hits are not independent for the treg column.</li>'
-        '<li style="margin:6px 0"><strong>treg bug:</strong> 3 rows returned HTTP 502 (route_failed) '
+        'the treg.to catalog, so its hits are not independent for the treg.to column.</li>'
+        '<li style="margin:6px 0"><strong>treg.to bug:</strong> 3 rows returned HTTP 502 (route_failed) '
         'and were scored as misses. $0 charged for those rows.</li>'
         '</ul>'
         '<p style="margin-top:24px">Related: '

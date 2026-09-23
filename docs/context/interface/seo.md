@@ -649,15 +649,17 @@ legacy-hub route serves no `.md`, so every one 404ed. The brand anchor reads `tr
 lead-enrichment "Proof from one real run" block no longer shows the 1-email $0.0245 demo: it
 carries the receipt of the 50-company workflow run (2026-08-26, $3.62, $0.13 per deliverable
 lead) and points at `/workflows/find-and-verify-a-lead-list`, so the hub sells the workflow
-instead of competing with it.
+instead of competing with it. That page now headlines the gated 2026-09-23 re-run and keeps
+the 2026-08-26 total in its narrative as the before, so the hub's block names its run as the
+ungated first one; `/pricing` and `/people-search` carry the 2026-09-23 receipt.
 
 **Links to job pages, not competing with them.** The "Next steps" section links real job pages and
-workflows: lead-enrichment links `/workflows/find-and-verify-a-lead-list` ($3.62 from a real run) and
+workflows: lead-enrichment links `/workflows/find-and-verify-a-lead-list` (the receipt of a real run) and
 `/use-cases/find-professional-emails`; SEO links keyword and SERP job pages; social links creator and
 trending job pages. The hubs sell the job pages, not cannibalize them.
 
 **No hardcoded numbers.** Every figure on the page comes from `catalog_store` or a real run receipt.
-The workflow receipts (e.g. $3.62 for lead generation) are hand-recorded from actual runs, not
+The workflow receipts (e.g. the lead-list total) are hand-recorded from actual runs, not
 rate-card estimates.
 
 **`{BASE}` templating.** The canonical URL and `og:url` use `{BASE}` in the HTML, substituted at
