@@ -1867,6 +1867,41 @@ PIAPI = OAuthProvider(
     probe_path="/account/info",  # free; a bad key answers 401 {"message":"Failed to verify api key"}
 )
 
+TINYFISH = OAuthProvider(
+    service="tinyfish",
+    display_name="TinyFish",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="your TinyFish API key",
+    token_header="X-API-Key",
+    token_format="{secret}",
+    setup_url="https://agent.tinyfish.ai/api-keys",
+    setup_action_label="Get your TinyFish API key",
+    setup_steps=(
+        "Sign in to TinyFish and open API keys.",
+        "Create or copy an API key and paste it here.",
+    ),
+    setup_note=(
+        "Search and Fetch are free within TinyFish's published limits. Agent runs cost $0.016 "
+        "per reported step; treg reads the terminal step count before settling a platform call."
+    ),
+    auth_uri="", token_uri="", scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="SEO",
+    summary="Search and fetch the web, or run an asynchronous browser agent toward a stated goal.",
+    base_url="https://agent.tinyfish.ai",
+    catalog_targets=(
+        CatalogTarget(host="api.search.tinyfish.ai", base_url="https://api.search.tinyfish.ai"),
+        CatalogTarget(host="api.fetch.tinyfish.ai", base_url="https://api.fetch.tinyfish.ai"),
+    ),
+    extra_tools=(
+        {"suffix": "search", "base_url": "https://api.search.tinyfish.ai"},
+        {"suffix": "fetch", "base_url": "https://api.fetch.tinyfish.ai"},
+    ),
+    docs_url="https://docs.tinyfish.ai/",
+    probe_path="/v1/wallet",
+)
+
 TIKHUB = OAuthProvider(
     service="tikhub",
     display_name="TikHub",
@@ -3405,7 +3440,7 @@ REGISTRY: dict[str, OAuthProvider] = {
         TRYKITT, CONTACTOUT, MILLIONVERIFIER, BOUNCEBAN, CRUNCHBASE, MINIMAX, FISHAUDIO,
         OPENROUTER,
         REPLICATE,
-        REAPI, PIAPI,
+        REAPI, PIAPI, TINYFISH,
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,
         SCRAPECREATORS,
         # SEO API-key providers

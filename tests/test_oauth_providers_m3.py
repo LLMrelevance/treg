@@ -59,7 +59,7 @@ def test_every_provider_is_registered():
         "financialdatasets",
         "microsoft-ads", "snapchat-ads", "tiktok-ads", "pinterest-ads",
         # BYOK token providers
-        "minimax", "fishaudio", "openrouter", "replicate", "reapi", "piapi",
+        "minimax", "fishaudio", "openrouter", "replicate", "reapi", "piapi", "tinyfish",
     }
 
 

@@ -10,6 +10,15 @@ sources:
   - src/treg/domain/provider_resources.py
   - src/treg/routers/provider_resources.py
   - src/treg/catalog/tavily.yaml
+  - src/treg/catalog/tinyfish.yaml
+  - src/treg/catalog/examples/tinyfish.web.search.json
+  - src/treg/catalog/examples/tinyfish.web.search.news.json
+  - src/treg/catalog/examples/tinyfish.web.search.publications.json
+  - src/treg/catalog/examples/tinyfish.web.fetch.json
+  - src/treg/catalog/examples/tinyfish.web.agent.run.json
+  - src/treg/catalog/examples/tinyfish.web.agent.run.get.json
+  - src/treg/catalog/examples/tinyfish.web.agent.run.cancel.json
+  - tests/test_tinyfish.py
   - src/treg/catalog/exa.yaml
   - src/treg/catalog/anyapi.extended.yaml
   - src/treg/catalog/adyntel.yaml

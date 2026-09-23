@@ -3,6 +3,8 @@ title: Money — prepaid balance, the ledger, Stripe, and the reports that check
 status: shipped
 sources:
   - src/treg/catalog/tavily.yaml
+  - src/treg/catalog/tinyfish.yaml
+  - tests/test_tinyfish.py
   - src/treg/domain/money/__init__.py
   - src/treg/domain/money/settlement.py
   - src/treg/domain/asynctasks/__init__.py

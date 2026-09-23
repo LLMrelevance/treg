@@ -35,6 +35,7 @@ sources:
   - tests/test_capacity_know.py
   - tests/test_capacity_collectors.py
   - tests/test_financialdatasets.py
+  - tests/test_tinyfish.py
 related:
   - architecture/data-model.md
   - architecture/money.md
@@ -43,6 +44,18 @@ related:
 ---
 
 # Provider capacity
+
+TinyFish capacity is `cash / manual / api`. `collectors._tinyfish` calls the free internal
+`GET /v1/wallet` route with the platform `X-API-Key`, accepts only a finite nonnegative
+`available_balance`, and retains the response currency plus whether vendor auto-reload is enabled.
+The wallet remains internal capacity evidence and is not a catalog tool. Shared-key request
+smoothing uses Search's documented 30 requests/minute burst limit. Fetch also limits URLs per
+minute/day and Agent limits concurrent runs; those differently shaped upstream limits are not
+misrepresented as request-token limits. An Agent run reserves its documented worst-case step cost:
+$2.40 for the default 150-step ceiling, or the $8.00 500-step fallback when the request cannot be
+matched to that ceiling. TinyFish currently beta-gates a caller-supplied `max_steps`, so low-balance
+teams can be refused even when the eventual run would be cheap; unused hold is released when the
+terminal `num_of_steps` is settled. BYOK calls bypass shared-key smoothing and treg metering.
 
 Fish Audio capacity is `cash / manual / api`. `collectors._fishaudio` calls the free
 `GET /wallet/self/api-credit` route with the platform Bearer key and the workspace selected through
