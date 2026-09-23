@@ -450,8 +450,10 @@ validated before resolving the shared HTTP client. `/auth/logout` remains an HTT
     before returning CLI users to the team picker.
   - Email: `POST /auth/email/start` and `/verify`. Six-digit codes, attempt counts and per-email/
     per-IP start limits live in DB-backed `Ephemeral` state. `expose_dev_code` permits response/
-    log disclosure only on guarded local SQLite; other deployments email the code. Verification
-    issues an identity token and session cookie.
+    log disclosure only on guarded local SQLite; other deployments email the code. An email listed
+    in `TREG_FIXED_LOGIN_CODES` (an account with no inbox, such as a directory reviewer's demo
+    account) is issued its configured code hash instead and nothing is sent; attempts, TTL and
+    start limits are unchanged. Verification issues an identity token and session cookie.
   - Invite sign-in: the admin-visible invite code is join-only. An independent inbox-only
     `email_token` authenticates through `/auth/invite-signin`, consumed once. Invalid/expired
     links return `/?invite_expired=1`. See [auth-secrets](../architecture/auth-secrets.md).
