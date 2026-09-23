@@ -1,6 +1,6 @@
 [project]
 name = "tools-registry"
-version = "0.20.0"
+version = "0.21.0"
 description = "A remote registry that turns team skills into shareable, callable tools via a credential-injecting proxy."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -271,6 +271,8 @@ path = "hatch_build.py"
 exclude = [
   "docs/evidence",          # working evidence for a plan — never public
   "docs/*-PLAN.md",         # ditto: plan docs live locally
+  "/*-PLAN.md", "/*-TODO.md", "/*-plan.html",  # root-level working plans and previews
+  ".worktrees",             # local linked checkouts may contain private or stale material
   ".import_linter_cache",   # build cache (nested .gitignore hides it from git, not from hatchling)
   ".codegraph",
   ".lavish",                # local visual review artifacts, not distributable product assets

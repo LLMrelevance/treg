@@ -39,7 +39,7 @@ Everything else in this file is guidance; these are the contract, and they win o
 3. A request holds zero database connections while upstream or object-storage I/O is in flight.
    Keep `reserve` and `settle` separate; read archive pointers, close the session, then fetch bytes.
 4. Plain `/call/` is a faithful relay: the injected credential, the transport headers listed in
-   `src/treg/infra/upstream/relay.py`, and (on treg's shared key only) the per-org re-scoping of the
+   `src/treg/infra/upstream/relay.py`, and (on treg's shared key only) the per-org and, for pinned agents, per-pin re-scoping of the
    caller's `Idempotency-Key` are the only rewrites. Never add upstream-specific modeling.
    A live-verified free catalog endpoint may declare an anonymous fallback; its empty binding list
    omits credential injection but does not strip or rewrite caller headers.
@@ -111,7 +111,7 @@ agents then built against a constitution that was wrong.
   credentials, catalog prices and balances, and writes only what `tests/test_call_architecture.py`
   allowlists (the ledger entries, idempotency claims, OAuth refresh, audit and telemetry, first-call
   markers, tag budgets, capacity marks, overflow spend, the member's daily-cap slot, the per-team
-  archive-question marks). Extend the
+  archive-question marks, and durable provider-resource ownership). Extend the
   test's allowlist in the same PR as any new write, and expect the reviewer to ask why.
 - **Signup credit.** Once per new verified user, enforced by a user-level atomic claim committed
   with the grant. Team deletion never restores eligibility; legacy registration is not email proof.

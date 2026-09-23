@@ -13,6 +13,7 @@ from urllib.parse import quote
 from sqlalchemy import select, update
 
 from .. import archive, oauth_providers
+from ..domain.governance.access import pinned_tag_predicates
 from ..domain import asynctasks
 from ..domain import money as ledger
 from ..domain.catalog import store as catalog_store
@@ -41,7 +42,7 @@ def _json_value(value: object) -> object:
     return json.loads(json.dumps(value, default=lambda item: item.isoformat()))
 
 
-async def defer_submission(mk, body: bytes, org_id: int) -> int:
+async def defer_submission(mk, body: bytes, org_id: int, *, tags: dict | None = None) -> int:
     """Persist the pending task before allowing the request path to leave its hold open."""
     now = utcnow_naive()
     # The request path has already established that this body is JSON and carries the task id
@@ -55,6 +56,7 @@ async def defer_submission(mk, body: bytes, org_id: int) -> int:
             raise RuntimeError("async submission hold disappeared before persistence")
         row = AsyncTaskRecord(
             call_id=str(mk.call_id), org_id=org_id, provider=mk.provider,
+            tags=dict(tags) if tags else None,
             endpoint_id=mk.endpoint_id, task_id=task_id, poll_url=poll_url,
             reserved_micro=hold.amount_micro, descriptor=_json_value(mk.async_descriptor or {}),
             settlement_basis=_json_value(mk.settlement_basis),
@@ -100,11 +102,13 @@ async def _remember_resource(db, row: AsyncTaskRecord, kind: str, resource_id: s
         db.add(AsyncResourceRecord(
             org_id=row.org_id, provider=row.provider, resource_kind=kind,
             resource_id=resource_id, source_call_id=row.call_id,
+            tags=dict(row.tags) if row.tags else None,
         ))
 
 
 async def remember_platform_resources(
     org_id: int, provider: str, call_id: str, rule: dict, body: bytes,
+    *, tags: dict | None = None,
 ) -> int:
     """Persist opaque ids a successful call created on treg's shared provider account."""
     try:
@@ -132,6 +136,7 @@ async def remember_platform_resources(
                 db.add(AsyncResourceRecord(
                     org_id=org_id, provider=provider, resource_kind=kind,
                     resource_id=resource_id, source_call_id=call_id,
+                    tags=dict(tags) if tags else None,
                 ))
                 added += 1
         await db.commit()
@@ -158,7 +163,9 @@ async def observe_owned_poll(call_id: str, status_code: int, body: bytes) -> str
         snapshot, outcome, document, status_code, body, utcnow_naive(), require_usage=True)
 
 
-async def views_for(org_id: int, call_ids: list[str]) -> dict[str, dict]:
+async def views_for(
+    org_id: int, call_ids: list[str], *, pinned_tags: dict | None = None,
+) -> dict[str, dict]:
     """The task's own account of each metered async call, keyed by call id, for activity displays.
 
     The audit row froze the reserve as "charged" at submission; this is where the display learns
@@ -172,6 +179,7 @@ async def views_for(org_id: int, call_ids: list[str]) -> dict[str, dict]:
         rows = (await db.execute(
             select(AsyncTaskRecord).where(
                 AsyncTaskRecord.org_id == org_id,
+                *pinned_tag_predicates(AsyncTaskRecord.tags, pinned_tags),
                 AsyncTaskRecord.call_id.in_(list(call_ids))))).scalars().all()
     if not rows:
         return {}

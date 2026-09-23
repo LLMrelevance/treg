@@ -35,6 +35,11 @@ describe the private topology, live settings, account funding, incidents or roll
 hosted treg.to service. Superdesign operators use the private
 [treg.to deployment runbook](https://github.com/superdesigndev/treg-internal/blob/main/docs/production/deploy.md).
 
+Fish Audio shared-key capacity monitoring requires both `TREG_PLATFORM_KEY_FISHAUDIO` and
+`TREG_PLATFORM_FISHAUDIO_WORKSPACE_ID`. The latter is the Fish workspace selector used only by the
+free API-credit probe; without it, capacity remains unknown rather than reading the unrelated
+personal wallet.
+
 ## Entry point (`__main__.py`)
 
 `python -m treg upgrade` runs the explicit release phase. `maintenance._upgrade_schema()` runs
@@ -275,6 +280,11 @@ version that satisfies it. Upgrading a dependency is a `uv lock --upgrade-packag
 
 Installing the published wheel (`pip install "tools-registry[server]"`) is a different path: a wheel
 carries no lock, so that operator pins versions in their own requirements file.
+
+The published source archive is built by Hatchling from the checkout. The
+`tool.hatch.build.targets.sdist.exclude` rules in `pyproject.toml` keep local linked worktrees,
+root-level working plans and previews, evidence, databases and environment files out of that public
+artifact. Release validation inspects the archive itself; a clean Git diff alone is not sufficient.
 
 The example is deliberately not the treg.to production Blueprint. The hosted topology and settings
 are private operational state.

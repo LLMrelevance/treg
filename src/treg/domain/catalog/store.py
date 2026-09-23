@@ -59,7 +59,7 @@ CONFIDENCES = ("verified", "documented", "inferred", "unknown")
 COST_SOURCES = ("rate_card_api", "docs", "observed", "vendor_email", "inferred")
 # What `per` counts: "value currency per <per> <unit>". Under `currency: unit` the provider bills in
 # its own meter and `unit` names that meter (see `Catalog.cost_view`).
-COST_UNITS = ("call", "result", "row", "record", "keyword", "page", "character", "review",
+COST_UNITS = ("call", "result", "row", "record", "keyword", "page", "character", "utf8_byte", "review",
               "section", "employee", "GB", "ad", "month", "line", "target", "domain", "item",
               "post", "user",
               "api_unit", "analysis_unit", "retrieval_unit", "index_item_unit", "quota_row",
@@ -159,7 +159,10 @@ class Catalog:
             grouped = display.get("grouped", False)
             out["display_usd"] = round(usd * per, 9) if grouped else usd
             unit = display["unit"]
-            out["display_unit"] = f"{per:g} {unit}" if grouped else unit
+            if grouped and per == 1_000_000:
+                out["display_unit"] = f"1M {unit}"
+            else:
+                out["display_unit"] = f"{per:g} {unit}" if grouped else unit
             if display.get("round_up"):
                 out["display_unit"] = "started " + out["display_unit"]
             out["display_suffix"] = "+" if display.get("variable") else ""
@@ -235,9 +238,11 @@ class Catalog:
         # to keep apart.
         priced_or_free = (cost.get("type") == "free" and not cost.get("usd")) \
             or cost.get("confidence") in ("verified", "documented")
+        kind = endpoint.get("kind") or DEFAULT_KIND
+        managed = isinstance(endpoint.get("managed_resource"), dict)
         return bool(priced_or_free
                     and endpoint.get("scope") != "own_account"
-                    and (endpoint.get("kind") or DEFAULT_KIND) not in PLATFORM_INELIGIBLE_KINDS)
+                    and (kind not in PLATFORM_INELIGIBLE_KINDS or managed))
 
 
 _CACHE: Catalog | None = None
@@ -651,8 +656,9 @@ def _normalize(raw: dict, provider: str, directory: Path) -> dict:
         # Opaque shared-account objects created/read by legacy async endpoint pairs. Resolution
         # enforces `requires`; the buffered successful response persists every `produces` path.
         "resource_ownership": raw.get("resource_ownership") or None,
+        # User-visible long-lived objects created on a shared provider account.
+        "managed_resource": raw.get("managed_resource") or None,
         "platform_request": raw.get("platform_request") or None,
-        "platform_bounds": raw.get("platform_bounds") or None,
         # How treg serves the catalog fallback after the team's own tool/credential ladder misses.
         # Absent means the provider credential is required. `anonymous` means the verified public
         # upstream route is called with no injected credential; catalog validation limits that

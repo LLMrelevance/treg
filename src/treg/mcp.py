@@ -35,12 +35,14 @@ not initialized". `bootstrap.py` composes this module's lifespan with its own; s
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 from urllib.parse import parse_qsl, urlsplit
 
 import httpx
@@ -49,7 +51,7 @@ from mcp.server.context import CallNext, HandlerResult, ServerRequestContext
 from mcp.server.mcpserver import Context
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
-from mcp.types import METHOD_NOT_FOUND, ToolAnnotations
+from mcp.types import AudioContent, CallToolResult, METHOD_NOT_FOUND, TextContent, ToolAnnotations
 
 from . import analytics, audit, hints
 from .application import search_experiment
@@ -270,6 +272,19 @@ class CallOut(TypedDict, total=False):
     did_you_mean: list[str] | None  # real ids close to one that missed
     error: str | None
     detail: str | None
+
+
+class ResourcesOut(TypedDict, total=False):
+    team: str | None
+    source: str | None
+    count: int | None
+    resources: list[dict[str, Any]] | None
+    error: str | None
+    detail: Any
+
+
+class MediaOut(CallOut, total=False):
+    """Structured metadata paired with native MCP audio content."""
 
 
 class BalanceOut(TypedDict, total=False):
@@ -904,8 +919,8 @@ async def _catalog_get_impl(
         "request headers an endpoint needs per-call (e.g. Google Ads' login-customer-id); "
         "injected credentials always win over them. Use `query` + `body` together for endpoints "
         "that split a POST across both (Bright Data's ?dataset_id=… + array body). Giving `body` "
-        "implies POST. Multipart file uploads aren't supported here — run (or tell the human to "
-        "run) the CLI: `treg call <endpoint> --upload name=@/path/to/file`.\n\n"
+        "implies POST. For multipart requests, put ordinary fields in `form` and files in "
+        "`uploads` as objects with name, filename, content_type and base64 data.\n\n"
         "Query values are sent the way HTTP spells them: booleans as `true`/`false`, nested "
         "objects as compact JSON. A null query value is OMITTED from the query string — if an "
         "upstream distinguishes an absent parameter from an empty one, send the empty string "
@@ -918,11 +933,13 @@ async def call(endpoint_id: str, params: dict | list | None = None,
                method: str | None = None, idempotency_key: str | None = None,
                query: dict | None = None, body: dict | list | str | None = None,
                headers: dict | None = None, content_type: str | None = None,
+               form: dict | None = None, uploads: list[dict] | None = None,
                authorization_method: str | None = None,
                ctx: Context = None) -> CallOut:  # type: ignore[assignment]
     return await _call_impl(
         endpoint_id, params=params, method=method, idempotency_key=idempotency_key,
         query=query, body=body, headers=headers, content_type=content_type,
+        form=form, uploads=uploads,
         authorization_method=authorization_method, ctx=ctx,
         catalog_only=False, surface=_TEAM_SURFACE, allowed_methods=None,
     )
@@ -932,6 +949,7 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
                      method: str | None = None, idempotency_key: str | None = None,
                      query: dict | None = None, body: dict | list | str | None = None,
                      headers: dict | None = None, content_type: str | None = None,
+                     form: dict | None = None, uploads: list[dict] | None = None,
                      authorization_method: str | None = None,
                      ctx: Context = None, *, catalog_only: bool,
                      allowed_methods: frozenset[str] | None,
@@ -987,6 +1005,9 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
     if reads_query and isinstance(args, list):
         return {"error": "this endpoint takes query parameters, so `params` must be an "
                          "object, not a list", "endpoint_id": endpoint_id}
+    if (form is not None or uploads) and (body is not None or (params is not None and not reads_query)):
+        return {"error": "give a multipart request as `form`/`uploads`, not together with body or params",
+                "endpoint_id": endpoint_id}
 
     # Query pairs as a LIST of tuples so repeated keys (?tag=a&tag=b) survive — a dict keeps only
     # the last. A list VALUE in `query` expands to repeated keys. And an inline `?a=b` inside a
@@ -1070,6 +1091,40 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
                 kw["content"] = the_body.encode()
             else:
                 kw["json"] = the_body
+        if form is not None or uploads:
+            parts: list[tuple[str, tuple]] = []
+            for name, value in (form or {}).items():
+                values = value if isinstance(value, list) else [value]
+                for item in values:
+                    if isinstance(item, (dict, list)):
+                        rendered = json.dumps(item, separators=(",", ":"))
+                    elif isinstance(item, bool):
+                        rendered = str(item).lower()
+                    else:
+                        rendered = str(item)
+                    parts.append((str(name), (None, rendered)))
+            total = 0
+            for upload in uploads or []:
+                if not isinstance(upload, dict):
+                    return {"error": "each upload must be an object", "endpoint_id": endpoint_id}
+                name = str(upload.get("name") or "").strip()
+                filename = str(upload.get("filename") or "upload.bin").strip()
+                mime = str(upload.get("content_type") or "application/octet-stream").strip()
+                encoded = upload.get("data_base64")
+                if not name or not isinstance(encoded, str):
+                    return {"error": "each upload needs name and data_base64",
+                            "endpoint_id": endpoint_id}
+                try:
+                    data = base64.b64decode(encoded, validate=True)
+                except (ValueError, binascii.Error):
+                    return {"error": f"upload {name!r} is not valid base64",
+                            "endpoint_id": endpoint_id}
+                total += len(data)
+                if total > 30 * 1024 * 1024:
+                    return {"error": "multipart uploads may total at most 30 MiB",
+                            "endpoint_id": endpoint_id}
+                parts.append((name, (filename, data, mime)))
+            kw["files"] = parts
         route = "/catalog/call" if catalog_only else "/call"
         r = await client.request(method, f"{route}/{endpoint_id}", **kw)
 
@@ -1128,6 +1183,123 @@ async def _call_impl(endpoint_id: str, params: dict | list | None = None,
         # Whose fault it was matters to an agent deciding whether to retry elsewhere.
         out["whose_error"] = "treg" if r.headers.get("X-Treg-Error") else "provider"
     return out
+
+
+async def _call_media_impl(
+    endpoint_id: str, *, body: dict | list | str, headers: dict | None,
+    idempotency_key: str | None, ctx: Context, catalog_only: bool,
+    surface: _SurfacePolicy,
+) -> Annotated[CallToolResult, MediaOut]:
+    """Call one media-producing endpoint and preserve its bytes as native MCP audio."""
+    token = _bearer(ctx)
+    if not token:
+        problem = _need_token()
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps(problem))],
+            structuredContent=problem, isError=True,
+        )
+    extra_headers = {k: str(v) for k, v in (headers or {}).items()
+                     if k.lower() not in ("x-treg-token", "x-treg-org", "authorization",
+                                          "idempotency-key", "x-treg-meta")}
+    api_context = (_api(token) if surface is _TEAM_SURFACE
+                   else _api(token, client_name=surface.client_name))
+    async with api_context as client:
+        _, slug, problem = await _resolve_org(client)
+        if problem:
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(problem))],
+                structuredContent=problem, isError=True,
+            )
+        if slug:
+            extra_headers["X-Treg-Org"] = slug
+        inbound_meta = (ctx.headers or {}).get("x-treg-meta") or (ctx.headers or {}).get("X-Treg-Meta")
+        if inbound_meta:
+            extra_headers["X-Treg-Meta"] = str(inbound_meta)
+        if idempotency_key:
+            client.headers["Idempotency-Key"] = idempotency_key[:200]
+        kw: dict[str, Any] = {"headers": extra_headers} if extra_headers else {}
+        if isinstance(body, str):
+            kw["content"] = body.encode()
+        else:
+            kw["json"] = body
+        route = "/catalog/call" if catalog_only else "/call"
+        response = await client.post(f"{route}/{endpoint_id}", **kw)
+    metadata: dict[str, Any] = {"status": response.status_code, "endpoint_id": endpoint_id}
+    if call_id := response.headers.get("X-Treg-Call-Id"):
+        metadata["call_id"] = call_id
+    if response.headers.get("X-Treg-Idempotent-Replay") == "true":
+        metadata["replayed"] = True
+    if spent := response.headers.get("X-Treg-Cost-Micro"):
+        try:
+            metadata["cost_usd"] = round(int(spent) / 1_000_000, 6)
+        except ValueError:
+            pass
+    mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if 200 <= response.status_code < 300 and mime.startswith("audio/"):
+        return CallToolResult(
+            content=[AudioContent(type="audio", data=base64.b64encode(response.content).decode(),
+                                  mimeType=mime)],
+            structuredContent=metadata,
+        )
+    metadata["body"] = _body(response)
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(metadata, ensure_ascii=False, default=str))],
+        structuredContent=metadata, isError=response.status_code >= 400,
+    )
+
+
+@mcp.tool(
+    description=("Call an audio-producing endpoint through the same treg proxy as `call`, returning "
+                 "the successful binary response as native MCP AudioContent. Use this for Fish "
+                 "Audio TTS; use `call` for JSON endpoints."),
+    annotations=_CALLS,
+)
+async def call_media(
+    endpoint_id: str, body: dict | list | str, ctx: Context,
+    headers: dict | None = None, idempotency_key: str | None = None,
+) -> Annotated[CallToolResult, MediaOut]:
+    return await _call_media_impl(
+        endpoint_id, body=body, headers=headers, idempotency_key=idempotency_key,
+        ctx=ctx, catalog_only=False, surface=_TEAM_SURFACE,
+    )
+
+
+async def _resources_list_impl(
+    provider: str, kind: str, ctx: Context, *, surface: _SurfacePolicy,
+) -> ResourcesOut:
+    token = _bearer(ctx)
+    if not token:
+        return _need_token()
+    api_context = (_api(token) if surface is _TEAM_SURFACE
+                   else _api(token, client_name=surface.client_name))
+    async with api_context as client:
+        org_id, slug, problem = await _resolve_org(client)
+        if problem:
+            return problem
+        request_headers = {"X-Treg-Org": slug or ""}
+        response = await client.get(
+            f"/orgs/{org_id}/provider-resources",
+            params={k: v for k, v in {"provider": provider, "kind": kind}.items() if v},
+            headers=request_headers,
+        )
+        source = response.headers.get("X-Treg-Resource-Source", "platform")
+    body = _body(response)
+    if response.status_code != 200:
+        return {"error": "could not list provider resources", "detail": body}
+    resources = body if isinstance(body, list) else []
+    return {"team": slug, "source": source, "count": len(resources), "resources": resources}
+
+
+@mcp.tool(
+    description=("List durable resources created with treg-provided provider credentials for the "
+                 "current team. Filter Fish voices with provider='fishaudio', kind='voice'."),
+    annotations=_READS,
+    structured_output=True,
+)
+async def resources_list(
+    ctx: Context, provider: str = "", kind: str = "",
+) -> ResourcesOut:
+    return await _resources_list_impl(provider, kind, ctx, surface=_TEAM_SURFACE)
 
 
 @mcp.tool(
@@ -1217,6 +1389,14 @@ _DIRECTORY_OPEN_READ = ToolAnnotations(
 _DIRECTORY_WRITE = ToolAnnotations(
     title="Call a Write Endpoint",
     read_only_hint=False, destructive_hint=True, open_world_hint=True, idempotent_hint=False,
+)
+_DIRECTORY_MEDIA = ToolAnnotations(
+    title="Call an Audio Endpoint",
+    read_only_hint=False, destructive_hint=True, open_world_hint=True, idempotent_hint=False,
+)
+_DIRECTORY_RESOURCES = ToolAnnotations(
+    title="List Team Resources",
+    read_only_hint=True, destructive_hint=False, open_world_hint=False, idempotent_hint=True,
 )
 _DIRECTORY_BALANCE = ToolAnnotations(
     title="Check Treg Balance",
@@ -1324,16 +1504,49 @@ async def directory_catalog_call_write(
     body: dict | list | str | None = None,
     headers: dict | None = None,
     content_type: str | None = None,
+    form: dict | None = None,
+    uploads: list[dict] | None = None,
     authorization_method: str | None = None,
     ctx: Context = None,  # type: ignore[assignment]
 ) -> CallOut:
     return await _call_impl(
         endpoint_id, params=params, idempotency_key=idempotency_key, query=query, body=body,
-        headers=headers, content_type=content_type, authorization_method=authorization_method,
+        headers=headers, content_type=content_type, form=form, uploads=uploads,
+        authorization_method=authorization_method,
         ctx=ctx, catalog_only=True,
         surface=_DIRECTORY_SURFACE,
         allowed_methods=frozenset({"POST", "PUT", "PATCH", "DELETE"}),
     )
+
+
+@directory_mcp.tool(
+    name="catalog_call_media",
+    title="Call an Audio Endpoint",
+    description=("Calls a catalog audio endpoint and returns a successful binary response as "
+                 "native MCP AudioContent, with call and cost metadata."),
+    annotations=_DIRECTORY_MEDIA,
+)
+async def directory_catalog_call_media(
+    endpoint_id: str, body: dict | list | str, ctx: Context,
+    headers: dict | None = None, idempotency_key: str | None = None,
+) -> Annotated[CallToolResult, MediaOut]:
+    return await _call_media_impl(
+        endpoint_id, body=body, headers=headers, idempotency_key=idempotency_key,
+        ctx=ctx, catalog_only=True, surface=_DIRECTORY_SURFACE,
+    )
+
+
+@directory_mcp.tool(
+    name="resources_list",
+    title="List Team Resources",
+    description="Lists durable provider resources owned by the connected team.",
+    annotations=_DIRECTORY_RESOURCES,
+    structured_output=True,
+)
+async def directory_resources_list(
+    ctx: Context, provider: str = "", kind: str = "",
+) -> ResourcesOut:
+    return await _resources_list_impl(provider, kind, ctx, surface=_DIRECTORY_SURFACE)
 
 
 @directory_mcp.tool(

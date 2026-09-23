@@ -36,7 +36,7 @@ export default { setup: useDashboard }
       </div>
       <nav class="rd-navs" aria-label="Primary navigation"><button v-if="authed" class="rd-nav" :class="{active:view==='start'}" :aria-current="(view==='start')?'page':null" @click="go('start')"><img src="/media/redesign/nav-getting-started.svg" alt="">Getting started</button>
 <button v-if="canRegister" class="rd-nav" :class="{active:view==='connections'}" :aria-current="(view==='connections')?'page':null" @click="go('connections')"><img src="/media/redesign/nav-catalog.svg" alt="">Catalog</button>
-<button v-if="authed" class="rd-nav" :class="{active:view==='tools'||view==='secrets'}" :aria-current="(view==='tools'||view==='secrets')?'page':null" @click="go('tools')"><img src="/media/redesign/nav-vault.svg" alt="">Your own tools</button>
+<button v-if="authed" class="rd-nav" :class="{active:view==='tools'||view==='secrets'||view==='resources'}" :aria-current="(view==='tools'||view==='secrets'||view==='resources')?'page':null" @click="go('tools')"><img src="/media/redesign/nav-vault.svg" alt="">Your own tools</button>
 <button v-if="authed" class="rd-nav" :class="{active:view==='activity'}" :aria-current="(view==='activity')?'page':null" @click="go('activity')"><img src="/media/redesign/nav-activity.svg" alt="">Activity</button>
 <button v-if="authed" class="rd-nav" :class="{active:view==='orgs'}" :aria-current="(view==='orgs')?'page':null" @click="go('orgs')"><img src="/media/redesign/nav-team.svg" alt="">Team</button></nav>
       <div class="rd-account">

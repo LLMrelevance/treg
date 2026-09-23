@@ -283,6 +283,7 @@ _UNRECORDED_SIGNATURE = {
     "openmart",  # funded subscription was not exhausted; shared-key exhaustion was not forced
     # Bare 402 is already the generic balance signal; the real empty-Credits body was not forced.
     "financialdatasets",
+    "fishaudio",  # shared-key serving stays disabled until the funded-account signatures are verified
     "minimax", "oceanio", "openrouter", "replicate", "scrapecreators", "seranking",
     "piapi",  # prepaid wallet exhaustion not observed ($50 funded 2026-09-14); no overflow route
     "trestleiq",  # funded wallet remains; documented 403/429 shapes do not identify empty balance

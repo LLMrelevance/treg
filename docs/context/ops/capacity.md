@@ -44,6 +44,19 @@ related:
 
 # Provider capacity
 
+Fish Audio capacity is `cash / manual / api`. `collectors._fishaudio` calls the free
+`GET /wallet/self/api-credit` route with the platform Bearer key and the workspace selected through
+its `team_id` query parameter. `TREG_PLATFORM_FISHAUDIO_WORKSPACE_ID` supplies that selector. When
+it is absent, the collector reports unknown and makes no request: the unscoped route returns the
+API-key user's separate personal wallet and can falsely look empty while the shared workspace is
+funded. The response's finite nonnegative `credit` value is the remaining USD workspace balance.
+treg never enables or performs vendor top-ups. Shared-key planning uses the documented Starter
+baseline of 5 concurrent requests, corroborated by a live six-request burst where five succeeded
+and one received Fish's concurrency-limit 429. That is a concurrency allowance, not QPS, so it is
+not encoded in the token-bucket rate smoother; Fish refuses excess work at its account boundary.
+BYOK calls use the customer's Fish account instead. The funded account was not deliberately
+exhausted, so the exact zero-balance response remains unrecorded and no overflow route is claimed.
+
 Tavily's internal collector calls `GET /usage` with the platform Bearer key. A finite `key.limit`
 is preferred when present. When the key has no independent cap, the collector sums the finite
 remaining account pools (`account.plan_limit - account.plan_usage` plus PAYGO when that pool has a

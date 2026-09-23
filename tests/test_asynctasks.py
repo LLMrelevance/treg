@@ -1361,8 +1361,8 @@ async def test_cancellation_at_the_pending_row_commit_boundary_leaves_a_coherent
     hold it still owns, and the worker must then record the row as released, not settle it at zero."""
     real_defer = task_app.defer_submission
 
-    async def defer_then_cancel(mk, body, org_id):
-        await real_defer(mk, body, org_id)
+    async def defer_then_cancel(mk, body, org_id, *, tags=None):
+        await real_defer(mk, body, org_id, tags=tags)
         mk.call_id = mk.call_id or None
         raise asyncio.CancelledError()
 

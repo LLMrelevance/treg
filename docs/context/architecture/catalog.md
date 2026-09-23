@@ -2,6 +2,13 @@
 title: Endpoint catalog — what you can DO with a connected key, and which provider should do it
 status: shipped
 sources:
+  - src/treg/catalog/fishaudio.yaml
+  - src/treg/catalog/examples/fishaudio.tts.s2-1-pro.json
+  - src/treg/catalog/examples/fishaudio.voices.create.json
+  - src/treg/catalog/examples/fishaudio.voices.discover.json
+  - src/treg/application/provider_resources.py
+  - src/treg/domain/provider_resources.py
+  - src/treg/routers/provider_resources.py
   - src/treg/catalog/tavily.yaml
   - src/treg/catalog/exa.yaml
   - src/treg/catalog/anyapi.extended.yaml
@@ -85,6 +92,33 @@ related:
 
 # Endpoint catalog — platform-grouped operations per provider
 
+## Fish Audio v1
+
+Fish Audio contributes synchronous S2.1 Pro TTS, public-voice discovery, and private voice
+create/update/delete tools. Fish's documented single-model GET is not exposed as a catalog tool
+because live private workspace voices return 403 while list, update, delete, and TTS reuse succeed.
+It is used internally only to verify that a non-team TTS reference is public. The raw account-wide
+model list remains `own_account`/BYOK-only, while the separate discovery tool fixes `self=false` and
+requires callers to choose whether `licensed=true` narrows the public catalog.
+`application.provider_resources.list_for_caller` gives HTTP,
+dashboard, CLI, and MCP one unified read: it selects Fish's account list when BYOK exists and
+otherwise returns only the current organization's `ProviderResource` voices in the same normalized
+shape. Its access-check database session closes before Fish I/O.
+Shared-key TTS fixes the `model` header to `s2.1-pro` and displays `$15 / 1M UTF-8 bytes` rather than
+the internal per-byte settlement rate; private voice creation fixes
+`type=tts`, `train_mode=fast`, and `visibility=private` in multipart form data. TTS is priced at the
+documented $15 per million UTF-8 bytes.
+
+`managed_resource` is the generic catalog contract for durable provider objects. It names the CRUD
+operation, resource kind, id location (path/query/body scalar or array, or create response), optional
+display-name source, create-compensation endpoint, and an optional public-resource verification
+read for use operations. This is the narrow exception allowing an otherwise account-kind tool onto
+a platform key: the runtime proves organization ownership locally, or verifies an unassigned id
+against the declared public predicate after closing the database session, before relay. An id
+assigned to any organization is never sent through the public lookup. BYOK never applies this
+policy. Fish remains deployment-disabled until live management-price, shared-account permission,
+and commercial checks pass.
+
 ## Authorization metadata
 
 An endpoint can declare `authorization_method`, ordered `authorization_methods`, method-specific
@@ -165,6 +199,18 @@ catalog YAML while the billing code reads the rules without provider-specific cr
 An optional `cost.settle: base` keeps documented riders in the reserve but settles the successful
 call at the catalog base when repeat live evidence proves that the provider neither bills nor
 delivers those riders.
+
+Tavily follows the provider-specific request/response pattern used for Hunter, Tomba and Openmart.
+`resolve._tavily_pricing` reads `cost.tavily_rates` and the caller's original body to size a bounded
+hold. Search reserves one or two credits and `settle._tavily_cost_micro` reads its per-request
+`usage.credits`. Extract and Map instead settle fractional per-success rates from their documented
+`results` arrays. Crawl settles a conservative per-returned-extraction allocation combining its
+mapping and extraction modes; Tavily does not expose every successfully mapped page, so treg absorbs
+any hidden mapping difference under the 20-page platform cap. Extract, Map and Crawl never use the
+provider account's grouped `usage.credits` to decide which team pays. BYOK bypasses all metering.
+Each endpoint's `tavily_rates` mapping has an exact mode-key contract. Catalog validation rejects an
+incomplete, extra, non-finite or non-positive rate, and runtime repeats that check before reserve or
+relay so catalog drift cannot silently turn a platform call into a free call.
 
 A verification stamp proves the request shape, response shape, and paid behavior that the evidence
 actually observed. A placeholder path value or a free miss does not prove a paid hit. Such rows keep
@@ -793,18 +839,17 @@ and state the break-even volume, and `fee_usd_month` must be present as data (th
 and edited by hand. The full ladder: docs/SHARED-PLAN-PRICING-PLAN.md; the billing side (429 never
 billable, the recovery report): architecture/money.md.
 
-For synchronous providers that disclose the exact charge in the response, a paid cost may declare
-`reported_charge: {path: ..., unit: usd|credit}`. The catalog estimate still reserves a safe
+For synchronous providers that disclose the exact USD charge in the response, a paid cost may
+declare `reported_charge: {path: ..., unit: usd}`. The catalog estimate still reserves a safe
 ceiling. A finite nonnegative response value settles the call at that amount; missing, invalid, or
-non-finite evidence falls back to the normal estimate/miss rules. Credit-denominated evidence
-requires a provider rate in `fx.yaml`, and the request freezes that conversion before relay so a
-later rate edit cannot re-price the in-flight call. `reported_charge` is generic catalog metadata,
-not a provider-specific billing branch, and cannot be combined with `cost.settle`.
+non-finite evidence falls back to the normal estimate/miss rules. `reported_charge` is generic
+catalog metadata, not a provider-specific billing branch, and cannot be combined with `cost.settle`.
 
-`platform_request` fixes exact body values needed only on the shared credential. The complementary
-`platform_bounds` mapping requires a declared numeric body field and a finite in-schema min/max;
-resolution rejects a missing, Boolean, non-finite, or out-of-range value before reserve. These
-controls never narrow a team's own credential.
+`platform_request` fixes exact body values needed only on the shared credential. Provider-specific
+request guards bound shapes whose billing formulas need more context than an exact selector:
+Openmart requires its explicit 1-25 record count, while Tavily Map and Crawl require an explicit
+integer limit from 1 to 20. Resolution applies these only after selecting the platform offer and
+before reserve; a team's own credential retains the upstream contract.
 
 A second treg-set kind, **`kind: treg_trial`**, prices a provider at exactly **$0** with a
 `trial_calls_per_team_day` allowance as data beside the zero: a capped taste served on treg's own

@@ -858,6 +858,15 @@
       "GET",
       "HEAD"
     ],
+    "name": "blog_work_email_finding_bench",
+    "path": "/blog/work-email-finding-bench"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "resources_page",
     "path": "/resources"
   },
@@ -1629,6 +1638,15 @@
     ],
     "name": "list_api_key_events",
     "path": "/orgs/{org_id}/api-keys/{key_id}/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "list_provider_resources",
+    "path": "/orgs/{org_id}/provider-resources"
   },
   {
     "kind": "APIRoute",

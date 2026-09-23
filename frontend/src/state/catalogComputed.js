@@ -239,32 +239,57 @@ epTryConnectedMethods(){ return this.epTryAuthMethods.filter(m=>{
       const a=this.epTryAccessByMethod[m]; return a && (a.tier==='tool'||a.tier==='credential'); }); },
 epTryShowAuthSelector(){ return this.epTryAuthMethods.length>1 && this.epTryConnectedMethods.length>1; },
 epTryDisplayPath(){ if(!this.epTry) return '';
+      if(this.epTry.id==='fishaudio.voices.list') return '/orgs/{org_id}/provider-resources?provider=fishaudio&kind=voice';
       return (this.epTry.authorization_paths||{})[this.epTryAuthMethod]||this.epTry.path; },
-epTryVisibleParams(){ return (this.epTryParams||[]).filter(p=>this.epTryParamAllowed(p)); },
-epTryQuery(){ return this.epTryVisibleParams.filter(p=>p.value!=='' && p.value!=null)
+epTryVisibleParams(){
+      if(this.epTry&&this.epTry.id==='fishaudio.voices.list') return [];
+      return (this.epTryParams||[]).filter(p=>this.epTryParamAllowed(p));
+    },
+epTryQuery(){ return this.epTryVisibleParams.filter(p=>['query','path'].includes(p.location) && p.value!=='' && p.value!=null)
       .map(p=>encodeURIComponent(p.name)+'='+encodeURIComponent(p.value)).join('&'); },
 epTryShellBody(){ return "'"+String(this.epTryBody).replace(/'/g,"'\"'\"'")+"'"; },
 epTryCliCall(){ if(!this.epTry) return '';
-      const args=this.epTryVisibleParams.filter(p=>p.value!=='' && p.value!=null)
+      if(this.epTry.id==='fishaudio.voices.list') return 'treg resources list --provider fishaudio --kind voice';
+      const args=this.epTryVisibleParams.filter(p=>['query','path'].includes(p.location) && p.value!=='' && p.value!=null)
         .map(p=>`--query ${p.name}=${/\s/.test(String(p.value))?JSON.stringify(String(p.value)):p.value}`).join(' ');
       const method=(this.epTry.method||'GET').toUpperCase();
       let s=`treg call ${this.epTry.id}${args?' '+args:''}`;
       if(method!=='GET') s+=` --method ${method}`;
       if(this.epTryAuthMethod) s+=` --authorization-method ${this.epTryAuthMethod}`;
-      if(method!=='GET' && this.epTryBody.trim()) s+=` --data ${this.epTryShellBody}`;
+      for(const p of this.epTryVisibleParams.filter(p=>p.location==='header'&&String(p.value)!==''))
+        s+=` --header ${p.name}=${JSON.stringify(String(p.value))}`;
+      if(this.epTryBodyType==='multipart'){
+        for(const p of this.epTryMultipart.filter(p=>!String(p.type).includes('file')&&String(p.value)!==''))
+          s+=` --form ${p.name}=${JSON.stringify(String(p.value))}`;
+        for(const p of this.epTryMultipart.filter(p=>String(p.type).includes('file')))
+          s+=` --upload ${p.name}=@${p.name==='voices'?'<reference-audio>':'<file>'}`;
+      }else if(method!=='GET' && this.epTryBody.trim()) s+=` --data ${this.epTryShellBody}`;
+      if(this.epTry.id==='fishaudio.tts.s2-1-pro') s+=' > speech.mp3';
       return s; },
 epTryCurl(){ if(!this.epTry) return '';
+      if(this.epTry.id==='fishaudio.voices.list'){
+        const tok=this.myToken||'$TREG_TOKEN', org=this.activeOrgId||'$TREG_ORG_ID';
+        let s=`curl "${this.proxy}/orgs/${org}/provider-resources?provider=fishaudio&kind=voice" \\\n+  -H "X-Treg-Token: ${tok}"`;
+        if(this.sessionMode && this.activeSlugNow) s+=` \\\n+  -H "X-Treg-Org: ${this.activeSlugNow}"`;
+        return s;
+      }
       const q=this.epTryQuery; const url=`${this.proxy}/call/${this.epTry.id}${q?'?'+q:''}`;
       const tok=this.myToken||'$TREG_TOKEN', method=(this.epTry.method||'GET').toUpperCase();
       let s=`curl -X ${method} "${url}" \\\n  -H "X-Treg-Token: ${tok}"`;
       if(this.sessionMode && this.activeSlugNow) s+=` \\\n  -H "X-Treg-Org: ${this.activeSlugNow}"`;  // minted identity token needs the org header
       if(this.epTryAuthMethod) s+=` \\\n  -H "X-Treg-Authorization-Method: ${this.epTryAuthMethod}"`;
-      if(method!=='GET' && this.epTryBody.trim()) s+=` \\\n  -H "Content-Type: application/json" \\\n  --data ${this.epTryShellBody}`;
+      for(const p of this.epTryVisibleParams.filter(p=>p.location==='header'&&String(p.value)!=='')) s+=` \\\n  -H "${p.name}: ${String(p.value).replace(/"/g,'\\"')}"`;
+      if(this.epTryBodyType==='multipart'){
+        for(const p of this.epTryMultipart.filter(p=>!String(p.type).includes('file')&&String(p.value)!=='')) s+=` \\\n  -F "${p.name}=${String(p.value).replace(/"/g,'\\"')}"`;
+        for(const p of this.epTryMultipart.filter(p=>String(p.type).includes('file'))) s+=` \\\n  -F "${p.name}=@${p.name==='voices'?'<reference-audio>':'<file>'}"`;
+      }else if(method!=='GET' && this.epTryBody.trim()) s+=` \\\n  -H "Content-Type: application/json" \\\n  --data ${this.epTryShellBody}`;
+      if(this.epTry.id==='fishaudio.tts.s2-1-pro') s+=' \\\n  --output speech.mp3';
       return s; },
 // token + team embedded HERE ONLY (a copy-and-run-now context) — the setup line elsewhere stays clean
     epTrySetupLine(){ const S=this.activeSlugNow||'<team-slug>', T=this.myToken||'<YOUR_TOKEN>';
       return `set up treg — ${this.proxy}/llms.txt with team ${S} token: ${T}`; },
 epTryAgentUse(){ if(!this.epTry) return '';
+      if(this.epTry.id==='fishaudio.voices.list') return 'Use treg resources_list with provider=fishaudio and kind=voice. It returns the connected Fish account when BYOK exists, otherwise this team’s platform-created voices.';
       const what=this.epTry.summary ? this.epTry.summary.replace(/\.$/,'') : this.epTry.id;
       const auth=this.epTryAuthMethod ? ` Use authorization_method=${this.epTryAuthMethod}.` : '';
       return `Use treg to call ${this.epTry.id} — ${what}.${auth}`; }

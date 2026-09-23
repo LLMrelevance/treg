@@ -16,6 +16,7 @@ export default { setup: useDashboard }
               <div class="tabs" style="margin:8px 0 4px">
                 <button @click="go('tools')">Skills &amp; tools</button>
                 <button class="active">Secrets</button>
+                <button @click="go('resources')">Team resources</button>
               </div>
               <p class="sub" style="margin:0">The credentials your tools inject. Values are encrypted server-side and never shown.</p></div>
           </div>

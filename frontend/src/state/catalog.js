@@ -25,7 +25,7 @@ export default {
     // billing lives on the Team pane's Billing tab, so it aliases there.
     viewFromHash(){ let v=(location.hash||'').replace('#','');
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
-      return ['tools','orgs','activity','usage','admin','help','secrets','start','connections','referrals'].includes(v)?v:null; },
+      return ['tools','orgs','activity','usage','admin','help','secrets','start','resources','connections','referrals'].includes(v)?v:null; },
 openPlatform(slug, fromPop){ this.resetConfirms();
       this.detail=null; this.platSlug=slug; this.view='platform'; this.platOpen={}; this.epOpen={}; this.epTab={}; this.platEx={}; this.platActionsOpen=false;
       this.platClearFilters(); this.platCopied='';
@@ -119,6 +119,7 @@ costNative(c){ return c && c.display_unit ? '' : this.nativeAmount(c); },
               pf.note].filter(Boolean).join(' — '); },
 endpointAccessLabel(e){
       if(e.kind==='routed') return 'Routed platform call';
+      if(e.id==='fishaudio.voices.list') return 'Team voices + BYOK';
       const p=this.providers.find(p=>p.service===e.provider)
         || (this.platData&&this.platData.providers||{})[e.provider] || {};
       if(p.auth_kind==='oauth') return p.metered ? 'OAuth · metered' : 'OAuth connection';
@@ -163,6 +164,7 @@ platConnNames(pl){ return ((pl&&pl.providers)||[]).filter(s=>this.catConnected(s
         if(names.length) out.push({key, label, type, rows:names.map(n=>({name:n, ...map[n]}))}); };
       add('query','Query', i.queryParams);
       add('path','Path', i.pathParams);
+      add('headers','Headers', i.headers);
       add('body','Body', i.body, i.bodyType);
       return out; },
 // Examples arrive as real JSON values, so an array or object has to be stringified rather than

@@ -137,6 +137,7 @@ capabilities:
   image-gen.from_text: "Generate an image from a text prompt"
   image-gen.edit: "Edit or restyle an image with a prompt"
   voice-gen.from_text: "Generate speech from text"
+  voice-gen.voices.list: "List available voices"
 
   creators.search: "Find influencers & creators by niche, country, followers & engagement on Instagram, TikTok, YouTube"
   # --- SEO / search -----------------------------------------------------------------------------

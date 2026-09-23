@@ -157,7 +157,7 @@ export default { setup: useDashboard }
                                  only ever sees the account you connected", which changes what you
                                  can build. -->
                             <span v-if="e.scope==='own_account'" class="chip own"
-                                  title="Reads the account YOU connect via OAuth, not arbitrary public accounts">your account</span>
+                                  :title="e.id==='fishaudio.voices.list'?'Uses the connected Fish account under BYOK, otherwise this treg team\'s voices':'Reads the account YOU connect via OAuth, not arbitrary public accounts'">{{e.id==='fishaudio.voices.list'?'team or your account':'your account'}}</span>
                             <span v-else-if="e.scope==='any_account'" class="chip any"
                                   title="Reads any public account, page or query — no OAuth connection to that account needed">any account</span>
                             <span v-if="e.tier && e.tier!=='core'" class="chip">{{e.tier}}</span>

@@ -359,11 +359,11 @@ unchanged. The parent only assembles `{output, raw, _treg}` and owns the idempot
 
 ## Platform capacity: refuse before reserve (plan step D)
 
-Catalog `platform_request` and `platform_bounds` checks run only after a platform offer is selected
-and before reserve. Exact selectors can force settlement evidence such as Tavily's
-`include_usage: true`; numeric bounds can require a finite value in a narrower shared-key range,
-such as Tavily Map/Crawl `limit` 1–20. Missing and out-of-range values are caller errors. BYOK is
-unchanged because the provider, not treg, bears that account's exposure.
+Catalog `platform_request` checks and provider-specific request guards run only after a platform
+offer is selected and before reserve. Exact selectors require evidence such as Tavily Search's
+caller-supplied `include_usage: true`. Openmart requires its explicit bounded record count; Tavily
+Map and Crawl require an integer `limit` from 1 to 20. Missing, Boolean and out-of-range values are
+caller errors. BYOK is unchanged because the provider, not treg, bears that account's exposure.
 
 Tier 4 spends treg's own vendor account, and that account can be empty. `_resolve_marketplace_call`
 asks, after `_platform_offer` says yes: is this call **exhausted** in the in-process capacity view
@@ -522,6 +522,17 @@ Unknown and cross-org ids receive the same 403 without contacting the provider. 
 are learned from an authorized successful poll or from the worker's terminal response. BYOK keeps its
 faithful-relay semantics because those ids belong to the caller's own provider account.
 
+Durable shared-account objects use the separate catalog `managed_resource` contract and
+`ProviderResource` table. Create relays with no DB connection held, then commits ownership before the
+provider id is returned; persistence failure triggers best-effort provider deletion and returns a
+treg 502 without exposing the id. Update changes local display state only after upstream success.
+Delete authorizes active or tombstoned ownership, treats an owned upstream 404 as deleted, then
+tombstones locally, making retries safe. These rules run only on the platform-key tier; own keys keep
+the ordinary faithful relay. A managed `use` declaration may permit provider-public ids through a
+bounded GET predicate. The local ownership check runs first; cross-org and tombstoned ids are denied
+without upstream I/O, while wholly unassigned ids are verified only after the DB phase closes and
+before money is reserved. Managed responses remain under the same 8 MiB complete-body limit.
+
 An owned platform status poll with an explicit free price and zero estimate takes the
 `MarketplaceCall.free_owned_poll` branch. It bypasses a new poll reservation and settlement while
 buffering the response for `observe_owned_poll`, which learns fetch ownership and finalizes the
@@ -557,3 +568,13 @@ CLI output, boundaries, Range, disconnects, settlement evidence, archive and rep
 ## HarvestAPI integration
 
 Catalog entries can opt into `strict_query`: `_enforce_catalog_query` rejects bodies, undeclared/duplicate query parameters, missing required inputs and unsupported enum values before credential selection. It applies to catalog calls on every tier, leaves unmarked entries unchanged and does not rewrite requests or constrain arbitrary raw own-tool relays.
+
+## Pinned shared-provider reads
+
+`_enforce_platform_async_ownership` adds `pinned_tag_predicates` to its org-scoped task and resource
+queries. All pins must match the submission snapshot; a pinned unknown/foreign id returns 404 before
+relay. BYOK and raw own-tool access keep their existing credential ACLs. The shared-provider
+`Idempotency-Key` rewrite additionally includes the complete enforced pin, so different customers
+cannot receive one upstream job through provider deduplication. Unpinned digests are unchanged.
+`intake.prepare_call_intake` includes the same full pin in Treg's membership replay namespace. See
+[multi-tenancy](multi-tenancy.md#caller-tags-and-pinned-read-scopes) for the history and ledger scopes.

@@ -14,8 +14,8 @@
 <!-- Vue is vendored and served from this origin, never a CDN: an unpkg.com that a visitor's network
      cannot reach used to leave the whole signed-in dashboard blank (issue #137). Version lives in
      the filename — bump it here and in src/treg/web/vendor/ together. -->
-<script src="/app/legacy/assets/fe91a935a9ea38d8232464a4f8cc88d71d464cb1/vendor/vue-3.5.41.global.prod.js"></script>
-<script src="/app/legacy/assets/fe91a935a9ea38d8232464a4f8cc88d71d464cb1/agent-setup.js"></script>
+<script src="/app/legacy/assets/81e84d6e19e3b54f7b591d1ea45e99c8c7a4560a/vendor/vue-3.5.41.global.prod.js"></script>
+<script src="/app/legacy/assets/81e84d6e19e3b54f7b591d1ea45e99c8c7a4560a/agent-setup.js"></script>
 <script>
 // Fail loudly. `[v-cloak]{display:none}` hides the un-compiled template until Vue mounts, so
 // anything that stops Vue mounting turns the dashboard into a silent blank page with nothing in
@@ -42,8 +42,8 @@ addEventListener('load', function(){
   }, 1500);   // generous: a slow connection is still a working one, and must not see this
 });
 </script>
-<script src="/app/legacy/assets/fe91a935a9ea38d8232464a4f8cc88d71d464cb1/tutorial.js"></script>
-<script src="/app/legacy/assets/fe91a935a9ea38d8232464a4f8cc88d71d464cb1/dashboard-tour/tour.js"></script>
+<script src="/app/legacy/assets/81e84d6e19e3b54f7b591d1ea45e99c8c7a4560a/tutorial.js"></script>
+<script src="/app/legacy/assets/81e84d6e19e3b54f7b591d1ea45e99c8c7a4560a/dashboard-tour/tour.js"></script>
 <script src="/adtrack.js"></script>
 <style>
   [v-cloak]{display:none}  /* hide the raw template until Vue mounts — else a hard refresh flashes the un-compiled markup while the script downloads. Vue drops the attribute on mount, which is also how the loader guard above detects that it never did. */
@@ -1193,7 +1193,7 @@ a:hover{text-decoration-color:var(--muted)}
         <div class="side-nav">
           <button v-if="authed" class="nav" :class="{active:view==='start'}" @click="go('start')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Getting started</button>
           <button v-if="canRegister || publicCatalog" class="nav" :class="{active:view==='connections'}" @click="go('connections')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Catalog</button>
-          <button v-if="authed" class="nav" :class="{active:view==='tools'||view==='secrets'}" @click="go('tools')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Your vault</button>
+          <button v-if="authed" class="nav" :class="{active:view==='tools'||view==='secrets'||view==='resources'}" @click="go('tools')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Your vault</button>
           <button v-if="authed" class="nav" :class="{active:view==='activity'}" @click="go('activity')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Activity</button>
           <button v-if="authed" class="nav" :class="{active:view==='orgs'}" @click="go('orgs')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</button>
           <button v-if="authed" class="nav" :class="{active:view==='referrals'}" @click="go('referrals')" style="gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>Refer a friend</button>
@@ -1669,7 +1669,7 @@ a:hover{text-decoration-color:var(--muted)}
                                  only ever sees the account you connected", which changes what you
                                  can build. -->
                             <span v-if="e.scope==='own_account'" class="chip own"
-                                  title="Reads the account YOU connect via OAuth, not arbitrary public accounts">your account</span>
+                                  :title="e.id==='fishaudio.voices.list'?'Uses the connected Fish account under BYOK, otherwise this treg team\'s voices':'Reads the account YOU connect via OAuth, not arbitrary public accounts'">{{e.id==='fishaudio.voices.list'?'team or your account':'your account'}}</span>
                             <span v-else-if="e.scope==='any_account'" class="chip any"
                                   title="Reads any public account, page or query — no OAuth connection to that account needed">any account</span>
                             <span v-if="e.tier && e.tier!=='core'" class="chip">{{e.tier}}</span>
@@ -1778,9 +1778,10 @@ a:hover{text-decoration-color:var(--muted)}
           </div>
           <div class="tut-head">
             <div><h1>Bring your own keys &amp; skills</h1>
-              <div v-if="canRegister" class="tabs" style="margin:8px 0 4px">
+              <div class="tabs" style="margin:8px 0 4px">
                 <button class="active">Skills &amp; tools</button>
-                <button @click="go('secrets')">Secrets</button>
+                <button v-if="canRegister" @click="go('secrets')">Secrets</button>
+                <button @click="go('resources')">Team resources</button>
               </div>
               <p class="sub" style="margin:0" v-if="filteredTools.length">Call any of these with no key on your machine. <b>Copy</b> a snippet, or <b>Try it</b> here.</p><p class="sub" style="margin:0" v-else-if="canRegister && !q">Register an upstream API here, then call it with no key on your machine.</p></div>
             <div class="tut-actions" v-if="canRegister" style="position:relative">
@@ -1973,6 +1974,7 @@ a:hover{text-decoration-color:var(--muted)}
               <div class="tabs" style="margin:8px 0 4px">
                 <button @click="go('tools')">Skills &amp; tools</button>
                 <button class="active">Secrets</button>
+                <button @click="go('resources')">Team resources</button>
               </div>
               <p class="sub" style="margin:0">The credentials your tools inject. Values are encrypted server-side and never shown.</p></div>
           </div>
@@ -2036,6 +2038,55 @@ a:hover{text-decoration-color:var(--muted)}
               <div class="lc-codewrap"><button class="lc-cp" @click="copyAgentGuide('agent')">{{agentRowCopied==='agent'?'✓ copied':'copy'}}</button><pre style="max-height:220px;overflow:auto">{{buildAgentPrompt('agent', true)}}</pre></div>
             </template>
           </div>
+          </div>
+        </template>
+
+        <!-- TEAM RESOURCES -->
+        <template v-if="view==='resources'">
+          <div v-if="teamResourceErr" class="banner err" style="max-width:900px;margin-bottom:14px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+            <span>{{teamResourceErr}}</span><button class="btn sm ico" @click="teamResourceErr=''" aria-label="Dismiss">✕</button>
+          </div>
+          <div class="tut-head">
+            <div><h1>Team resources</h1>
+              <div class="tabs" style="margin:8px 0 4px">
+                <button @click="go('tools')">Skills &amp; tools</button>
+                <button v-if="canRegister" @click="go('secrets')">Secrets</button>
+                <button class="active">Team resources</button>
+              </div>
+              <p class="sub" style="margin:0">Reusable items created for this team through treg's platform providers. BYOK account resources stay with their provider account.</p></div>
+            <div class="tut-actions"><button class="btn sm" :disabled="teamResourceBusy" @click="loadTeamResources">{{teamResourceBusy?'…':'Refresh'}}</button></div>
+          </div>
+          <div class="field" style="max-width:900px;flex-wrap:wrap;margin:12px 0">
+            <select class="msel" v-model="teamResourceProvider" @change="teamResourcePage=1">
+              <option value="">All providers</option><option v-for="p in teamResourceProviders" :key="p" :value="p">{{p}}</option>
+            </select>
+            <select class="msel" v-model="teamResourceKind" @change="teamResourcePage=1">
+              <option value="">All resource types</option><option v-for="k in teamResourceKinds" :key="k" :value="k">{{k}}</option>
+            </select>
+            <span class="sub" style="margin:0">{{filteredTeamResources.length}} resource{{filteredTeamResources.length===1?'':'s'}}</span>
+          </div>
+          <p v-if="teamResourceBusy" class="sub">Loading team resources…</p>
+          <div v-else-if="pagedTeamResources.length" class="ttable-wrap"><table class="ttable">
+            <thead><tr><th>Name</th><th>Type</th><th>Provider</th><th>Created by</th><th>Created</th><th></th></tr></thead>
+            <tbody><tr v-for="r in pagedTeamResources" :key="r.id">
+              <td class="tn"><b>{{r.display_name||'Untitled resource'}}</b><span class="mono muted" style="font-size:11px">{{r.upstream_id}}</span></td>
+              <td class="ta"><span class="chip">{{r.kind}}</span></td>
+              <td>{{r.provider}}</td>
+              <td class="th">{{r.created_by?short(r.created_by):'—'}}</td>
+              <td class="th">{{r.created_at?when(r.created_at):'—'}}</td>
+              <td class="tx">
+                <button class="btn sm" @click="copyTeamResourceId(r)">{{teamResourceCopied===r.id?'✓ copied':'Copy ID'}}</button>
+                <button v-if="r.provider==='fishaudio'&&r.kind==='voice'" class="btn sm" @click="useFishVoice(r)">Use in TTS</button>
+                <button v-if="r.provider==='fishaudio'&&r.kind==='voice'" class="btn sm" @click="beginRenameFishVoice(r)">Rename</button>
+                <button v-if="r.provider==='fishaudio'&&r.kind==='voice'" class="btn sm danger" @click="beginDeleteFishVoice(r)">Delete</button>
+              </td>
+            </tr></tbody>
+          </table></div>
+          <div v-else class="mk-empty" style="margin-top:14px">{{teamResources.length?'Nothing matches these filters.':'No team resources yet. Create a private voice through Fish Audio and it will appear here.'}}</div>
+          <div v-if="teamResourcePageCount>1" style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">
+            <span class="sub" style="margin:0">Page {{teamResourceCurrentPage}} of {{teamResourcePageCount}}</span>
+            <button class="btn sm" :disabled="teamResourceCurrentPage<=1" @click="teamResourcePage=teamResourceCurrentPage-1">← Previous</button>
+            <button class="btn sm" :disabled="teamResourceCurrentPage>=teamResourcePageCount" @click="teamResourcePage=teamResourceCurrentPage+1">Next →</button>
           </div>
         </template>
 
@@ -3820,8 +3871,8 @@ product, including per-customer usage tracking and billing.</pre>
         </div>
       </div>
     </div>
-    <div class="scrim" role="dialog" aria-modal="true" v-if="epTry" @click.self="epTry=null" style="place-items:stretch;justify-items:end">
-      <div class="drawer"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Try “{{epTry.id}}”</b><button class="btn sm" @click="epTry=null" aria-label="Close">✕</button></div>
+    <div class="scrim" role="dialog" aria-modal="true" v-if="epTry" @click.self="closeEpTry" style="place-items:stretch;justify-items:end">
+      <div class="drawer"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Try “{{epTry.id}}”</b><button class="btn sm" @click="closeEpTry" aria-label="Close">✕</button></div>
         <div class="bd" style="padding:16px 18px;overflow:auto">
           <p class="explain"><span class="mono">{{epTry.method||'GET'}} {{epTryDisplayPath}}</span><br>{{epTry.summary}}</p>
           <p class="sub" v-if="epTryAccess" style="margin:0 0 12px">
@@ -3862,13 +3913,14 @@ product, including per-customer usage tracking and billing.</pre>
 treg login</pre></div>
             <div class="lbl" style="margin-top:18px">2 · See its params &amp; price</div>
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('treg catalog get '+epTry.id,'ep-cli2')">{{startCopied==='ep-cli2'?'✓ copied':'copy'}}</button><pre>treg catalog get {{epTry.id}}</pre></div>
-            <div class="lbl" style="margin-top:18px">3 · Call it — {{epTryAccess&&epTryAccess.tier==='anonymous'?'no provider key is needed':'the key is injected server-side'}}</div>
+            <div class="lbl" style="margin-top:18px">3 · Call it — {{epTry.id==='fishaudio.voices.list'?'BYOK or platform is selected server-side':(epTryAccess&&epTryAccess.tier==='anonymous'?'no provider key is needed':'the key is injected server-side')}}</div>
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(epTryCliCall,'ep-cli3')">{{startCopied==='ep-cli3'?'✓ copied':'copy'}}</button><pre style="white-space:pre-wrap;word-break:break-all">{{epTryCliCall}}</pre></div>
           </template>
 
           <!-- API — the raw /call/ passthrough with the token header -->
           <template v-else-if="epTryTab==='api'">
-            <p class="sub" style="margin:0 0 8px">One endpoint, one token. {{epTryAccess&&epTryAccess.tier==='anonymous'?'This verified public upstream route needs no provider key.':'treg injects the credential server-side.'}} treg relays the response verbatim.</p>
+            <p v-if="epTry.id==='fishaudio.voices.list'" class="sub" style="margin:0 0 8px">One endpoint, one token. The server returns normalized voice rows from the connected Fish account under BYOK, or from this team's organization-owned voices otherwise.</p>
+            <p v-else class="sub" style="margin:0 0 8px">One endpoint, one token. {{epTryAccess&&epTryAccess.tier==='anonymous'?'This verified public upstream route needs no provider key.':'treg injects the credential server-side.'}} treg relays the response verbatim.</p>
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(epTryCurl,'ep-api')">{{startCopied==='ep-api'?'✓ copied':'copy'}}</button><pre style="white-space:pre-wrap;word-break:break-all">{{epTryCurl}}</pre></div>
             <p class="sub" v-if="!myToken" style="margin:8px 0 0;font-size:12px"><span class="mono">$TREG_TOKEN</span> is a placeholder — set it to your API token (copy it on Getting started).</p>
           </template>
@@ -3881,17 +3933,24 @@ treg login</pre></div>
                  class="banner" style="margin:0">
               {{epTryAccess.missing_message || (mkOauth(epTry.provider) ? 'Can\'t run this here yet — connect '+(epTry.provider_display||epTry.provider)+' first, then Run.' : 'This endpoint needs a key. Use the AI Agent / CLI / API tab, or bring your own.')}}
               <div style="margin-top:10px">
-                <button v-if="mkOauth(epTry.provider)" class="btn sm primary" @click="openProvider(epTry.provider); epTry=null">{{epTryAccess.action_label||endpointConnectLabel(epTry)}}</button>
+                <button v-if="mkOauth(epTry.provider)" class="btn sm primary" @click="openProvider(epTry.provider); closeEpTry()">{{epTryAccess.action_label||endpointConnectLabel(epTry)}}</button>
                 <button v-else-if="mkKnown(epTry.provider)" class="btn sm primary" @click="goByok(epTry.provider)">🔑 Bring your own key</button>
               </div>
             </div>
             <template v-else>
               <div class="field" v-for="p in epTryVisibleParams" :key="p.name" style="max-width:520px">
-                <label class="mono" style="min-width:140px">{{p.name}}<span v-if="p.required" style="color:var(--accent)"> *</span></label>
+                <label class="mono" style="min-width:140px">{{p.name}} <span class="muted">({{p.location}})</span><span v-if="p.required" style="color:var(--accent)"> *</span></label>
                 <input v-model="p.value" :placeholder="p.required?'required':'optional'"/>
               </div>
               <p v-if="!epTryVisibleParams.length && (epTry.method||'GET')==='GET'" class="sub" style="margin:0 0 12px">No parameters — just run it.</p>
-              <div v-if="(epTry.method||'GET')!=='GET' && epTryBody!==''" class="field" style="max-width:520px;align-items:flex-start">
+              <template v-if="epTryBodyType==='multipart'">
+                <div class="field" v-for="p in epTryMultipart" :key="p.name" style="max-width:520px">
+                  <label class="mono" style="min-width:140px">{{p.name}}<span v-if="p.required" style="color:var(--accent)"> *</span></label>
+                  <input v-if="String(p.type).includes('file')" type="file" :multiple="String(p.type).startsWith('array')" @change="setEpTryFiles(p.name,$event)"/>
+                  <input v-else v-model="p.value" :placeholder="p.required?'required':'optional'"/>
+                </div>
+              </template>
+              <div v-else-if="(epTry.method||'GET')!=='GET' && epTryBody!==''" class="field" style="max-width:520px;align-items:flex-start">
                 <label style="min-width:140px">Body (JSON)</label>
                 <textarea v-model="epTryBody" rows="6" style="width:100%;font-family:var(--mono);font-size:12px"></textarea>
               </div>
@@ -3901,11 +3960,39 @@ treg login</pre></div>
               <div class="muted" style="font-size:12px;margin-bottom:6px">Result
                 <span class="badge" :class="epTryStatus>=200&&epTryStatus<300?'ok':'invalid'">{{epTryStatus}}</span>
                 · {{epTryMs}}ms<span v-if="epTryCost!=null"> · charged {{money(epTryCost)}}<span v-if="epTryCost===0 && epTryStatus>=200 && epTryStatus<300" :title="epTryAccess&&epTryAccess.tier==='anonymous'?'This verified public upstream route used no provider key and did not charge the team balance.':'The provider reported charging nothing for this call — usually its own cache serving a repeat lookup (look for cached: true in the response). You are billed exactly what the provider billed treg.'"> {{epTryAccess&&epTryAccess.tier==='anonymous'?'(free — no provider key ⓘ)':'(free — provider charged 0 ⓘ)'}}</span></span>
-                · logged in Activity like any call</div>
-              <pre style="max-height:340px;overflow:auto">{{epTryResp}}</pre>
+                <template v-if="epTry.id!=='fishaudio.voices.list'"> · logged in Activity like any call</template></div>
+              <audio v-if="epTryAudioUrl" :src="epTryAudioUrl" controls style="width:100%;margin:8px 0"></audio>
+              <a v-if="epTryAudioUrl" class="btn sm" :href="epTryAudioUrl" :download="epTryAudioName">Download audio</a>
+              <pre v-if="!epTryAudioUrl" style="max-height:340px;overflow:auto">{{epTryResp}}</pre>
+            </div>
+            <div v-if="epTry.provider==='fishaudio'" style="margin-top:20px;border-top:1px solid var(--line);padding-top:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><b>{{fishVoicesSource==='byok'?'Your Fish Audio voices':'Team voices'}}</b><button class="btn sm" @click="loadFishVoices">Refresh</button></div>
+              <p v-if="fishVoiceNote" class="sub" style="margin:6px 0 0">{{fishVoiceNote}}</p>
+              <p v-if="!fishVoices.length && !fishVoiceBusy" class="sub">{{fishVoicesSource==='byok'?'No voices in this Fish Audio account yet.':'No platform-created voices in this team yet.'}}</p>
+              <p v-if="fishVoiceBusy" class="sub">Loading voices…</p>
+              <div v-for="v in fishVoices" :key="v.id" class="card" style="padding:10px;margin-top:8px">
+                <div><b>{{v.display_name||'Untitled voice'}}</b><div class="mono muted" style="font-size:11px">{{v.upstream_id}}</div></div>
+                <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                  <button class="btn sm" @click="useFishVoice(v)">Use in TTS</button>
+                  <button class="btn sm" @click="beginRenameFishVoice(v)">Rename</button>
+                  <button class="btn sm danger" @click="beginDeleteFishVoice(v)">Delete</button>
+                </div>
+              </div>
             </div>
           </template>
         </div></div>
+    </div>
+
+    <div v-if="fishVoiceDialog" class="scrim" role="dialog" aria-modal="true" aria-labelledby="fish-voice-dialog-title" @click.self="closeFishVoiceDialog">
+      <div class="modal" style="width:min(470px,94vw);padding:18px 20px">
+        <div class="hd"><b id="fish-voice-dialog-title">{{fishVoiceDialog.action==='rename'?'Rename voice':'Delete voice'}}</b><button class="btn sm ico" @click="closeFishVoiceDialog" aria-label="Close">✕</button></div>
+        <template v-if="fishVoiceDialog.action!=='delete'">
+          <div class="field" style="margin-top:14px"><label>Voice name</label><input ref="fishVoiceName" v-model="fishVoiceDialog.name" maxlength="100" @keyup.enter="submitFishVoiceDialog"/></div>
+        </template>
+        <p v-else style="margin:14px 0 0">Delete <b>{{fishVoiceDialog.voice.display_name||fishVoiceDialog.voice.upstream_id}}</b>? This cannot be undone.</p>
+        <p v-if="fishVoiceDialog.error" class="err" style="margin:10px 0 0">{{fishVoiceDialog.error}}</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px"><button class="btn sm" :disabled="fishVoiceDialog.busy" @click="closeFishVoiceDialog">Cancel</button><button class="btn sm" :class="{primary:fishVoiceDialog.action!=='delete',danger:fishVoiceDialog.action==='delete'}" :disabled="fishVoiceDialog.busy || (fishVoiceDialog.action!=='delete'&&!fishVoiceDialog.name.trim())" @click="submitFishVoiceDialog">{{fishVoiceDialog.busy?'Working…':fishVoiceDialog.action==='rename'?'Save name':'Delete voice'}}</button></div>
+      </div>
     </div>
 
     <!-- access reminder toast: fired when a new tool is registered while some members have customized access -->
@@ -4012,6 +4099,8 @@ createApp({
       confirmDel:'', confirmLeave:false, confirmRemove:null,
       showJoin:false, joinCode:'', joinBusy:false, joinErr:'',
       secrets:[], showSecrets:false, secretRows:[{name:'',value:'',kind:'env'}], secretBusy:false, secretErr:'', runNote:'',
+      teamResources:[], teamResourceBusy:false, teamResourceErr:'', teamResourceProvider:'', teamResourceKind:'',
+      teamResourcePage:1, teamResourcePageSize:10, teamResourceCopied:null,
       newTool:false, toolBusy:false, toolErr:'', confirmDelTool:null, confirmDelSecret:null,
       tForm:{id:null, name:'', base_url:'', bindings:[]},
       addToolMenu:false,  // the ＋ Add tool [endpoint | cli] chooser
@@ -4047,8 +4136,9 @@ createApp({
       // marketplace endpoint Try-it drawer
       callView:null, callViewFull:false, callCopied:'',  // Activity → one call's request/response drawer
       actOkOnly:true,  // Activity feed: successes only by default; the toggle shows failed/refused too
-      epTry:null, epTryTab:'agent', epTryAccess:null, epTryAccessByMethod:{}, epTryAuthMethod:'', epTryParams:[], epTryBody:'', epTryResp:'', epTryStatus:null,
-      epTryMs:null, epTryCost:null, epTryBusy:false,
+      epTry:null, epTryTab:'agent', epTryAccess:null, epTryAccessByMethod:{}, epTryAuthMethod:'', epTryParams:[], epTryBody:'', epTryBodyType:'json', epTryMultipart:[], epTryFiles:{}, epTryResp:'', epTryStatus:null,
+      epTryMs:null, epTryCost:null, epTryBusy:false, epTryAudioUrl:'', epTryAudioName:'speech.mp3', fishVoices:[],
+      fishVoicesSource:'platform', fishVoiceBusy:false, fishVoiceNote:'', fishVoiceDialog:null,
       catalogClis:null,  // bin → catalog default deny patterns (lazy, from /providers.json)
       newSkill:false, skillJson:'', skillBusy:false, skillErr:'', skillMode:'folder',
       skillFiles:[], detected:null, skillSel:{}, skillVals:{}, skillResults:null,
@@ -4394,6 +4484,16 @@ createApp({
     tourParts(){ return [...new Set(this.tourSteps.map(s=>s.part))]; },
     activeOrgId(){ return this.activeOrg ? this.activeOrg.org_id : null; },
     canAdmin(){ return ['admin','owner'].includes(this.activeRole); },
+    teamResourceProviders(){ return [...new Set(this.teamResources.map(r=>r.provider).filter(Boolean))].sort(); },
+    teamResourceKinds(){ return [...new Set(this.teamResources.map(r=>r.kind).filter(Boolean))].sort(); },
+    filteredTeamResources(){ const q=(this.q||'').trim().toLowerCase(); return this.teamResources.filter(r=>(
+      (!this.teamResourceProvider||r.provider===this.teamResourceProvider) &&
+      (!this.teamResourceKind||r.kind===this.teamResourceKind) &&
+      (!q||[r.display_name,r.upstream_id,r.provider,r.kind,r.created_by].some(v=>String(v||'').toLowerCase().includes(q)))
+    )); },
+    teamResourcePageCount(){ return Math.max(1,Math.ceil(this.filteredTeamResources.length/this.teamResourcePageSize)); },
+    teamResourceCurrentPage(){ return Math.min(this.teamResourcePage,this.teamResourcePageCount); },
+    pagedTeamResources(){ const start=(this.teamResourceCurrentPage-1)*this.teamResourcePageSize; return this.filteredTeamResources.slice(start,start+this.teamResourcePageSize); },
     agentPromptText(){ return this.buildAgentPrompt(this.agentGuide); },
     // The whole vendor pitch is two sentences: the hosted /vendor-listing page carries the real
     // instructions, so this prompt only has to name the repo, the page, and the contact email.
@@ -4416,32 +4516,57 @@ createApp({
       const a=this.epTryAccessByMethod[m]; return a && (a.tier==='tool'||a.tier==='credential'); }); },
     epTryShowAuthSelector(){ return this.epTryAuthMethods.length>1 && this.epTryConnectedMethods.length>1; },
     epTryDisplayPath(){ if(!this.epTry) return '';
+      if(this.epTry.id==='fishaudio.voices.list') return '/orgs/{org_id}/provider-resources?provider=fishaudio&kind=voice';
       return (this.epTry.authorization_paths||{})[this.epTryAuthMethod]||this.epTry.path; },
-    epTryVisibleParams(){ return (this.epTryParams||[]).filter(p=>this.epTryParamAllowed(p)); },
-    epTryQuery(){ return this.epTryVisibleParams.filter(p=>p.value!=='' && p.value!=null)
+    epTryVisibleParams(){
+      if(this.epTry&&this.epTry.id==='fishaudio.voices.list') return [];
+      return (this.epTryParams||[]).filter(p=>this.epTryParamAllowed(p));
+    },
+    epTryQuery(){ return this.epTryVisibleParams.filter(p=>['query','path'].includes(p.location) && p.value!=='' && p.value!=null)
       .map(p=>encodeURIComponent(p.name)+'='+encodeURIComponent(p.value)).join('&'); },
     epTryShellBody(){ return "'"+String(this.epTryBody).replace(/'/g,"'\"'\"'")+"'"; },
     epTryCliCall(){ if(!this.epTry) return '';
-      const args=this.epTryVisibleParams.filter(p=>p.value!=='' && p.value!=null)
+      if(this.epTry.id==='fishaudio.voices.list') return 'treg resources list --provider fishaudio --kind voice';
+      const args=this.epTryVisibleParams.filter(p=>['query','path'].includes(p.location) && p.value!=='' && p.value!=null)
         .map(p=>`--query ${p.name}=${/\s/.test(String(p.value))?JSON.stringify(String(p.value)):p.value}`).join(' ');
       const method=(this.epTry.method||'GET').toUpperCase();
       let s=`treg call ${this.epTry.id}${args?' '+args:''}`;
       if(method!=='GET') s+=` --method ${method}`;
       if(this.epTryAuthMethod) s+=` --authorization-method ${this.epTryAuthMethod}`;
-      if(method!=='GET' && this.epTryBody.trim()) s+=` --data ${this.epTryShellBody}`;
+      for(const p of this.epTryVisibleParams.filter(p=>p.location==='header'&&String(p.value)!==''))
+        s+=` --header ${p.name}=${JSON.stringify(String(p.value))}`;
+      if(this.epTryBodyType==='multipart'){
+        for(const p of this.epTryMultipart.filter(p=>!String(p.type).includes('file')&&String(p.value)!==''))
+          s+=` --form ${p.name}=${JSON.stringify(String(p.value))}`;
+        for(const p of this.epTryMultipart.filter(p=>String(p.type).includes('file')))
+          s+=` --upload ${p.name}=@${p.name==='voices'?'<reference-audio>':'<file>'}`;
+      }else if(method!=='GET' && this.epTryBody.trim()) s+=` --data ${this.epTryShellBody}`;
+      if(this.epTry.id==='fishaudio.tts.s2-1-pro') s+=' > speech.mp3';
       return s; },
     epTryCurl(){ if(!this.epTry) return '';
+      if(this.epTry.id==='fishaudio.voices.list'){
+        const tok=this.myToken||'$TREG_TOKEN', org=this.activeOrgId||'$TREG_ORG_ID';
+        let s=`curl "${this.proxy}/orgs/${org}/provider-resources?provider=fishaudio&kind=voice" \\\n+  -H "X-Treg-Token: ${tok}"`;
+        if(this.sessionMode && this.activeSlugNow) s+=` \\\n+  -H "X-Treg-Org: ${this.activeSlugNow}"`;
+        return s;
+      }
       const q=this.epTryQuery; const url=`${this.proxy}/call/${this.epTry.id}${q?'?'+q:''}`;
       const tok=this.myToken||'$TREG_TOKEN', method=(this.epTry.method||'GET').toUpperCase();
       let s=`curl -X ${method} "${url}" \\\n  -H "X-Treg-Token: ${tok}"`;
       if(this.sessionMode && this.activeSlugNow) s+=` \\\n  -H "X-Treg-Org: ${this.activeSlugNow}"`;  // minted identity token needs the org header
       if(this.epTryAuthMethod) s+=` \\\n  -H "X-Treg-Authorization-Method: ${this.epTryAuthMethod}"`;
-      if(method!=='GET' && this.epTryBody.trim()) s+=` \\\n  -H "Content-Type: application/json" \\\n  --data ${this.epTryShellBody}`;
+      for(const p of this.epTryVisibleParams.filter(p=>p.location==='header'&&String(p.value)!=='')) s+=` \\\n  -H "${p.name}: ${String(p.value).replace(/"/g,'\\"')}"`;
+      if(this.epTryBodyType==='multipart'){
+        for(const p of this.epTryMultipart.filter(p=>!String(p.type).includes('file')&&String(p.value)!=='')) s+=` \\\n  -F "${p.name}=${String(p.value).replace(/"/g,'\\"')}"`;
+        for(const p of this.epTryMultipart.filter(p=>String(p.type).includes('file'))) s+=` \\\n  -F "${p.name}=@${p.name==='voices'?'<reference-audio>':'<file>'}"`;
+      }else if(method!=='GET' && this.epTryBody.trim()) s+=` \\\n  -H "Content-Type: application/json" \\\n  --data ${this.epTryShellBody}`;
+      if(this.epTry.id==='fishaudio.tts.s2-1-pro') s+=' \\\n  --output speech.mp3';
       return s; },
     // token + team embedded HERE ONLY (a copy-and-run-now context) — the setup line elsewhere stays clean
     epTrySetupLine(){ const S=this.activeSlugNow||'<team-slug>', T=this.myToken||'<YOUR_TOKEN>';
       return `set up treg — ${this.proxy}/llms.txt with team ${S} token: ${T}`; },
     epTryAgentUse(){ if(!this.epTry) return '';
+      if(this.epTry.id==='fishaudio.voices.list') return 'Use treg resources_list with provider=fishaudio and kind=voice. It returns the connected Fish account when BYOK exists, otherwise this team’s platform-created voices.';
       const what=this.epTry.summary ? this.epTry.summary.replace(/\.$/,'') : this.epTry.id;
       const auth=this.epTryAuthMethod ? ` Use authorization_method=${this.epTryAuthMethod}.` : '';
       return `Use treg to call ${this.epTry.id} — ${what}.${auth}`; },
@@ -5074,6 +5199,18 @@ createApp({
       catch(e){ this.orgErr='Delete failed: '+(e.detail||e.status); } },
     // ---- Phase 2b: resource registration (secrets + tools) ----
     async loadSecrets(){ try{ this.secrets=await this.api('/secrets'); }catch(e){ this.secrets=[]; } },
+    async loadTeamResources(){
+      if(!this.activeOrgId) return;
+      this.teamResourceBusy=true; this.teamResourceErr='';
+      try{ this.teamResources=await this.api('/orgs/'+this.activeOrgId+'/provider-resources?source=platform');
+        this.teamResourcePage=Math.min(this.teamResourcePage,Math.max(1,Math.ceil(this.teamResources.length/this.teamResourcePageSize))); }
+      catch(e){ this.teamResources=[]; this.teamResourceErr='Could not load team resources: '+(e.detail||e.status||e); }
+      finally{ this.teamResourceBusy=false; }
+    },
+    async copyTeamResourceId(resource){
+      if(!(await this.toClipboard(resource.upstream_id||''))) return;
+      this.teamResourceCopied=resource.id; setTimeout(()=>{ if(this.teamResourceCopied===resource.id)this.teamResourceCopied=null; },1400);
+    },
     // Paste a whole .env into the name/value field (Render/Vercel-style): it splits into rows
     // client-side — comments/blank lines skipped, `export ` stripped, one balanced quote pair removed.
     parseEnvText(t){ const out=[];
@@ -5679,7 +5816,7 @@ createApp({
       // working so an existing /app#usage link, and the balance card's deep link, still land right.
       if(v==='usage'){ this.actTab='usage'; v='activity'; this.loadUsage(); }
       else if(v==='activity'){ this.actTab='feed'; }
-      this.detail=null; this.view=v; if(v==='activity')this.loadCalls(); if(v==='admin')this.loadAdmin(); if(v==='orgs'){this.loadOrgAdmin(); this.loadMyUsage(); this.loadBilling();} if(v==='usage')this.loadUsage(); if(v==='secrets'){this.loadSecrets(); if(!this.providers.length)this.loadConnections();} if(v==='connections')this.loadConnections(); if(v==='referrals')this.loadReferrals();
+      this.detail=null; this.view=v; if(v==='activity')this.loadCalls(); if(v==='admin')this.loadAdmin(); if(v==='orgs'){this.loadOrgAdmin(); this.loadMyUsage(); this.loadBilling();} if(v==='usage')this.loadUsage(); if(v==='secrets'){this.loadSecrets(); if(!this.providers.length)this.loadConnections();} if(v==='resources')this.loadTeamResources(); if(v==='connections')this.loadConnections(); if(v==='referrals')this.loadReferrals();
       // push history so browser Back navigates BETWEEN views instead of leaving the app; the '/app'
       // pathname also walks back from a /app/skills/<x> detail URL so reload doesn't reopen the detail
       if(!fromPop) history.pushState({view:v}, '',
@@ -5701,7 +5838,7 @@ createApp({
     goPublicTool(service){ location.href='/tools/'+encodeURIComponent(service); },
     goByok(service){
       this.mkTab='platform'; this.mkCat='';
-      this.byokFocus=service||null; this.epTry=null;
+      this.byokFocus=service||null; this.closeEpTry();
       this.go('connections');
       if(!service) return;
       this.$nextTick(()=>{ const el=document.getElementById('prov-'+service);
@@ -5741,7 +5878,7 @@ createApp({
     // billing lives on the Team pane's Billing tab, so it aliases there.
     viewFromHash(){ let v=(location.hash||'').replace('#','');
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
-      return ['tools','orgs','activity','usage','admin','help','secrets','start','connections','referrals'].includes(v)?v:null; },
+      return ['tools','orgs','activity','usage','admin','help','secrets','start','resources','connections','referrals'].includes(v)?v:null; },
     openPlatform(slug, fromPop){ this.resetConfirms();
       this.detail=null; this.platSlug=slug; this.view='platform'; this.platOpen={}; this.epOpen={}; this.epTab={}; this.platEx={}; this.platActionsOpen=false;
       this.platClearFilters(); this.platCopied='';
@@ -5834,6 +5971,7 @@ createApp({
               pf.note].filter(Boolean).join(' — '); },
     endpointAccessLabel(e){
       if(e.kind==='routed') return 'Routed platform call';
+      if(e.id==='fishaudio.voices.list') return 'Team voices + BYOK';
       const p=this.providers.find(p=>p.service===e.provider)
         || (this.platData&&this.platData.providers||{})[e.provider] || {};
       if(p.auth_kind==='oauth') return p.metered ? 'OAuth · metered' : 'OAuth connection';
@@ -5878,6 +6016,7 @@ createApp({
         if(names.length) out.push({key, label, type, rows:names.map(n=>({name:n, ...map[n]}))}); };
       add('query','Query', i.queryParams);
       add('path','Path', i.pathParams);
+      add('headers','Headers', i.headers);
       add('body','Body', i.body, i.bodyType);
       return out; },
     // Examples arrive as real JSON values, so an array or object has to be stringified rather than
@@ -6156,6 +6295,7 @@ createApp({
         // — both are org-scoped and would otherwise keep showing the previous team's numbers.
         if(this.view==='activity'){ this.loadCalls(); if(this.actTab==='usage') this.loadUsage(); }
         if(this.view==='secrets') this.loadSecrets();  // …and the Secrets view (was showing the previous org's)
+        if(this.view==='resources') this.loadTeamResources();
       }catch(e){ this.err='Failed to load: '+(e.detail||e.status); }
       finally{ this.loading=false; } },
     async openCall(a){  // Activity row → the drawer; details load from /calls/{id}/result
@@ -6238,32 +6378,42 @@ createApp({
     async copy(text){ if(!(await this.toClipboard(text))) return; this.copied=true; setTimeout(()=>this.copied=false,1500); },
     // ---- marketplace endpoint Try-it ----
     openEpTry(e){
+      this.closeEpTry();
       this.epTry=e; this.epTryTab='agent'; this.epTryResp=''; this.epTryStatus=null; this.epTryMs=null; this.epTryCost=null;
       this.epTryAccess=null; this.epTryAccessByMethod={}; this.epTryBusy=false;
       this.epTryAuthMethod=e.authorization_method||((e.authorization_methods||[])[0])||'';
       const secs=this.paramSections(e);
       const tr=e.test_request||{};  // the live-verified request — the best possible prefill
-      const trq={...(tr.queryParams||{}), ...(tr.pathParams||{})};
+      const trq={...(tr.queryParams||{}), ...(tr.pathParams||{}), ...(tr.headers||{})};
       const qp=[];  // query + path params (path placeholders are consumed from query server-side)
       for(const s of secs) if(s.key!=='body') for(const p of s.rows)
         qp.push({name:p.name, required:!!p.required, authorization_methods:p.authorization_methods||[],
+                 location:s.key==='headers'?'header':s.key,
                  value: trq[p.name]!=null ? this.fmtExample(trq[p.name])
                         : (p.example!=null ? this.fmtExample(p.example) : '')});
       // test_request may carry params the input spec doesn't list — keep them, they made the call work
-      for(const [k,v] of Object.entries(trq)) if(!qp.some(p=>p.name===k)) qp.push({name:k, required:false, value:this.fmtExample(v)});
+      for(const [k,v] of Object.entries(trq)) if(!qp.some(p=>p.name===k)) qp.push({name:k, required:false, location:'query', value:this.fmtExample(v)});
       this.epTryParams=qp;
+      const bodySec=secs.find(s=>s.key==='body');
+      this.epTryBodyType=(bodySec&&bodySec.type)||'json'; this.epTryMultipart=[]; this.epTryFiles={};
+      if(this.epTryBodyType==='multipart' && bodySec){
+        this.epTryMultipart=bodySec.rows.map(p=>({name:p.name,type:p.type||'string',required:!!p.required,
+          value:tr.body&&tr.body[p.name]!=null?this.fmtExample(tr.body[p.name]):(p.example!=null?this.fmtExample(p.example):'')}));
+      }
       let body='';
-      if((e.method||'GET')!=='GET'){
+      if((e.method||'GET')!=='GET' && this.epTryBodyType!=='multipart'){
         if(tr.body!=null){ body=JSON.stringify(tr.body,null,2); }  // verbatim — array-vs-object is ground truth here
         else{
-          const bodySec=secs.find(s=>s.key==='body');
           if(bodySec){ const o={}; for(const p of bodySec.rows) if(p.example!=null||p.required) o[p.name]=p.example!=null?p.example:null;
             body=JSON.stringify(o,null,2); }
         }
       }
       this.epTryBody=body;
-      // the authenticated dry-run: which ladder rung would serve this org, and at what price
-      this.loadEpTryAccessPolicy();
+      if(e.provider==='fishaudio') this.loadFishVoices(); else this.fishVoices=[];
+      // Voice listing has a first-party unified read. The raw /call endpoint stays a faithful Fish
+      // relay, while this action selects BYOK or organization-owned platform resources server-side.
+      if(e.id==='fishaudio.voices.list') this.epTryAccess={tier:'platform',detail:'Uses your connected Fish Audio account when present; otherwise lists voices owned by this treg team. No BYOK key is required for team voices.'};
+      else this.loadEpTryAccessPolicy();
     },
     epTryParamAllowed(p){ return !p.authorization_methods || !p.authorization_methods.length
       || p.authorization_methods.includes(this.epTryAuthMethod); },
@@ -6297,15 +6447,45 @@ createApp({
     async runEpTry(){
       const e=this.epTry; if(!e) return; this.epTryBusy=true; const t0=performance.now();
       try{
-        const qs=this.epTryVisibleParams.filter(p=>String(p.value)!=='').map(p=>encodeURIComponent(p.name)+'='+encodeURIComponent(p.value)).join('&');
+        if(this.epTryAudioUrl) URL.revokeObjectURL(this.epTryAudioUrl);
+        this.epTryAudioUrl='';
+        if(e.id==='fishaudio.voices.list'){
+          const r=await fetch('/orgs/'+this.activeOrgId+'/provider-resources?provider=fishaudio&kind=voice',
+            {credentials:'include',headers:{...this.headers()}});
+          const text=await r.text(); this.epTryStatus=r.status; this.epTryMs=Math.round(performance.now()-t0);
+          if(!r.ok) throw new Error(text||('HTTP '+r.status));
+          const payload=text?JSON.parse(text):[]; this.epTryResp=JSON.stringify(payload,null,2);
+          this.fishVoices=this.fishVoiceRows(payload);
+          this.fishVoicesSource=r.headers.get('X-Treg-Resource-Source')||'platform';
+          this.fishVoiceNote=this.fishVoicesSource==='byok'
+            ?'These voices come from your connected Fish Audio account.'
+            :'These voices belong only to this treg team.';
+          return;
+        }
+        const qs=this.epTryVisibleParams.filter(p=>['query','path'].includes(p.location)&&String(p.value)!=='').map(p=>encodeURIComponent(p.name)+'='+encodeURIComponent(p.value)).join('&');
         const opts={method:e.method||'GET', credentials:'include', headers:{...this.headers()}};
         if(this.epTryAuthMethod) opts.headers['X-Treg-Authorization-Method']=this.epTryAuthMethod;
-        if(opts.method!=='GET' && this.epTryBody.trim()){ opts.body=this.epTryBody; opts.headers['content-type']='application/json'; }
+        for(const p of this.epTryVisibleParams.filter(p=>p.location==='header'&&String(p.value)!=='')) opts.headers[p.name]=String(p.value);
+        if(this.epTryBodyType==='multipart'){
+          const form=new FormData();
+          for(const p of this.epTryMultipart){
+            if(String(p.type).includes('file')) for(const file of (this.epTryFiles[p.name]||[])) form.append(p.name,file,file.name);
+            else if(String(p.value)!=='') form.append(p.name,String(p.value));
+          }
+          opts.body=form;
+        }else if(opts.method!=='GET' && this.epTryBody.trim()){ opts.body=this.epTryBody; opts.headers['content-type']='application/json'; }
         const r=await fetch('/call/'+e.id+(qs?'?'+qs:''), opts);
         this.epTryStatus=r.status; this.epTryMs=Math.round(performance.now()-t0);
-        const txt=await r.text();
-        if(!txt){ this.epTryResp='(empty response body - status '+r.status+')'; }
-        else{ try{ this.epTryResp=JSON.stringify(JSON.parse(txt),null,2).slice(0,20000); }catch(_){ this.epTryResp=txt.slice(0,8000); } }
+        const contentType=(r.headers.get('content-type')||'').toLowerCase();
+        if(contentType.startsWith('audio/')){
+          const blob=await r.blob(); this.epTryAudioUrl=URL.createObjectURL(blob);
+          this.epTryAudioName='speech.'+({'audio/mpeg':'mp3','audio/wav':'wav','audio/opus':'opus'}[contentType.split(';')[0]]||'audio');
+          this.epTryResp='Audio ready ('+this.fmtBytes(blob.size)+')';
+        }else{
+          const txt=await r.text();
+          if(!txt){ this.epTryResp='(empty response body - status '+r.status+')'; }
+          else{ try{ const parsed=JSON.parse(txt); this.epTryResp=JSON.stringify(parsed,null,2).slice(0,20000); }catch(_){ this.epTryResp=txt.slice(0,8000); } }
+        }
         // The charge, read back from the same telemetry Activity renders. The audit writer is
         // fire-and-forget, so give it a beat; also refresh the balance pill.
         setTimeout(async()=>{ try{
@@ -6316,6 +6496,65 @@ createApp({
         }catch(_){}} , 900);
       }catch(err){ this.epTryResp='Request failed: '+err; this.epTryStatus=0; this.epTryMs=Math.round(performance.now()-t0); }
       finally{ this.epTryBusy=false; }
+    },
+    closeEpTry(){
+      if(this.epTryAudioUrl) URL.revokeObjectURL(this.epTryAudioUrl);
+      this.epTryAudioUrl=''; this.epTry=null;
+    },
+    setEpTryFiles(name,event){ this.epTryFiles={...this.epTryFiles,[name]:Array.from(event.target.files||[])}; },
+    fishVoiceRows(payload){
+      const rows=Array.isArray(payload)?payload:(payload&&[payload.items,payload.models,payload.results,payload.data].find(Array.isArray))||[];
+      return rows.map((v,i)=>({
+        id:v.id||v._id||v.model_id||('fish-'+i), provider:'fishaudio', kind:'voice',
+        upstream_id:v.upstream_id||v._id||v.id||v.model_id||'',
+        display_name:v.display_name||v.title||v.name||'Untitled voice',
+        status:v.status||'active', created_at:v.created_at||v.createdAt||null,
+      })).filter(v=>v.upstream_id);
+    },
+    async loadFishVoices(){
+      if(!this.activeOrgId) return;
+      this.fishVoiceBusy=true; this.fishVoiceNote='';
+      try{
+        const r=await fetch('/orgs/'+this.activeOrgId+'/provider-resources?provider=fishaudio&kind=voice',
+          {credentials:'include',headers:{...this.headers()}});
+        if(!r.ok) throw new Error((await r.text())||('HTTP '+r.status));
+        this.fishVoices=this.fishVoiceRows(await r.json());
+        this.fishVoicesSource=r.headers.get('X-Treg-Resource-Source')||'platform';
+        this.fishVoiceNote=this.fishVoicesSource==='byok'
+          ?'These voices come from your connected Fish Audio account.'
+          :'These voices belong only to this treg team.';
+      }catch(err){ this.fishVoices=[]; this.fishVoiceNote='Could not load voices: '+(err.detail||err); }
+      finally{ this.fishVoiceBusy=false; }
+    },
+    async useFishVoice(voice){
+      const all=[...(this.plats.list||[]),...((this.platData&&this.platData.endpoints)||[])];
+      let ep=all.find(e=>e.id==='fishaudio.tts.s2-1-pro');
+      try{ if(!ep){ const detail=await this.api('/catalog/endpoints/fishaudio.tts.s2-1-pro'); ep=detail.endpoint||detail; } }
+      catch(err){ this.epTryResp='Could not open Fish Audio TTS: '+err; return; }
+      this.openEpTry(ep); this.epTryTab='manual';
+      try{ const body=JSON.parse(this.epTryBody||'{}'); body.reference_id=voice.upstream_id; this.epTryBody=JSON.stringify(body,null,2); }catch(_){}
+    },
+    beginRenameFishVoice(voice){
+      this.fishVoiceDialog={action:'rename',voice,name:voice.display_name||'',busy:false,error:''};
+      this.$nextTick(()=>{ const el=this.$refs.fishVoiceName; if(el){ el.focus(); el.select(); } });
+    },
+    beginDeleteFishVoice(voice){ this.fishVoiceDialog={action:'delete',voice,name:'',busy:false,error:''}; },
+    closeFishVoiceDialog(){ if(this.fishVoiceDialog&&!this.fishVoiceDialog.busy)this.fishVoiceDialog=null; },
+    async submitFishVoiceDialog(){
+      const d=this.fishVoiceDialog; if(!d||d.busy)return;
+      d.busy=true; d.error='';
+      try{
+        if(d.action==='rename'){
+          const r=await fetch('/call/fishaudio.voices.update?id='+encodeURIComponent(d.voice.upstream_id),{method:'PATCH',credentials:'include',headers:{...this.headers(),'content-type':'application/json'},body:JSON.stringify({title:d.name.trim(),visibility:'private'})});
+          if(!r.ok)throw new Error((await r.text())||('HTTP '+r.status));
+          this.epTryResp='Renamed voice to “'+d.name.trim()+'”.';
+        }else{
+          const r=await fetch('/call/fishaudio.voices.delete?id='+encodeURIComponent(d.voice.upstream_id),{method:'DELETE',credentials:'include',headers:{...this.headers()}});
+          if(!(r.ok||r.status===404))throw new Error((await r.text())||('HTTP '+r.status));
+          this.epTryResp='Deleted “'+(d.voice.display_name||d.voice.upstream_id)+'”.';
+        }
+        this.fishVoiceDialog=null; const reloads=[this.loadTeamResources()]; if(this.epTry)reloads.push(this.loadFishVoices()); await Promise.all(reloads);
+      }catch(err){ d.error=String(err&&err.message||err); d.busy=false; }
     },
     async runTry(){ this.trying=true; const t0=performance.now();
       try{ const opts={method:this.tryMethod, credentials:'include', headers:{...this.headers()}};
@@ -6341,7 +6580,7 @@ createApp({
       this.orgMenuStyle={position:'fixed', top:(r.bottom+6)+'px', left:r.left+'px'};
     },
     toggleOrgMenu(){ this.orgMenu=!this.orgMenu; if(this.orgMenu) this.placeOrgMenu(); },
-    closeOverlays(){ this.newTool=false; this.newSkill=false; this.showJoin=false; this.newOrg=false; this.addOrg=false; this.tryTool=null; this.copyTool=null; this.orgMenu=false; this.keyMenu=null; this.keyConfirm=null; this.share.on=false; this.methodAsk=null; },
+    closeOverlays(){ this.newTool=false; this.newSkill=false; this.showJoin=false; this.newOrg=false; this.addOrg=false; this.tryTool=null; this.copyTool=null; this.orgMenu=false; this.keyMenu=null; this.keyConfirm=null; this.share.on=false; this.methodAsk=null; if(!this.fishVoiceDialog||!this.fishVoiceDialog.busy)this.fishVoiceDialog=null; },
   },
   async mounted(){
     document.documentElement.dataset.theme=this.theme;
@@ -6351,7 +6590,7 @@ createApp({
       if(e.key==='Escape'){ this.closeOverlays(); return; }
       // "/" focuses the search box (the "/" glyph in the box advertised a shortcut that didn't exist)
       const t=e.target, typing = t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
-      if(e.key==='/' && !typing && this.authed && (this.view==='tools'||this.view==='connections')){ e.preventDefault(); this.$refs.search && this.$refs.search.focus(); }
+      if(e.key==='/' && !typing && this.authed && (this.view==='tools'||this.view==='resources'||this.view==='connections')){ e.preventDefault(); this.$refs.search && this.$refs.search.focus(); }
     });
     document.addEventListener('click', e=>{  // the org dropdown didn't close on an outside click
       if(this.orgMenu && !e.target.closest('.orgblock') && !e.target.closest('.dropdown')) this.orgMenu=false;
@@ -6368,7 +6607,7 @@ createApp({
       if(d){ this.openDetail(d.kind, d.name, true); return; }
       let v=(e.state&&e.state.view)||(location.hash||'').replace('#','')||'tools';
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
-      if(['tools','orgs','activity','usage','admin','help','secrets','start','connections','referrals'].includes(v)) this.go(v, true);
+      if(['tools','orgs','activity','usage','admin','help','secrets','start','resources','connections','referrals'].includes(v)) this.go(v, true);
     });
     this.meta = await fetch('/meta',{headers:{'ngrok-skip-browser-warning':'1'}}).then(r=>r.json()).catch(()=>this.meta);
     this.proxy = this.meta.public_url || location.origin;

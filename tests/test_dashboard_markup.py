@@ -335,6 +335,45 @@ def test_an_empty_price_from_object_reads_as_no_price_at_all():
     assert "(raw && Object.keys(raw).length) ? raw : null" in fn
 
 
+def test_fish_voice_actions_use_dashboard_state_not_native_dialogs():
+    block = INDEX[INDEX.index("async loadFishVoices(){") : INDEX.index("async runTry(){")]
+    assert "prompt(" not in block and "confirm(" not in block
+    assert "fishVoiceDialog={action:'rename'" in block
+    assert "fishVoiceDialog={action:'delete'" in block
+    assert "detail.endpoint||detail" in block
+    assert "inspectFishVoice" not in INDEX
+    assert "fishaudio.voices.get" not in INDEX
+
+
+def test_fish_voice_design_is_not_exposed_in_the_dashboard():
+    assert "fishaudio.voice-design.create" not in INDEX
+    assert "saveVoiceCandidate" not in INDEX
+    assert "voice_design_signatures" not in INDEX
+
+
+def test_fish_voice_panel_uses_the_server_unified_resource_view():
+    block = INDEX[INDEX.index("async loadFishVoices(){") : INDEX.index("async useFishVoice(voice){")]
+    assert "/provider-resources?provider=fishaudio&kind=voice" in block
+    assert "X-Treg-Resource-Source" in block
+    assert "/call/fishaudio.voices.list" not in block
+    assert "No BYOK key is required for team voices" in INDEX
+    assert "treg resources list --provider fishaudio --kind voice" in INDEX
+
+
+def test_team_resources_is_a_vault_tab_with_platform_only_rows_and_pagination():
+    assert _enclosing_views("<template v-if=\"view==='resources'\">") == []
+    assert INDEX.count("Team resources</button>") == 3
+    assert "provider-resources?source=platform" in INDEX
+    assert "pagedTeamResources" in INDEX
+    assert "teamResourcePageCount>1" in INDEX
+    assert "Page {{teamResourceCurrentPage}} of {{teamResourcePageCount}}" in INDEX
+    assert "view==='tools'||view==='secrets'||view==='resources'" in INDEX
+
+
+def test_team_resources_is_registered_in_both_view_whitelists():
+    assert INDEX.count("'start','resources','connections','referrals'") == 2
+
+
 def test_a_converted_price_still_shows_the_providers_own_figure():
     """Nobody should have to wonder whether we invented the number: the native amount rides along
     wherever the provider bills in something other than USD. On the platform card it rides in the
@@ -764,7 +803,7 @@ def test_own_account_rows_are_labelled_and_distinct_from_scraper_rows():
     """An OAuth endpoint reads the account you connected; a scraper endpoint reads any handle. That
     is the difference between two different products, so it gets a badge and a colour."""
     assert """<span v-if="e.scope==='own_account'" class="chip own\"""" in INDEX
-    assert ">your account</span>" in INDEX
+    assert "?'team or your account':'your account'" in INDEX
     assert "Reads the account YOU connect via OAuth, not arbitrary public accounts" in INDEX
     assert """v-else-if="e.scope==='any_account'" class="chip any\"""" in INDEX
     assert ".chip.own{" in INDEX
@@ -925,7 +964,7 @@ def test_catalog_connection_badges_require_an_endpoint_compatible_grant():
     assert "endpointConnectLabel(e)" in logic
     drawer = INDEX[INDEX.index("<!-- MANUAL — the live test form -->") : INDEX.index("<!-- access reminder toast:")]
     assert "epTryAccess.connect_command" not in drawer
-    assert "openProvider(epTry.provider); epTry=null" in drawer
+    assert "openProvider(epTry.provider); closeEpTry()" in drawer
     assert "epTryAccess.action_label||endpointConnectLabel(epTry)" in drawer
 
 

@@ -262,7 +262,10 @@ deadline it releases the hold in full**, marks the row `timed_out` with `reconci
 an ERROR-level alert: an outcome nobody observed is the platform's cost, never the customer's, and a
 provider that silently changed its status field shows up as absorbed timeouts in
 `reconcile.async_task_settlement` (`absorbed_timeouts`) rather than as a quiet overcharge.
-Platform-key poll and fetch calls are authorized against the caller org's row before relay. A
+Platform-key poll and fetch calls are authorized against the caller org's row before relay, and
+against all membership pins when present. `defer_submission` freezes effective tags on the task;
+`_remember_resource` propagates them to later resource ids. `remember_platform_resources` freezes
+successful non-deferred submissions too. Missing legacy tags fail closed for pinned readers. A
 successful caller-driven poll may see a fetch-mode result id before the worker does, so the buffered
 terminal response records that id on the same row; the worker records it as part of settlement too.
 This makes the durable record both the hold owner and the authority for later shared-account objects.
@@ -299,7 +302,7 @@ a table-settled video row once billed its fallback ceiling for the provider's ma
 the first metered token-priced listing, together with its fx rule and a live test. Ledger writes remain exclusively through `domain/money`.
 
 The audit row (`CallRecord`) froze the reserve as `cost_charged_micro` at submission, so displays
-must not read it alone. `application.asynctasks.views_for(org_id, call_ids)` is the read side: it
+must not read it alone. `application.asynctasks.views_for(org_id, call_ids, pinned_tags=...)` is the read side: it
 joins the org's `AsyncTaskRecord`s, loads the archived terminal JSON for settled ones, and derives
 the artifact with the pure `domain.asynctasks.artifact(descriptor, terminal)` - the first URL under
 `result.path`, or the `{endpoint, name, value}` retrieval target for fetch-mode descriptors (the
@@ -499,7 +502,11 @@ Provider-specific calculation stays outside the faithful relay.
 
 | Evidence | Settlement behavior |
 |---|---|
-| Generic catalog-reported charge | A paid synchronous cost may name `reported_charge.path` and unit `usd` or `credit`. A finite nonnegative response value, including zero, settles exactly; invalid or absent evidence falls through to the normal estimate/miss behavior. Credit calls use the provider FX rate frozen at resolve time. Tavily's four web tools use `usage.credits` this way. Extract, Map, and Crawl group credits across successful pages: an early call may settle zero and a later response may carry the whole group debit; treg bills that provider evidence exactly instead of inventing a cross-call allocation |
+| Generic catalog-reported charge | A paid synchronous cost may name `reported_charge.path` with unit `usd`. A finite nonnegative response value, including zero, settles exactly; invalid or absent evidence falls through to the normal estimate/miss behavior |
+| Tavily Search | Reserve one credit for Basic, Fast and Ultra-fast or two for Advanced and an auto-selected depth; an explicit Basic depth overrides automatic selection. Platform Search requires caller-supplied `include_usage: true` and settles finite nonnegative per-request `usage.credits`. Empty results remain a paid routing miss. Missing or malformed usage keeps the frozen reserve. BYOK is unmetered and need not request usage. The endpoint-specific rate table must be complete, positive and finite; catalog validation rejects bad declarations and runtime refuses the call before reserve or relay instead of pricing it at zero |
+| Tavily Extract | Reserve the requested URL count (bounded by the documented 20-URL maximum) at 0.2 credit per Basic or 0.4 per Advanced extraction. Settle that fractional allocation for each valid entry in `results`; `failed_results` and grouped `usage.credits` do not charge the caller. A documented empty results list is free; malformed evidence keeps the frozen reserve |
+| Tavily Map | Platform calls require an explicit integer `limit` from 1 to 20. Reserve that many pages at 0.1 credit each, or 0.2 when the caller supplied nonempty `instructions`; settle valid URL strings in `results` at the frozen per-page unit. Empty results are free, malformed evidence keeps the reserve, and grouped `usage.credits` is ignored |
+| Tavily Crawl | Platform calls require the same 1-20 limit. Reserve per returned extraction at 0.3 credit (Basic), 0.4 (Basic + instructions), 0.5 (Advanced), or 0.6 (Advanced + instructions), then settle valid extracted entries in `results`. This is a conservative deterministic allocation, not the exact Tavily account charge: the response does not expose every page successfully mapped before extraction. treg absorbs any hidden mapping difference, bounded by the 20-page platform cap. Grouped `usage.credits` is ignored and BYOK remains unmetered |
 | Legacy reported charge | DataForSEO `cost`, ScrapeCreators and Dropleads finder/verifier `credits_charged`, Akta and Dropleads person enrichment `credits_consumed`, Dropleads company `credits.creditsDeducted`, Lusha `billing.creditsCharged`, Exa `costDollars.total`, and Prospeo bulk `total_cost`; credit amounts use the catalog FX rate |
 | Crustdata, cloro, AI Ark | Read the charge from a response header through `_CREDIT_HEADERS` using the same FX rate. Crustdata `X-Credits-Used` and cloro `X-Credits-Charged` are positive charges; AI Ark `X-Credit` is a negative debit and declares an explicit -1 multiplier. Invalid signs and non-finite values are ignored. cloro omits the header on its free routes and on a failed extraction, neither of which it bills, so an absent header settles at the estimate, not at zero |
 | cloro reserve | `cost.value` is the full-surface `test_request` price (ChatGPT 9, Google SERP 7); the plain call settles lower from the header (verified live 2026-09-07 at the then-Lite rate: reserve 7,200 µ$, settled 5,600, refunded 1,600; at the Hobby rate 3,600 → 2,800, re-verified 2026-09-14). The top-level `state` body field is a `cost.modifiers` rider (+2 credits) reserved through the same generic path Aviato uses, which is open to any credit-priced provider with a FX rate |
@@ -928,8 +935,8 @@ its existing explicit charge/no-charge prose handling is a separate billing sign
 
 ## Kitt AI response billing
 
-`_observed_cost_micro` reads the catalog's `cost.reported_charge.path` in USD
-(`unit: usd`), converting with Decimal to integer micro-USD. Kitt's two realtime
+`_observed_cost_micro` reads the catalog's `cost.reported_charge.path` in USD,
+converting with Decimal to integer micro-USD. Kitt's two realtime
 endpoints declare `credits.jobCredits`; there is no provider-specific billing branch. Finite nonnegative values,
 including zero, override the estimate; malformed, negative, boolean or null values
 fall through to the verified miss rule and documented base estimate. Find misses
@@ -998,3 +1005,12 @@ instead of raising. `_prospeo_cost_micro` settles bulk calls from finite nonnega
 single enrichments from endpoint-specific success evidence plus `free_enrichment`, searches from
 `free` and the result list, and suggestions at zero. Non-finite or malformed numeric evidence keeps
 the estimate for reconciliation. BYOK calls never enter this money path.
+
+## Pinned attribution and replay reads
+
+`reserve_in_transaction` writes `meta.tags` from its authoritative `tags` argument, overriding any
+same-named caller provenance. The append-only reserve entry survives hold release and provides the
+ownership proof for `/calls/{call_ref}` when audit was shed. Amounts and settlement rules are unchanged.
+`_scoped_idempotency_key` also folds in every membership pin; unpinned primary-tag scoping is unchanged.
+The shared-provider label includes the pin too (`scope_shared_idempotency_key`), preventing two
+customers' identical labels from resolving to one upstream job. BYOK labels remain verbatim.

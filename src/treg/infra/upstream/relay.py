@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from collections.abc import Awaitable, Callable
 
 import httpx
@@ -68,15 +69,20 @@ _IDEMPOTENCY_HEADER = b"idempotency-key"
 
 def scope_shared_idempotency_key(
     raw_headers: tuple[tuple[bytes, bytes], ...], org_id: int,
+    *, pinned_tags: dict | None = None,
 ) -> tuple[tuple[bytes, bytes], ...]:
-    """Rewrite 4 of the faithfulness contract: partition the caller's idempotency label by org.
+    """Rewrite 4 of the faithfulness contract: partition the caller's idempotency label by org and enforced pin.
 
     Only for calls on treg's shared provider key. The value is an opaque, fixed-length digest of
-    (org, label): two orgs can never collide on the provider's account, and the same org retrying the
+    (org, pin, label): distinct pins do not share a provider dedupe entry. With no pin, the
+    existing (org, label) digest is preserved. The same scope retrying the
     same label still hits the provider's own dedupe should treg's replay window miss it.
     """
+    scope = f"{org_id}\x1f".encode()
+    if pinned_tags:
+        scope += b"pins:" + json.dumps(pinned_tags, sort_keys=True, separators=(",", ":")).encode() + b"\x1f"
     return tuple(
-        (k, hashlib.sha256(f"{org_id}\x1f".encode() + v).hexdigest().encode())
+        (k, hashlib.sha256(scope + v).hexdigest().encode())
         if k.lower() == _IDEMPOTENCY_HEADER else (k, v)
         for k, v in raw_headers
     )

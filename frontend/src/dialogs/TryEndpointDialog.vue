@@ -4,8 +4,8 @@ export default { setup: useDashboard }
 </script>
 
 <template>
-<div class="scrim" role="dialog" aria-modal="true"  @click.self="epTry=null" style="place-items:stretch;justify-items:end">
-      <div class="drawer"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Try “{{epTry.id}}”</b><button class="btn sm" @click="epTry=null" aria-label="Close">✕</button></div>
+<div class="scrim" role="dialog" aria-modal="true"  @click.self="closeEpTry" style="place-items:stretch;justify-items:end">
+      <div class="drawer"><div class="hd" style="padding:15px 18px;border-bottom:1px solid var(--line)"><b>Try “{{epTry.id}}”</b><button class="btn sm" @click="closeEpTry" aria-label="Close">✕</button></div>
         <div class="bd" style="padding:16px 18px;overflow:auto">
           <p class="explain"><span class="mono">{{epTry.method||'GET'}} {{epTryDisplayPath}}</span><br>{{epTry.summary}}</p>
           <p class="sub" v-if="epTryAccess" style="margin:0 0 12px">
@@ -46,13 +46,14 @@ export default { setup: useDashboard }
 treg login</pre></div>
             <div class="lbl" style="margin-top:18px">2 · See its params &amp; price</div>
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart('treg catalog get '+epTry.id,'ep-cli2')">{{startCopied==='ep-cli2'?'✓ copied':'copy'}}</button><pre>treg catalog get {{epTry.id}}</pre></div>
-            <div class="lbl" style="margin-top:18px">3 · Call it — {{epTryAccess&&epTryAccess.tier==='anonymous'?'no provider key is needed':'the key is injected server-side'}}</div>
+            <div class="lbl" style="margin-top:18px">3 · Call it — {{epTry.id==='fishaudio.voices.list'?'BYOK or platform is selected server-side':(epTryAccess&&epTryAccess.tier==='anonymous'?'no provider key is needed':'the key is injected server-side')}}</div>
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(epTryCliCall,'ep-cli3')">{{startCopied==='ep-cli3'?'✓ copied':'copy'}}</button><pre style="white-space:pre-wrap;word-break:break-all">{{epTryCliCall}}</pre></div>
           </template>
 
           <!-- API — the raw /call/ passthrough with the token header -->
           <template v-else-if="epTryTab==='api'">
-            <p class="sub" style="margin:0 0 8px">One endpoint, one token. {{epTryAccess&&epTryAccess.tier==='anonymous'?'This verified public upstream route needs no provider key.':'treg injects the credential server-side.'}} treg relays the response verbatim.</p>
+            <p v-if="epTry.id==='fishaudio.voices.list'" class="sub" style="margin:0 0 8px">One endpoint, one token. The server returns normalized voice rows from the connected Fish account under BYOK, or from this team's organization-owned voices otherwise.</p>
+            <p v-else class="sub" style="margin:0 0 8px">One endpoint, one token. {{epTryAccess&&epTryAccess.tier==='anonymous'?'This verified public upstream route needs no provider key.':'treg injects the credential server-side.'}} treg relays the response verbatim.</p>
             <div class="lc-codewrap"><button class="lc-cp" @click="copyStart(epTryCurl,'ep-api')">{{startCopied==='ep-api'?'✓ copied':'copy'}}</button><pre style="white-space:pre-wrap;word-break:break-all">{{epTryCurl}}</pre></div>
             <p class="sub" v-if="!myToken" style="margin:8px 0 0;font-size:12px"><span class="mono">$TREG_TOKEN</span> is a placeholder — set it to your API token (copy it on Getting started).</p>
           </template>
@@ -65,17 +66,24 @@ treg login</pre></div>
                  class="banner" style="margin:0">
               {{epTryAccess.missing_message || (mkOauth(epTry.provider) ? 'Can\'t run this here yet — connect '+(epTry.provider_display||epTry.provider)+' first, then Run.' : 'This endpoint needs a key. Use the AI Agent / CLI / API tab, or bring your own.')}}
               <div style="margin-top:10px">
-                <button v-if="mkOauth(epTry.provider)" class="btn sm primary" @click="openProvider(epTry.provider); epTry=null">{{epTryAccess.action_label||endpointConnectLabel(epTry)}}</button>
+                <button v-if="mkOauth(epTry.provider)" class="btn sm primary" @click="openProvider(epTry.provider); closeEpTry()">{{epTryAccess.action_label||endpointConnectLabel(epTry)}}</button>
                 <button v-else-if="mkKnown(epTry.provider)" class="btn sm primary" @click="goByok(epTry.provider)">🔑 Bring your own key</button>
               </div>
             </div>
             <template v-else>
               <div class="field" v-for="p in epTryVisibleParams" :key="p.name" style="max-width:520px">
-                <label class="mono" style="min-width:140px">{{p.name}}<span v-if="p.required" style="color:var(--accent)"> *</span></label>
+                <label class="mono" style="min-width:140px">{{p.name}} <span class="muted">({{p.location}})</span><span v-if="p.required" style="color:var(--accent)"> *</span></label>
                 <input v-model="p.value" :placeholder="p.required?'required':'optional'"/>
               </div>
               <p v-if="!epTryVisibleParams.length && (epTry.method||'GET')==='GET'" class="sub" style="margin:0 0 12px">No parameters — just run it.</p>
-              <div v-if="(epTry.method||'GET')!=='GET' && epTryBody!==''" class="field" style="max-width:520px;align-items:flex-start">
+              <template v-if="epTryBodyType==='multipart'">
+                <div class="field" v-for="p in epTryMultipart" :key="p.name" style="max-width:520px">
+                  <label class="mono" style="min-width:140px">{{p.name}}<span v-if="p.required" style="color:var(--accent)"> *</span></label>
+                  <input v-if="String(p.type).includes('file')" type="file" :multiple="String(p.type).startsWith('array')" @change="setEpTryFiles(p.name,$event)"/>
+                  <input v-else v-model="p.value" :placeholder="p.required?'required':'optional'"/>
+                </div>
+              </template>
+              <div v-else-if="(epTry.method||'GET')!=='GET' && epTryBody!==''" class="field" style="max-width:520px;align-items:flex-start">
                 <label style="min-width:140px">Body (JSON)</label>
                 <textarea v-model="epTryBody" rows="6" style="width:100%;font-family:var(--mono);font-size:12px"></textarea>
               </div>
@@ -85,8 +93,24 @@ treg login</pre></div>
               <div class="muted" style="font-size:12px;margin-bottom:6px">Result
                 <span class="badge" :class="epTryStatus>=200&&epTryStatus<300?'ok':'invalid'">{{epTryStatus}}</span>
                 · {{epTryMs}}ms<span v-if="epTryCost!=null"> · charged {{money(epTryCost)}}<span v-if="epTryCost===0 && epTryStatus>=200 && epTryStatus<300" :title="epTryAccess&&epTryAccess.tier==='anonymous'?'This verified public upstream route used no provider key and did not charge the team balance.':'The provider reported charging nothing for this call — usually its own cache serving a repeat lookup (look for cached: true in the response). You are billed exactly what the provider billed treg.'"> {{epTryAccess&&epTryAccess.tier==='anonymous'?'(free — no provider key ⓘ)':'(free — provider charged 0 ⓘ)'}}</span></span>
-                · logged in Activity like any call</div>
-              <pre style="max-height:340px;overflow:auto">{{epTryResp}}</pre>
+                <template v-if="epTry.id!=='fishaudio.voices.list'"> · logged in Activity like any call</template></div>
+              <audio v-if="epTryAudioUrl" :src="epTryAudioUrl" controls style="width:100%;margin:8px 0"></audio>
+              <a v-if="epTryAudioUrl" class="btn sm" :href="epTryAudioUrl" :download="epTryAudioName">Download audio</a>
+              <pre v-if="!epTryAudioUrl" style="max-height:340px;overflow:auto">{{epTryResp}}</pre>
+            </div>
+            <div v-if="epTry.provider==='fishaudio'" style="margin-top:20px;border-top:1px solid var(--line);padding-top:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><b>{{fishVoicesSource==='byok'?'Your Fish Audio voices':'Team voices'}}</b><button class="btn sm" @click="loadFishVoices">Refresh</button></div>
+              <p v-if="fishVoiceNote" class="sub" style="margin:6px 0 0">{{fishVoiceNote}}</p>
+              <p v-if="!fishVoices.length && !fishVoiceBusy" class="sub">{{fishVoicesSource==='byok'?'No voices in this Fish Audio account yet.':'No platform-created voices in this team yet.'}}</p>
+              <p v-if="fishVoiceBusy" class="sub">Loading voices…</p>
+              <div v-for="v in fishVoices" :key="v.id" class="card" style="padding:10px;margin-top:8px">
+                <div><b>{{v.display_name||'Untitled voice'}}</b><div class="mono muted" style="font-size:11px">{{v.upstream_id}}</div></div>
+                <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                  <button class="btn sm" @click="useFishVoice(v)">Use in TTS</button>
+                  <button class="btn sm" @click="beginRenameFishVoice(v)">Rename</button>
+                  <button class="btn sm danger" @click="beginDeleteFishVoice(v)">Delete</button>
+                </div>
+              </div>
             </div>
           </template>
         </div></div>

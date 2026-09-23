@@ -10,7 +10,7 @@ export default async function boot(){
       if(e.key==='Escape'){ const orgWasOpen=this.orgMenu; this.closeOverlays(); if(orgWasOpen) this.elements.orgmain?.focus(); if(this.startAgentOpen){ this.startAgentOpen=false; this.elements.startAgentTrigger?.focus(); } else if(this.elements.accountMenu?.open){ this.elements.accountMenu.open=false; this.elements.accountMenu.querySelector('summary').focus(); } return; }
       // "/" focuses the search box (the "/" glyph in the box advertised a shortcut that didn't exist)
       const t=e.target, typing = t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
-      if(e.key==='/' && !typing && this.authed && (this.view==='tools'||this.view==='connections')){ e.preventDefault(); this.elements.search && this.elements.search.focus(); }
+      if(e.key==='/' && !typing && this.authed && (this.view==='tools'||this.view==='resources'||this.view==='connections')){ e.preventDefault(); this.elements.search && this.elements.search.focus(); }
     });
     listen(document, 'click', e=>{  // the org dropdown didn't close on an outside click
       if(this.elements.accountMenu && !e.target.closest('.rd-account-menu')) this.elements.accountMenu.open=false;
@@ -29,7 +29,7 @@ export default async function boot(){
       if(d){ this.openDetail(d.kind, d.name, true); return; }
       let v=(e.state&&e.state.view)||(location.hash||'').replace('#','')||'tools';
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
-      if(['tools','orgs','activity','usage','admin','help','secrets','start','connections','referrals'].includes(v)) this.go(v, true);
+      if(['tools','orgs','activity','usage','admin','help','secrets','start','resources','connections','referrals'].includes(v)) this.go(v, true);
     });
     this.meta = await fetch('/meta',{headers:{'ngrok-skip-browser-warning':'1'}}).then(r=>r.json()).catch(()=>this.meta);
     this.proxy = this.meta.public_url || location.origin;

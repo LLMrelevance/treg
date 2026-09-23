@@ -365,7 +365,7 @@ def test_public_catalog_drops_the_workspace_chrome():
     assert member_header in spa                                  # app bar only for members
     header = spa.split(member_header, 1)[1].split('</header>', 1)[0]
     assert 'class="orgblock"' in header and 'class="rd-navs"' in header
-    assert 'v-if="!publicCatalog && (view===\'tools\'||view===\'connections\')"' in spa
+    assert 'v-if="!publicCatalog && (view===\'tools\'||view===\'resources\'||view===\'connections\')"' in spa
     assert 'v-if="authed && !publicCatalog" class="rd-referral"' in spa
     assert '.layout.solo{grid-template-columns:minmax(0,1fr)}' in spa   # main spans the full width
 
@@ -439,6 +439,16 @@ async def test_every_surface_links_the_three_hubs(clients: AsyncClient):
             assert hub in html, f"{path} does not link {hub}"
 
 
+async def test_every_surface_links_the_blog(clients: AsyncClient):
+    """The blog was reachable only through the sitemap: no footer on the site linked it. Every
+    footer now does, on the hosted deployment (the route 404s off-host, like the hubs)."""
+    for path in ("/", "/catalog", "/tools/hunter", "/use-cases/verify-an-email",
+                 "/workflows/find-and-verify-a-lead-list", "/agents/claude-code",
+                 "/people-search", "/jev", "/use-cases/lead-enrichment-for-ai-agents"):
+        html = (await clients.get(path)).text
+        assert 'href="/blog"' in html, f"{path} does not link the blog"
+
+
 async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
     """The job, workflow and agent pages exist on treg.to only (`_hosted`), so a self-hosted
     registry's footer and catalog must not point at three 404s. The IndexNow key file is generic
@@ -454,6 +464,7 @@ async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
                 html = (await c.get(path)).text
                 for hub in HUBS:
                     assert hub not in html, f"{path} links {hub} off-host"
+                assert 'href="/blog"' not in html, f"{path} links the blog off-host"
             assert (await c.get(f"/{INDEXNOW_KEY}.txt")).status_code == 200
     finally:
         get_settings.cache_clear()
@@ -477,10 +488,15 @@ async def test_compare_titles_carry_the_cheapest_price(clients: AsyncClient):
     assert "$" in title and len(title) <= 65, title
 
 
-async def test_provider_title_leads_with_pricing(clients: AsyncClient):
+async def test_provider_title_matches_h1(clients: AsyncClient):
+    """Title matches H1: `{H1} | treg.to`, respecting _TITLE_MAX truncation."""
     html = (await clients.get("/tools/hunter")).text
     title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
-    assert title.startswith("Hunter API pricing") and "$" in title, title
+    h1 = re.search(r"<h1>(.*?)</h1>", html, re.S).group(1)
+    assert title.startswith("Hunter:"), title
+    assert title.endswith(" | treg.to"), title
+    title_h1_part = title.rsplit(" | treg.to", 1)[0]
+    assert title_h1_part == h1 or h1.startswith(title_h1_part), (title, h1)
     assert len(title) <= 65, title
 
 

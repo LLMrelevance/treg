@@ -104,3 +104,23 @@ test('session initialization never flashes the old signed-out landing page', asy
   releaseSession()
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible()
 })
+
+test('mainline team resources survive navigation and open the voice tools', async ({ page }) => {
+  await signIn(page)
+  await page.route('**/provider-resources?source=platform', route => route.fulfill({
+    json: [{ id: 1, provider: 'fishaudio', kind: 'voice', upstream_id: 'test-private-voice', display_name: 'Test voice', status: 'active' }],
+  }))
+  await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Your own tools', exact: true }).click()
+  await page.getByRole('button', { name: 'Team resources', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Team resources', exact: true })).toBeVisible()
+  await expect(page.getByText('Test voice', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Team resources', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Rename', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Rename voice', exact: true })
+  await expect(dialog.getByRole('textbox')).toHaveValue('Test voice')
+  await expect(dialog.getByRole('textbox')).toBeFocused()
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.getByRole('button', { name: 'Use in TTS', exact: true }).click()
+  await expect(page.locator('.drawer textarea')).toHaveValue(/test-private-voice/)
+})

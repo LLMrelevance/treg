@@ -10,9 +10,10 @@ export default { setup: useDashboard }
           </div>
           <div class="tut-head">
             <div><h1>Bring your own keys &amp; skills</h1>
-              <div v-if="canRegister" class="tabs" style="margin:8px 0 4px">
+              <div class="tabs" style="margin:8px 0 4px">
                 <button class="active">Skills &amp; tools</button>
-                <button @click="go('secrets')">Secrets</button>
+                <button v-if="canRegister" @click="go('secrets')">Secrets</button>
+                <button @click="go('resources')">Team resources</button>
               </div>
               <p class="sub" style="margin:0" v-if="filteredTools.length">Call any of these with no key on your machine. <b>Copy</b> a snippet, or <b>Try it</b> here.</p><p class="sub" style="margin:0" v-else-if="canRegister && !q">Register an upstream API here, then call it with no key on your machine.</p></div>
             <div class="tut-actions" v-if="canRegister" style="position:relative">

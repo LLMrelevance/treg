@@ -43,8 +43,8 @@ teams: `treg org switch <slug>`.
 ## Already connected over MCP? Then you have the tools, not the CLI
 
 If you reached treg through `{BASE}/mcp/` — ChatGPT, Claude Code, Cursor — the CLI steps above do not
-apply to you. You have `catalog_search`, `catalog_get`, `call`, `balance`, `my_tools`,
-`catalog_request`, `feedback`, and `review`.
+apply to you. You have `catalog_search`, `catalog_get`, `call`, `call_media`, `resources_list`,
+`balance`, `my_tools`, `catalog_request`, `feedback`, and `review`.
 Everything in this document maps onto them:
 
 - "search the catalog" → `catalog_search`, then `catalog_get` for the exact price and parameters
@@ -173,6 +173,18 @@ How it works:
 - **Voice generation is synchronous.** MiniMax returns JSON containing a 24-hour audio URL. The
   catalog route fixes `stream:false` and `output_format:"url"`; use the voice-list action to discover
   valid system voice IDs, then choose HD or Turbo by endpoint id.
+- **Fish Audio is binary and team-scoped on the platform key.** Use
+  `fishaudio.tts.s2-1-pro` with header `model: s2.1-pro`; redirect CLI stdout to an audio file or use
+  MCP `call_media`. To use a Fish-supplied voice, call `fishaudio.voices.discover` with
+  `self=false` and `licensed=true|false`, then pass a returned `_id` as `reference_id`; `true`
+  selects Fish's rights-secured subset and `false` includes public/community voices. treg rechecks
+  that non-team id as public before platform-key synthesis. Create reusable
+  private voices with `fishaudio.voices.create`, then list their ids with
+  `treg resources list --provider fishaudio --kind voice` or MCP `resources_list`. Those list the
+  connected Fish account under BYOK and otherwise list only the current team's platform voices; curl uses
+  `GET /orgs/{org_id}/provider-resources?provider=fishaudio&kind=voice`. BYOK remains an unrestricted
+  unmetered relay. `treg resources list` requires CLI ≥ 0.21.0; run `treg update` if the
+  `resources` command is unrecognised.
 - **A video or image generation call is an async task.** The submission returns a task id at once; `--await` polls
   the provider until it finishes and prints the **final response only** on stdout. stderr carries the
   task id, a resumable `treg call …` command (Ctrl-C loses the wait, never the task or the money),
@@ -313,6 +325,7 @@ treg org ls / treg org switch <slug>           # your orgs / switch active
 **Give an agent its own identity** (admin+). An agent doesn't have to borrow the human's token — mint
 it one, and every call it makes is capped, scoped and logged as *itself*:
 ```bash
+treg org agent-new customer-bot --pin customer=cust_A  # scope history and shared-provider async reads
 treg org agent-new ci-bot                        # prints the token ONCE (run again to rotate)
 treg org agent-new ci-bot --tools stripe,gh --cap 500   # only these tools, 500 calls/day
 treg org agents                                  # who the team's agents are + today's usage

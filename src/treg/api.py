@@ -32,6 +32,7 @@ from .caller_metadata import _client_of
 from .config import get_settings
 from .domain.catalog import store as catalog_store
 from .infra.db import get_session, session_maker
+from .domain.governance.access import pinned_tag_predicates
 from .domain.governance.teams import _unique_slug
 from .domain.identity.access import (
     Caller,
@@ -60,6 +61,7 @@ from .routers import feedback as feedback_routes
 from .routers import media as media_routes
 from .routers import onboard as onboard_routes
 from .routers import orgs as org_routes
+from .routers import provider_resources as provider_resource_routes
 from .routers import referrals as referral_routes
 from .routers import resources as resources_routes
 from .routers import web as web_routes
@@ -343,6 +345,7 @@ router.routes.extend(billing_routes.webhook_router.routes)
 router.routes.extend(org_routes.member_management_router.routes)
 router.routes.extend(org_routes.machine_identity_router.routes)
 router.routes.extend(api_key_routes.router.routes)
+router.routes.extend(provider_resource_routes.router.routes)
 
 
 # ---- projects: an optional sub-scope inside an org ------------------------------------------
@@ -501,7 +504,7 @@ async def _grant_audit(db: AsyncSession, caller: Caller, tool_name: str, method:
     run-report can prove it follows a real grant. One insert; this is not the hot proxy path."""
     rec = CallRecord(org_id=caller.org_id, user_email=caller.email, tool_name=tool_name,
                      method=method, path=path[:500], status_code=status, kind="local_run",
-                     client=client,
+                     client=client, tags=dict(caller.membership.pinned_tags or {}) or None,
                      api_key_id=caller.api_key.id if caller.api_key else None,
                      api_key_name=caller.api_key.name if caller.api_key else None,
                      api_key_prefix=caller.api_key.safe_prefix if caller.api_key else None)
@@ -673,7 +676,8 @@ async def list_calls(
     # Keep owned free polling in diagnostic audit, but out of Activity before applying the limit.
     q = (select(CallRecord)
          .options(defer(CallRecord.error_request), defer(CallRecord.error_response))
-         .where(CallRecord.org_id == caller.org_id, CallRecord.kind != "async_poll"))
+         .where(CallRecord.org_id == caller.org_id, CallRecord.kind != "async_poll",
+                *pinned_tag_predicates(CallRecord.tags, caller.membership.pinned_tags)))
     if days is not None:
         q = q.where(CallRecord.created_at >= _day_start_utc() - timedelta(days=max(1, min(days, 365)) - 1))
     if before_id is not None:
@@ -685,7 +689,8 @@ async def list_calls(
     # of what happened afterwards (settled, refunded, timed out) and what the caller bought.
     await db.close()  # release the request session before terminal archive object I/O
     tasks = await async_task_app.views_for(
-        caller.org_id, [c.call_ref for c in rows if c.call_ref and c.credential_tier == "platform"])
+        caller.org_id, [c.call_ref for c in rows if c.call_ref and c.credential_tier == "platform"],
+        pinned_tags=caller.membership.pinned_tags)
     return [
         {
             "id": c.id,
@@ -759,7 +764,8 @@ async def get_call_result(
     row = (await db.execute(
         select(CallRecord)
         .options(defer(CallRecord.error_request), defer(CallRecord.error_response))
-        .where(CallRecord.org_id == caller.org_id, CallRecord.id == call_id))).scalars().first()
+        .where(CallRecord.org_id == caller.org_id, CallRecord.id == call_id,
+               *pinned_tag_predicates(CallRecord.tags, caller.membership.pinned_tags)))).scalars().first()
     if row is None:
         raise HTTPException(status_code=404, detail="no call with that id")
     out = {"id": row.id, "call_ref": row.call_ref, "endpoint_id": row.endpoint_id,
@@ -802,14 +808,24 @@ async def get_call(
     body before concluding anything about money.
     """
     row = (await db.execute(select(CallRecord).where(
-        CallRecord.org_id == caller.org_id, CallRecord.call_ref == call_ref))).scalars().first()
+        CallRecord.org_id == caller.org_id, CallRecord.call_ref == call_ref,
+        *pinned_tag_predicates(CallRecord.tags, caller.membership.pinned_tags)))).scalars().first()
+    if row is None and caller.membership.pinned_tags:
+        owned = (await db.execute(select(LedgerEntry.id).where(
+            LedgerEntry.org_id == caller.org_id, LedgerEntry.call_id == call_ref,
+            LedgerEntry.kind == "reserve",
+            *pinned_tag_predicates(LedgerEntry.meta["tags"], caller.membership.pinned_tags),
+        ).limit(1))).scalar_one_or_none()
+        if owned is None:
+            raise HTTPException(status_code=404, detail="no call with that id")
     entries = (await db.execute(select(LedgerEntry).where(
         LedgerEntry.org_id == caller.org_id, LedgerEntry.call_id == call_ref)
         .order_by(LedgerEntry.created_at))).scalars().all()
     if row is None and not entries:
         raise HTTPException(status_code=404, detail="no call with that id")
     await db.close()
-    task = (await async_task_app.views_for(caller.org_id, [call_ref])).get(call_ref)
+    task = (await async_task_app.views_for(
+        caller.org_id, [call_ref], pinned_tags=caller.membership.pinned_tags)).get(call_ref)
     view = None
     if row is not None:
         view = {"id": row.id, "call_ref": row.call_ref, "user_email": row.user_email,
@@ -846,10 +862,13 @@ async def list_runs(
     Local successes carry no exit code (only failures report back), so `exit_code` is null for them.
     Ids are prefixed (s/l) so the two sources never collide as list keys."""
     limit = max(1, min(limit, 500))
-    server_q = select(RunRecord).where(RunRecord.org_id == caller.org_id)
+    server_q = select(RunRecord).where(
+        RunRecord.org_id == caller.org_id,
+        *pinned_tag_predicates(RunRecord.tags, caller.membership.pinned_tags))
     local_q = select(CallRecord).where(
         CallRecord.org_id == caller.org_id, CallRecord.kind == "local_run",
-        CallRecord.method == "GRANT")
+        CallRecord.method == "GRANT",
+        *pinned_tag_predicates(CallRecord.tags, caller.membership.pinned_tags))
     if api_key_id is not None:
         server_q = server_q.where(RunRecord.api_key_id == api_key_id)
         local_q = local_q.where(CallRecord.api_key_id == api_key_id)
@@ -958,6 +977,7 @@ async def run_tool_server(
         org_id=caller.org_id, user_email=caller.email, bundle_name=tool.name,
         argv=_redact_argv_list(list(body.args)),  # redact any credential typed inline before it's stored
         exit_code=result.exit_code, duration_ms=result.duration_ms, client=_client_of(request),
+        tags=dict(caller.membership.pinned_tags or {}) or None,
         api_key_id=caller.api_key.id if caller.api_key else None,
         api_key_name=caller.api_key.name if caller.api_key else None,
         api_key_prefix=caller.api_key.safe_prefix if caller.api_key else None,

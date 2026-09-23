@@ -28,23 +28,31 @@ def test_tavily_surface_keeps_only_safe_synchronous_data_tools():
     assert all(ep["platform"] == "web" and ep["scope"] == "any_account" for ep in rows.values())
     assert all(cat.platform_eligible(ep) for ep in rows.values())
     assert rows["tavily.web.extract"]["input"]["body"]["urls"]["maxItems"] == 20
-    assert all(
-        row["input"]["body"]["include_usage"]["required"] is True
-        and row["input"]["body"]["include_usage"]["enum"] == [True]
-        for row in rows.values()
-    )
+    assert rows["tavily.web.search"]["input"]["body"]["include_usage"] == {
+        "type": "boolean", "required": False, "enum": [True], "example": True,
+        "note": "Optional with your own key; platform Search requires true so treg can settle "
+                "from this request's reported usage.",
+    }
+    assert all("include_usage" not in rows[eid]["input"]["body"] for eid in (
+        "tavily.web.extract", "tavily.web.map", "tavily.web.crawl",
+    ))
     assert all(ep["verified"] == "2026-09-21" and ep["example_file"] for ep in rows.values())
     assert cat.credit_rates["tavily"] == 0.008
     shown = {eid: cat.cost_view(ep["cost"], "tavily") for eid, ep in rows.items()}
-    assert "display_prefix" not in shown["tavily.web.search"]
-    assert {
-        eid: (cost["display_prefix"], cost["display_usd"], cost["display_unit"])
-        for eid, cost in shown.items() if eid != "tavily.web.search"
-    } == {
-        "tavily.web.extract": ("up to ", 0.064, "call"),
-        "tavily.web.map": ("up to ", 0.032, "call"),
-        "tavily.web.crawl": ("up to ", 0.096, "call"),
+    assert {eid: (cost["usd"], cost["unit"]) for eid, cost in shown.items()} == {
+        "tavily.web.search": (0.016, "call"),
+        "tavily.web.extract": (0.0032, "result"),
+        "tavily.web.map": (0.0016, "page"),
+        "tavily.web.crawl": (0.0048, "result"),
     }
+    assert shown["tavily.web.search"]["usd_min"] == 0.008
+    assert shown["tavily.web.extract"]["usd_min"] == 0.0016
+    assert shown["tavily.web.map"]["usd_min"] == 0.0008
+    assert shown["tavily.web.crawl"]["usd_min"] == 0.0024
+    assert shown["tavily.web.extract"]["tavily_rates"] == {"basic": 0.2, "advanced": 0.4}
+    assert shown["tavily.web.map"]["tavily_rates"] == {"regular": 0.1, "instructions": 0.2}
+    assert shown["tavily.web.crawl"]["tavily_rates"]["advanced_instructions"] == 0.6
+    assert all("reported_charge" not in rows[eid]["cost"] for eid in rows)
     serialized = json.dumps(rows).lower()
     assert not any(term in serialized for term in (
         "research task", "account usage", "key management", "feedback endpoint", "export endpoint",
@@ -773,6 +781,12 @@ async def test_unknown_endpoint_is_404(clients: AsyncClient):
     assert r.status_code == 404 and "tikhub.tiktok.nope" in r.text
 
 
+async def test_unknown_endpoint_access_is_a_clean_404(clients: AsyncClient):
+    r = await clients.get("/catalog/endpoints/not.a.real.endpoint/access")
+    assert r.status_code == 404
+    assert "unknown endpoint" in r.text
+
+
 def test_hunter_multi_domain_search_uses_official_query_filters():
     """Hunter Multi-Domain Search (Beta) rejects a JSON `companies` array with
     `wrong_params` / `Unknown parameter: companies.` Official docs take company
@@ -1145,20 +1159,22 @@ async def test_ai_generation_pages_keep_comparisons_curated_and_coverage_in_mode
     assert {row["capability"] for row in voice_rows} == {
         "voice-gen.speech-2-8-hd.generate",
         "voice-gen.speech-2-8-turbo.generate",
+        "voice-gen.fishaudio.s2-1-pro.generate",
     }
     voice_endpoints = [endpoint for row in voice_rows for endpoint in row["endpoints"]]
     assert {endpoint["id"] for endpoint in voice_endpoints} == {
         "minimax.voice-gen.speech-2-8-hd",
         "minimax.voice-gen.speech-2-8-turbo",
+        "fishaudio.tts.s2-1-pro",
     }
-    assert all(endpoint["provider"] == "minimax" for endpoint in voice_endpoints)
+    assert {endpoint["provider"] for endpoint in voice_endpoints} == {"minimax", "fishaudio"}
     catalog = cs.load()
     assert all(catalog.by_id[endpoint["id"]]["cache"] == "forbidden"
                for endpoint in voice_endpoints)
 
     voice_full = (await clients.get(
         "/catalog/platforms/voice-gen?include_hidden=1")).json()
-    assert voice_full["hidden_count"] == 1
+    assert voice_full["hidden_count"] == 6
     action_endpoints = {
         endpoint["id"]: endpoint
         for section in voice_full["domains"]
@@ -1166,7 +1182,20 @@ async def test_ai_generation_pages_keep_comparisons_curated_and_coverage_in_mode
         for endpoint in row["endpoints"]
         if endpoint["kind"] == "utility"
     }
-    assert set(action_endpoints) == {"minimax.voice-gen.voices.list"}
+    assert set(action_endpoints) == {
+        "fishaudio.voices.discover", "minimax.voice-gen.voices.list",
+    }
+    account_endpoints = {
+        endpoint["id"]
+        for section in voice_full["domains"]
+        for row in section["rows"]
+        for endpoint in row["endpoints"]
+        if endpoint["kind"] == "account"
+    }
+    assert account_endpoints == {
+        "fishaudio.voices.create", "fishaudio.voices.list",
+        "fishaudio.voices.update", "fishaudio.voices.delete",
+    }
     assert catalog.by_id["minimax.voice-gen.voices.list"]["platform_request"] == {
         "body.voice_type": "system"
     }

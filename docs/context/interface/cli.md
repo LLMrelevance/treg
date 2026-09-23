@@ -567,6 +567,12 @@ CLI call billing still uses the shared server call path.
 
 ## Released CLI compatibility
 
+`resources list [--provider] [--kind] [--include-deleted]` resolves the active organization and
+calls `GET /orgs/{id}/provider-resources`. This is the platform-created resource inventory, distinct
+from `connections resources`, which discovers accounts behind an OAuth connection. Binary `treg
+call` responses still write untouched bytes to stdout; Fish TTS examples redirect that stream to an
+audio file. Existing `--header` and repeated `--upload` multipart behavior is unchanged.
+
 The unmodified PyPI CLIs 0.16.0 and 0.19.0 can use existing saved tokens, complete browser login,
 and exchange Default keys with `org use`. Their email flow discards the browser cookie and would
 save a restricted bootstrap token. Their team-create and identity-mode invite flows keep the

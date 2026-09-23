@@ -1,5 +1,7 @@
 <script>
 import controller from './state/controller.js'
+import TeamResourcesPage from './pages/TeamResourcesPage.vue'
+import FishVoiceDialog from './dialogs/FishVoiceDialog.vue'
 import CatalogPage from './pages/CatalogPage.vue'
 import ProviderPage from './pages/ProviderPage.vue'
 import PlatformPage from './pages/PlatformPage.vue'
@@ -33,7 +35,7 @@ import RunToolDialog from './dialogs/RunToolDialog.vue'
 import CallDetailsDialog from './dialogs/CallDetailsDialog.vue'
 import TryEndpointDialog from './dialogs/TryEndpointDialog.vue'
 import SignInDialog from './components/SignInDialog.vue'
-export default { ...controller, components: { ...controller.components, CatalogPage, ProviderPage, PlatformPage, ToolsPage, DetailPage, SecretsPage, TeamPage, ActivityPage, AdminPage, GettingStartedPage, ReferralsPage, HelpPage, SignedOutPage, PublicNavigation, DashboardNavigation, ConnectTokenDialog, TopUpDialog, AgentGuideDialog, ConnectionMethodDialog, ResourcePickerDialog, ExtraCredentialDialog, EditToolDialog, AcceptInvitesDialog, WelcomeDialog, CopyToolDialog, ImportSkillDialog, RequestToolDialog, ShareDialog, RecipeDialog, RunToolDialog, CallDetailsDialog, TryEndpointDialog, SignInDialog } }
+export default { ...controller, components: { ...controller.components, TeamResourcesPage, FishVoiceDialog, CatalogPage, ProviderPage, PlatformPage, ToolsPage, DetailPage, SecretsPage, TeamPage, ActivityPage, AdminPage, GettingStartedPage, ReferralsPage, HelpPage, SignedOutPage, PublicNavigation, DashboardNavigation, ConnectTokenDialog, TopUpDialog, AgentGuideDialog, ConnectionMethodDialog, ResourcePickerDialog, ExtraCredentialDialog, EditToolDialog, AcceptInvitesDialog, WelcomeDialog, CopyToolDialog, ImportSkillDialog, RequestToolDialog, ShareDialog, RecipeDialog, RunToolDialog, CallDetailsDialog, TryEndpointDialog, SignInDialog } }
 </script>
 
 <template>
@@ -64,7 +66,7 @@ export default { ...controller, components: { ...controller.components, CatalogP
     <span class="rd-sr-only" role="status">{{startCopied ? 'Copied to clipboard' : ''}}</span>
     <div class="layout" :class="{solo:publicCatalog}">
       <main id="maincontent" tabindex="-1">
-        <div v-if="!publicCatalog && (view==='tools'||view==='connections')" class="rd-view-search search"><img src="/media/redesign/search.svg" alt=""><input :ref="el => setElement('search', el)" v-model="q" :placeholder="view==='connections'?'Search the catalog…':'Search your own tools…'" aria-label="Search"></div>
+        <div v-if="!publicCatalog && (view==='tools'||view==='resources'||view==='connections')" class="rd-view-search search"><img src="/media/redesign/search.svg" alt=""><input :ref="el => setElement('search', el)" v-model="q" :placeholder="view==='connections'?'Search the catalog…':view==='resources'?'Search team resources…':'Search your own tools…'" aria-label="Search"></div>
         <div v-if="err" class="banner">{{err}}</div>
         <div v-if="pendingInvites.length" class="banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span>You've been invited:</span>
@@ -90,6 +92,8 @@ export default { ...controller, components: { ...controller.components, CatalogP
 
         <!-- SECRETS -->
         <SecretsPage v-if="view==='secrets'" />
+
+        <TeamResourcesPage v-if="view==='resources'" />
 
         <!-- ORGS -->
         <TeamPage v-if="view==='orgs'" />
@@ -255,6 +259,7 @@ export default { ...controller, components: { ...controller.components, CatalogP
   <!-- SIGN-IN MODAL — a SIBLING of both branches. It used to live inside the logged-out
        landing, which meant the public catalog (which renders the app shell, not that branch)
        had no way to sign anyone in and every CTA had to navigate away to find one. -->
+  <FishVoiceDialog v-if="fishVoiceDialog" />
   <SignInDialog  />
 </div>
 </div>

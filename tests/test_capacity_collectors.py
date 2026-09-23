@@ -14,6 +14,61 @@ import httpx
 import pytest
 
 
+async def test_fishaudio_balance_uses_workspace_wallet(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_FISHAUDIO", "private-test-key")
+    monkeypatch.setenv("TREG_PLATFORM_FISHAUDIO_WORKSPACE_ID", "workspace-test-id")
+    collectors.get_settings.cache_clear()
+    try:
+        def probe(request):
+            assert request.method == "GET"
+            assert request.url.path == "/wallet/self/api-credit"
+            assert request.url.params.get("team_id") == "workspace-test-id"
+            assert request.headers["authorization"] == "Bearer private-test-key"
+            return httpx.Response(200, json={"credit": "99.957540"})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(probe)) as client:
+            row = await collectors.provider_balance("fishaudio", client)
+    finally:
+        collectors.get_settings.cache_clear()
+    assert row["value"] == 99.95754
+    assert row["unit"] == "USD"
+    capacity = policy.default_policy("fishaudio", has_key=True)
+    assert capacity.capacity_type == "cash"
+    assert capacity.funding_mode == "manual"
+    assert capacity.source == "api"
+    assert capacity.rate_limit is None
+
+
+async def test_fishaudio_balance_is_unknown_without_workspace_and_skips_request(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_FISHAUDIO", "private-test-key")
+    monkeypatch.setenv("TREG_PLATFORM_FISHAUDIO_WORKSPACE_ID", "")
+    collectors.get_settings.cache_clear()
+    try:
+        def probe(_request):
+            pytest.fail("missing workspace ID must not call Fish's unscoped personal wallet")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(probe)) as client:
+            row = await collectors.provider_balance("fishaudio", client)
+    finally:
+        collectors.get_settings.cache_clear()
+    assert row["value"] is None
+    assert row["unit"] == "USD"
+    assert "not configured" in row["note"]
+
+
+@pytest.mark.parametrize("credit", [None, True, "not-a-number", "NaN", "Infinity", -1])
+async def test_fishaudio_balance_rejects_invalid_credit(monkeypatch, credit):
+    monkeypatch.setenv("TREG_PLATFORM_FISHAUDIO_WORKSPACE_ID", "workspace-test-id")
+    collectors.get_settings.cache_clear()
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json={"credit": credit}))) as client:
+            row = await collectors._fishaudio(client, "test")
+    finally:
+        collectors.get_settings.cache_clear()
+    assert row["value"] is None
+
+
 async def test_openmart_balance_collector_and_policy():
     def probe(request):
         assert request.method == "GET"

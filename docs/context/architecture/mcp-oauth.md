@@ -138,6 +138,8 @@ same-named team tool. A change is incomplete if only one relevant MCP test file 
 | `catalog_search` | find endpoints by what you want to DO, with prices |
 | `catalog_get` | one endpoint in full: params, cost, reliability, sibling providers |
 | `call` | a catalog endpoint by id, or `<tool-name>/<path>` for the team's own tool |
+| `call_media` | the same `/call/` path for audio endpoints, returned as native `AudioContent` plus structured call/cost metadata |
+| `resources_list` | calls the unified provider-resource API; Fish voice listing uses the connected Fish account when BYOK exists, otherwise the active team's platform voices |
 | `balance` | the team's prepaid balance |
 | `my_tools` | what the team registered that can be called without holding the key |
 | `feedback` | submit a private problem report or suggestion |
@@ -569,6 +571,11 @@ header. `curl {BASE}/install.sh | sh -s -- --token <key>` runs the whole thing â
 Catalog-call tools also expose an optional `authorization_method`. MCP maps that explicit argument
 to treg's internal `X-Treg-Authorization-Method` routing header; caller-supplied headers cannot
 override it, and the header is not relayed to the provider.
+
+The generic `call` surfaces accept optional `form` scalar fields and base64 `uploads`, capped at 30
+MiB before the internal request, so multipart voice creation does not change the existing JSON call
+contract. `/mcp/v2/` names the audio tool `catalog_call_media`; both surfaces independently register
+and test `resources_list`. Native audio never passes through JSON/text decoding.
 
 `X-Treg-Meta` (see [money](money.md)) is read off the MCP **transport** in `mcp.call()` and forwarded
 on the internal request, the same way `catalog_request` forwards `X-Forwarded-For`. It is deliberately

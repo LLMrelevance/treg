@@ -1741,6 +1741,29 @@ MINIMAX = OAuthProvider(
     probe_reject_statuses=(401, 403),
 )
 
+FISHAUDIO = OAuthProvider(
+    service="fishaudio",
+    display_name="Fish Audio",
+    auth_kind="token",
+    token_label="API key",
+    token_placeholder="your Fish Audio API key",
+    setup_url="https://fish.audio/app/api/",
+    setup_action_label="Get your Fish Audio API key",
+    setup_steps=(
+        "Sign in to Fish Audio and open the API page.",
+        "Create an API key and copy it.",
+    ),
+    setup_note="Speech generation is usage-priced; private voice models belong to your Fish account.",
+    auth_uri="", token_uri="", scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="AI generation",
+    summary="Generate speech, design voices from descriptions, and create reusable private voices.",
+    base_url="https://api.fish.audio",
+    docs_url="https://docs.fish.audio/api-reference/introduction",
+    probe_path="/model?self=true&page_size=1",
+    probe_reject_statuses=(401, 403),
+)
+
 OPENROUTER = OAuthProvider(
     service="openrouter",
     display_name="OpenRouter",
@@ -3327,7 +3350,8 @@ REGISTRY: dict[str, OAuthProvider] = {
         # API-key providers
         ANYAPI, APOLLO, PDL, AKTA, HUNTER, SUMBLE, MOLTSETS, OPENMART, HARVESTAPI, DROPLEADS,
         QUICKENRICH, PROSPEO, AIARK, WIZA, LIMADATA, GETLEADSIO, SCRUBBY, ZEROBOUNCE, DATAGMA,
-        TRYKITT, CONTACTOUT, MILLIONVERIFIER, BOUNCEBAN, CRUNCHBASE, MINIMAX, OPENROUTER,
+        TRYKITT, CONTACTOUT, MILLIONVERIFIER, BOUNCEBAN, CRUNCHBASE, MINIMAX, FISHAUDIO,
+        OPENROUTER,
         REPLICATE,
         REAPI, PIAPI,
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,

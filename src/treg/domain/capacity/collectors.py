@@ -11,6 +11,7 @@ Pure collection: nothing here touches the database or the request path. The work
 from __future__ import annotations
 
 import math
+from decimal import Decimal, InvalidOperation
 
 import httpx
 
@@ -38,6 +39,34 @@ async def _tikhub(c, key):
     d = await _get(c, "https://api.tikhub.io/api/v1/tikhub/user/get_user_info",
                    headers={"Authorization": f"Bearer {key}"})
     return {"value": (d.get("user_data") or {}).get("balance"), "unit": "USD", "note": ""}
+
+
+async def _fishaudio(c, key):
+    workspace_id = get_settings().platform_fishaudio_workspace_id.strip()
+    if not workspace_id:
+        return {
+            "value": None,
+            "unit": "USD",
+            "note": "TREG_PLATFORM_FISHAUDIO_WORKSPACE_ID is not configured; "
+                    "the unscoped route reports a separate personal wallet and is not used",
+        }
+    d = await _get(
+        c,
+        "https://api.fish.audio/wallet/self/api-credit",
+        headers={"Authorization": f"Bearer {key}"},
+        params={"team_id": workspace_id},
+    )
+    raw = d.get("credit") if isinstance(d, dict) else None
+    try:
+        credit = Decimal(str(raw)) if not isinstance(raw, bool) and raw is not None else None
+    except (InvalidOperation, ValueError):
+        credit = None
+    value = float(credit) if credit is not None and credit.is_finite() and credit >= 0 else None
+    return {
+        "value": value,
+        "unit": "USD",
+        "note": "Workspace API-credit balance; funding and top-ups are operator-managed",
+    }
 
 
 async def _tavily(c, key):
@@ -674,6 +703,7 @@ BALANCE_ROUTES = {
     "tomba": _tomba,
     "dataforseo": _dataforseo,
     "tikhub": _tikhub,
+    "fishaudio": _fishaudio,
     "tavily": _tavily,
     "scrapecreators": _scrapecreators,
     "serpapi": _serpapi,

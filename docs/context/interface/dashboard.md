@@ -6,6 +6,10 @@ sources:
   - frontend/index.html
   - frontend/package.json
   - frontend/vite.config.ts
+  - frontend/src/pages/TeamResourcesPage.vue
+  - frontend/src/dialogs/FishVoiceDialog.vue
+  - frontend/src/state/resources.js
+  - frontend/src/state/resourcesComputed.js
   - frontend/src/App.vue
   - frontend/src/api.ts
   - frontend/src/components/DashboardNavigation.vue
@@ -196,6 +200,8 @@ retry on unexpected failure. Signed-out arrivals get a focused sign-in entry or 
 the obsolete embedded marketing page is removed. The public landing page remains at `/`.
 History navigation retains existing hashes, catalog URLs and shared links in `state/navigation.js`,
 `state/catalog.js`, `state/details.js` and `state/boot.js`.
+Mainline Team resources and Fish Audio upload, voice-management and audio-preview flows live
+in `TeamResourcesPage.vue`, `FishVoiceDialog.vue`, `TryEndpointDialog.vue` and their state modules.
 
 `_new_dashboard` selects the compiled entry by verified session user ID: the master rollout switch
 must be on, then an ID allowlist or a stable SHA-256 bucket below the configured percentage selects
@@ -1122,6 +1128,24 @@ dashboard views rather than leaving the app; its allow-list now includes the **`
 **`start`** (Getting started) views too, so those are reachable by Back/Forward like the rest.
 
 ## Write UI — Phase 2b shipped (resource registration)
+The catalog Try drawer renders declared provider headers and multipart/file fields. Audio responses
+remain blobs with playback/download controls; replacing or closing a preview revokes its browser
+object URL. The Fish voices panel calls the
+unified organization provider-resource route: BYOK reads the connected Fish account's list, while platform access reads only
+the current organization's resources. Both normalize into the same rows and offer use-in-TTS,
+rename, and confirmed delete. Save and rename use app-owned dialogs rather than browser prompts,
+mutations surface success or failure, and use-in-TTS unwraps the catalog endpoint-detail envelope.
+The panel never calls Fish's account-wide list on the platform key; the unusable Inspect action is absent.
+The Fish list action's Manual, CLI, API and agent recipes point at the unified resource surface, so
+platform teams do not see a misleading BYOK-required warning. Plain `/call/` remains the raw relay.
+
+**Team resources** is the third Your vault sub-tab (`view==='resources'`). It calls the organization
+resource endpoint with `source=platform`, so the table means exactly “durable objects owned by this
+team” even when the team has a Fish BYOK credential. Provider and kind filters narrow the table, the
+global dashboard search matches names and ids, and the client paginates ten rows at a time. Fish voice
+rows reuse the existing use-in-TTS, rename and confirmed-delete actions; every resource can copy its
+upstream id. The view participates in both hash-route whitelists and reloads on an organization switch.
+
 The **Tools** view registers resources (members+ via `canRegister`; viewers can't). The **Secrets** view
 (own sidebar tab) — `loadSecrets` (values never shown) + `addSecrets` (posts each filled `secretRows` row,
 per-name errors, `encode:true` body for the edge WAF) + `deleteSecret` (surfaces the 409

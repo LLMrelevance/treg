@@ -77,6 +77,7 @@ async loadAll(){ this.err=''; this.loading=true;
         // — both are org-scoped and would otherwise keep showing the previous team's numbers.
         if(this.view==='activity'){ this.loadCalls(); if(this.actTab==='usage') this.loadUsage(); }
         if(this.view==='secrets') this.loadSecrets();  // …and the Secrets view (was showing the previous org's)
+        if(this.view==='resources') this.loadTeamResources();
       }catch(e){ this.err='Failed to load: '+(e.detail||e.status); }
       finally{ this.loading=false; } }
 }
