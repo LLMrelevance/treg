@@ -23,7 +23,8 @@ async:
     path: status
     progress: [PENDING, RUNNING]
     success: [COMPLETED]
-    failure: [FAILED, CANCELLED]
+    failure: []
+    billed_failure: [FAILED, CANCELLED]
   result:
     path: result
   interval: 2
@@ -214,7 +215,7 @@ endpoints:
       source_url: https://www.tinyfish.ai/pricing
       checked: '2026-09-23'
       confidence: verified
-      note: "TinyFish publishes $0.016 per Agent step. A completed live run reported 3 steps and reduced the wallet by exactly $0.048; a cancelled run reduced it by $0, so FAILED and CANCELLED release the hold until a positive terminal charge is observed."
+      note: "TinyFish publishes $0.016 per Agent step. COMPLETED, FAILED, and CANCELLED runs settle from the terminal num_of_steps value, so a zero-step terminal response costs $0 while completed work remains billable; a completed live run reported 3 steps and reduced the wallet by exactly $0.048, and a cancelled live run reported 0 steps with no wallet change."
     verified: '2026-09-23'
     example_response: examples/tinyfish.web.agent.run.json
     docs_url: https://docs.tinyfish.ai/api-reference/automation/start-automation-asynchronously

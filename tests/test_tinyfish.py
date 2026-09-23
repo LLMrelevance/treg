@@ -75,7 +75,8 @@ def test_tinyfish_registry_and_catalog_are_byok_and_platform_ready(tinyfish_plat
     assert shown["usd_min"] == 0.016 and shown["usd"] == 8.0
     assert agent["async"]["status"] == {
         "path": "status", "progress": ["PENDING", "RUNNING"],
-        "success": ["COMPLETED"], "failure": ["FAILED", "CANCELLED"],
+        "success": ["COMPLETED"], "failure": [],
+        "billed_failure": ["FAILED", "CANCELLED"],
     }
 
 
@@ -93,9 +94,9 @@ async def test_tinyfish_agent_price_is_exposed_as_per_step_to_clients(clients):
 
 @pytest.mark.parametrize(("terminal_status", "steps", "task_status", "settled_micro"), [
     ("COMPLETED", 3, "settled", 48_000),
-    ("FAILED", 2, "released", 0),
-    ("CANCELLED", 4, "released", 0),
-    ("CANCELLED", 0, "released", 0),
+    ("FAILED", 2, "settled", 32_000),
+    ("CANCELLED", 4, "settled", 64_000),
+    ("CANCELLED", 0, "settled", 0),
 ])
 async def test_tinyfish_agent_holds_requested_ceiling_then_settles_terminal_steps(
     clients, monkeypatch, tinyfish_platform, terminal_status, steps, task_status, settled_micro,
