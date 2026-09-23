@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Literal
 
@@ -30,6 +31,14 @@ def platform_setting_name(provider: str) -> str:
     """The Settings attribute holding treg's own key for `provider` — the string a `platform_setting`
     binding carries, and the only form of a platform credential that ever leaves this module."""
     return "platform_key_" + (provider or "").lower().replace("-", "_")
+
+
+@lru_cache
+def _fixed_login_codes(raw: str) -> dict[str, str]:
+    """Parse `TREG_FIXED_LOGIN_CODES` (`email=sha256hex,...`) into {normalised email: code hash}.
+    Malformed entries are refused by the field validator, so parsing here can trust the shape."""
+    pairs = (part.split("=", 1) for part in raw.split(",") if part.strip())
+    return {email.strip().lower(): digest.strip().lower() for email, digest in pairs}
 
 
 @lru_cache
@@ -562,6 +571,27 @@ class Settings(BaseSettings):
     # listed domain are suspended out of band, so listing one strands nobody legitimate. A blocklist,
     # deliberately: no allowlist, no table, no admin UI.
     blocked_email_domains: str = ""
+
+    # Sign-in codes for designated accounts that cannot receive email, such as the demo account an
+    # app directory's reviewers use: `email=<sha256 hex of the code>,...`. For a listed email the
+    # email-code door sends nothing and accepts only the configured code, under the same attempt and
+    # start limits as an emailed one. Only the hash is configured; use a long random code. Empty
+    # (the default) leaves every email on the normal emailed code.
+    fixed_login_codes: str = ""
+
+    @field_validator("fixed_login_codes")
+    @classmethod
+    def _fixed_login_codes_shape(cls, v: str) -> str:
+        for part in (p for p in v.split(",") if p.strip()):
+            email, sep, digest = part.partition("=")
+            if not sep or "@" not in email or not re.fullmatch(r"[0-9a-fA-F]{64}", digest.strip()):
+                raise ValueError("fixed_login_codes entries must be email=<64-hex sha256>")
+        return v
+
+    @property
+    def fixed_login_code_hashes(self) -> dict[str, str]:
+        """The normalised `TREG_FIXED_LOGIN_CODES` entries; empty = no designated accounts."""
+        return _fixed_login_codes(self.fixed_login_codes)
 
     @property
     def blocked_email_domain_set(self) -> frozenset[str]:
