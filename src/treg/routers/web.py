@@ -499,11 +499,13 @@ async def catalog_page(slug: str, treg_session: str = Cookie(default=""), db: As
               "url": f"{base}/catalog/{slug}#{cap['id']}"}
              for i, cap in enumerate(caps, 1)]},
         {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
-            {"@type": "ListItem", "position": 1, "name": "treg", "item": base + "/"},
+            {"@type": "ListItem", "position": 1, "name": "treg.to", "item": base + "/"},
             {"@type": "ListItem", "position": 2, "name": "Catalog", "item": base + "/catalog"},
             {"@type": "ListItem", "position": 3, "name": label, "item": f"{base}/catalog/{slug}"}]},
     ]
-    return _spa_catalog_page(f"{label} API — {len(eps)} endpoints, priced per call | treg",
+    # "{platform} api pricing" is the non-brand phrasing that reaches the site (GSC), so the shelf
+    # title leads with it; the brand is treg.to and the copy carries no em-dash.
+    return _spa_catalog_page(f"{label} API pricing: {len(eps)} endpoints priced per call | treg.to",
                              desc[:300], f"/catalog/{slug}", ld, prerender, await _user_from_session(treg_session, db))
 
 
@@ -2717,12 +2719,13 @@ async def docs_page():
                 + (f'<div class="params">{_esc_html(params)}</div>' if params else "")
                 + "</div>")
 
+    n_endpoints, _ = catalog_store.headline_counts(catalog_store.load())
     body = f"""<main class="wrap">
 <div class="phead">
   <div class="crumbs"><a href="/">treg</a> / api</div>
   <h1>API reference</h1>
   <p class="lede">One base URL, one token. Call any of {len(ops)} documented operations, or proxy a
-  real request to any of 2,630 catalogued provider endpoints through <code>/call/</code>.</p>
+  real request to any of {n_endpoints} catalogued provider endpoints through <code>/call/</code>.</p>
   <div class="facts">
     <span>base <b>{_esc_html(base)}</b></span>
     <span><b>Bearer</b> token auth</span>
@@ -2737,10 +2740,10 @@ async def docs_page():
 </main>"""
     ld = [{"@context": "https://schema.org", "@type": "TechArticle",
            "headline": "treg API reference",
-           "description": "How to call 2,630 provider API endpoints through one treg token.",
+           "description": f"How to call {n_endpoints} provider API endpoints through one treg.to token.",
            "url": f"{base}/docs"}]
     return _page("API reference — call any tool through one endpoint | treg",
-                 "The treg HTTP API: proxy a real request to any of 2,630 catalogued provider "
+                 f"The treg.to HTTP API: proxy a real request to any of {n_endpoints} catalogued provider "
                  "endpoints through /call/, with the credential injected server-side. Plus the "
                  "catalog, org, billing and tool-management routes.",
                  "/docs", body, ld, nav_current="/docs")
@@ -3489,6 +3492,18 @@ _BLOG_POSTS: list[tuple[str, str, str, str]] = [
 ]
 
 
+def _blog_posting_ld(slug: str, base: str) -> dict:
+    """BlogPosting schema for one entry of `_BLOG_POSTS`: a dated, bylined article. The posts are
+    first-party measurements, and a named author with a visible date is what earns the validation
+    click and the AI citation; breadcrumbs alone describe a page, not a piece of writing."""
+    _, title, date, blurb = next(p for p in _BLOG_POSTS if p[0] == slug)
+    return {"@context": "https://schema.org", "@type": "BlogPosting", "headline": title,
+            "description": blurb, "datePublished": date, "dateModified": date,
+            "mainEntityOfPage": f"{base}/blog/{slug}", "url": f"{base}/blog/{slug}",
+            "author": {"@type": "Person", "name": "Jason Zhou", "url": "https://github.com/JayZeeDesign"},
+            "publisher": {"@type": "Organization", "name": "treg.to", "url": base + "/"}}
+
+
 @app.get("/blog", include_in_schema=False)
 async def blog_index():
     """Thin index of launch pages and notes. The launches stay at their existing routes; this page
@@ -3587,7 +3602,8 @@ async def blog_people_search_bench():
         '</main>'
     )
 
-    ld = [{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+    ld = [_blog_posting_ld("people-search-bench", base),
+          {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
         {"@type": "ListItem", "position": 1, "name": "treg.to", "item": base + "/"},
         {"@type": "ListItem", "position": 2, "name": "Blog", "item": base + "/blog"},
         {"@type": "ListItem", "position": 3, "name": "#1 on People Search Bench",
@@ -3733,7 +3749,8 @@ async def blog_work_email_finding_bench():
         '</main>'
     )
 
-    ld = [{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+    ld = [_blog_posting_ld("work-email-finding-bench", base),
+          {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
         {"@type": "ListItem", "position": 1, "name": "treg.to", "item": base + "/"},
         {"@type": "ListItem", "position": 2, "name": "Blog", "item": base + "/blog"},
         {"@type": "ListItem", "position": 3, "name": "Work Email Finding",

@@ -390,6 +390,23 @@ async def test_every_surface_links_the_three_hubs(clients: AsyncClient):
             assert hub in html, f"{path} does not link {hub}"
 
 
+async def test_landing_and_docs_quote_the_live_counts(clients: AsyncClient):
+    """The landing carried eight typed endpoint/provider counts and /docs three; all had drifted a
+    year stale. They now read the same generated headline numbers as llms.txt."""
+    from treg.domain.catalog import store as catalog_store
+    endpoints, providers = catalog_store.headline_counts(catalog_store.load())
+    for path in ("/", "/docs"):
+        html = (await clients.get(path)).text
+        assert "{ENDPOINTS}" not in html and "{PROVIDERS}" not in html, f"{path} left a placeholder unfilled"
+        assert "2,630" not in html and "47 providers" not in html, f"{path} still quotes a typed count"
+        assert endpoints in html, f"{path} does not quote the live endpoint count {endpoints}"
+    landing = (await clients.get("/")).text
+    assert f"{providers} providers" in landing
+    assert "<title>treg.to: OpenRouter for agent tools and data, pay per call</title>" in landing
+    desc = re.search(r'<meta name="description" content="([^"]+)"', landing)[1]
+    assert desc.startswith("One MCP server, one key: ") and endpoints in desc and len(desc) <= 155, desc
+
+
 async def test_every_surface_links_the_blog(clients: AsyncClient):
     """The blog was reachable only through the sitemap: no footer on the site linked it. Every
     footer now does, on the hosted deployment (the route 404s off-host, like the hubs)."""
@@ -398,6 +415,15 @@ async def test_every_surface_links_the_blog(clients: AsyncClient):
                  "/people-search", "/jev", "/use-cases/lead-enrichment-for-ai-agents"):
         html = (await clients.get(path)).text
         assert 'href="/blog"' in html, f"{path} does not link the blog"
+
+
+async def test_catalog_shelf_title_leads_with_api_pricing(clients: AsyncClient):
+    """`{platform} api pricing` is the non-brand phrasing that reaches the site; the shelf title
+    leads with it, names the brand as treg.to and carries no em-dash."""
+    html = (await clients.get("/catalog/reddit")).text
+    title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
+    assert title.startswith("Reddit API pricing: ") and title.endswith(" | treg.to"), title
+    assert "\u2014" not in title
 
 
 async def test_hub_links_stay_off_a_self_hosted_registry(monkeypatch):
