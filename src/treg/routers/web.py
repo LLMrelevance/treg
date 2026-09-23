@@ -3691,7 +3691,7 @@ async def blog_work_email_finding_bench():
 
     return _page("Work Email Finding: 292 Person Bench | treg.to",
                  "Quality tie across vendors, cost is the gap. Measured 2026-09-16: "
-                 "treg $0.0056/correct vs Clay $0.0395/correct on 292 people.",
+                 "treg.to $0.0056/correct vs Clay $0.0395/correct on 292 people.",
                  "/blog/work-email-finding-bench", body, ld)
 
 

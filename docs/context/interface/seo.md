@@ -803,7 +803,7 @@ registered in `bootstrap.py`'s ownership table like every other public route.
 
 Tests: `test_every_surface_links_the_three_hubs`, `test_provider_page_names_the_jobs_it_serves`,
 `test_job_page_names_the_workflows_that_chain_it`, `test_compare_titles_carry_the_cheapest_price`,
-`test_provider_title_leads_with_pricing`, `test_indexnow_key_is_served_from_the_root`.
+`test_provider_title_matches_h1`, `test_indexnow_key_is_served_from_the_root`.
 
 ### Agent pages name the workflows
 
