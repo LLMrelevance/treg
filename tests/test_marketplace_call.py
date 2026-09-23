@@ -263,6 +263,15 @@ def tavily_platform_on(monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def olostep_platform_on(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_OLOSTEP", "PLATFORM-OLOSTEP")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "olostep")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 async def _balance(clients: AsyncClient) -> int:
     org_id = (await clients.get("/orgs")).json()[0]["org_id"]
     return (await clients.get(f"/orgs/{org_id}/balance")).json()["balance_micro"]
@@ -1802,6 +1811,33 @@ async def test_tavily_platform_gates_search_usage_and_site_work_limits(
     response = await clients.post(f"/call/tavily.web.{endpoint}", json=body)
     assert response.status_code == 400
     assert response.json()["detail"]["error"] == "catalog_parameter_invalid"
+    assert await _balance(clients) == before
+
+
+@pytest.mark.parametrize(("endpoint", "body", "parameter"), [
+    ("olostep.web.map.search", {
+        "url": "https://docs.olostep.com",
+        "search_query": "billing",
+        "top_n": 1001,
+    }, "body.top_n"),
+    ("olostep.web.crawl", {
+        "start_url": "https://example.com",
+        "max_pages": 101,
+        "follow_robots_txt": True,
+    }, "body.max_pages"),
+])
+async def test_olostep_catalog_bounds_refuse_overspend_before_reserve(
+    clients, olostep_platform_on, endpoint, body, parameter,
+):
+    before = await _balance(clients)
+    response = await clients.post(f"/call/{endpoint}", json=body)
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "error": "catalog_parameter_invalid",
+        "endpoint_id": endpoint,
+        "parameter": parameter,
+        "message": f"{endpoint} received an invalid value for {parameter}",
+    }
     assert await _balance(clients) == before
 
 

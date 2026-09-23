@@ -447,6 +447,37 @@ async def test_keenable_capacity_is_portal_only_with_documented_rate_limit(monke
         collectors.get_settings.cache_clear()
 
 
+async def test_olostep_balance_and_conservative_shared_key_rate(monkeypatch):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_OLOSTEP", "test-key")
+    collectors.get_settings.cache_clear()
+    try:
+        def probe(request):
+            assert request.method == "GET"
+            assert request.url.path == "/user/credits/info"
+            assert request.headers["authorization"] == "Bearer test-key"
+            return httpx.Response(200, json={
+                "credits": 4321,
+                "active_subscription": {"display_name": "Free"},
+                "allow_usage": True,
+            })
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(probe)) as client:
+            row = await collectors.provider_balance("olostep", client)
+        assert row == {
+            "provider": "olostep",
+            "value": 4321,
+            "unit": "credits",
+            "note": "plan Free; usage allowed",
+        }
+        capacity = policy.default_policy("olostep", has_key=True)
+        assert capacity.capacity_type == "credits"
+        assert capacity.funding_mode == "manual"
+        assert capacity.source == "api"
+        assert capacity.rate_limit == {"limit": 5, "window_s": 1, "source": "policy"}
+    finally:
+        collectors.get_settings.cache_clear()
+
+
 async def test_adyntel_capacity_is_dashboard_only_and_rate_limited(monkeypatch):
     monkeypatch.setenv("TREG_PLATFORM_KEY_ADYNTEL", "PLATFORM-ADYNTEL")
     collectors.get_settings.cache_clear()

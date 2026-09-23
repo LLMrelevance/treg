@@ -2513,6 +2513,33 @@ KEENABLE = OAuthProvider(
     probe_cost_micro=4_000,
 )
 
+OLOSTEP = OAuthProvider(
+    service="olostep",
+    display_name="Olostep",
+    auth_kind="key",
+    token_label="API key",
+    token_placeholder="sk_…",
+    setup_url="https://www.olostep.com/dashboard/api-keys",
+    setup_action_label="Get your Olostep API key",
+    setup_steps=(
+        "Sign in to Olostep and open API Keys.",
+        "Create or copy an API key.",
+    ),
+    setup_note=(
+        "Olostep meters tools in credits: standard Scrape and bounded Map cost one credit, "
+        "Search costs five, Answer costs twenty, and Crawl costs one per completed page. "
+        "Connecting checks the free credit-balance endpoint."
+    ),
+    auth_uri="", token_uri="",
+    scopes={},
+    client_id_setting="", client_secret_setting="",
+    category="SEO",
+    summary="Scrape pages, search the web, answer questions, map sites and run bounded crawls.",
+    base_url="https://api.olostep.com",
+    docs_url="https://docs.olostep.com/",
+    probe_path="/user/credits/info",
+)
+
 CLORO = OAuthProvider(
     service="cloro",
     display_name="cloro",
@@ -3474,7 +3501,7 @@ REGISTRY: dict[str, OAuthProvider] = {
         TIKHUB, BRIGHTDATA, SEMRUSH, JUSTONEAPI,
         SCRAPECREATORS,
         # SEO API-key providers
-        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA, TAVILY, KEENABLE, CLORO,
+        DATAFORSEO, SERANKING, MOZ, MAJESTIC, SERPSTAT, EXA, TAVILY, KEENABLE, OLOSTEP, CLORO,
         # more Enrichment API-key providers
         LUSHA, CORESIGNAL, DIFFBOT, THECOMPANIESAPI, LEADMAGIC, FIBER_AI, CRUSTDATA, AVIATO,
         COMPANYENRICH, OCEANIO, ADYNTEL, TOMBA, TRESTLEIQ, PREDICTLEADS, FINDYMAIL, BRANDDEV, ICYPEAS, LEADSFORGE,

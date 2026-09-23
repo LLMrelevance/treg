@@ -125,6 +125,19 @@ async def _tavily(c, key):
             "note": "Usage response did not contain a finite key or account limit"}
 
 
+async def _olostep(c, key):
+    # Free authenticated account read. `credits` is the authoritative sum of unexpired lots;
+    # endpoint responses report their own `credits_consumed`, which settlement handles separately.
+    d = await _get(c, "https://api.olostep.com/user/credits/info",
+                   headers={"Authorization": f"Bearer {key}"})
+    subscription = d.get("active_subscription") or {}
+    plan = subscription.get("display_name") or subscription.get("id") or "unknown"
+    allowed = d.get("allow_usage")
+    state = "allowed" if allowed is True else "blocked" if allowed is False else "unknown"
+    return {"value": d.get("credits"), "unit": "credits",
+            "note": f"plan {plan}; usage {state}"}
+
+
 async def _scrapecreators(c, key):
     d = await _get(c, "https://api.scrapecreators.com/v1/account/credit-balance",
                    headers={"x-api-key": key})
@@ -729,6 +742,7 @@ BALANCE_ROUTES = {
     "tinyfish": _tinyfish,
     "fishaudio": _fishaudio,
     "tavily": _tavily,
+    "olostep": _olostep,
     "scrapecreators": _scrapecreators,
     "serpapi": _serpapi,
     "moz": _moz,
