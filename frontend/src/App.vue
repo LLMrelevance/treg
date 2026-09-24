@@ -62,7 +62,6 @@ export default { ...controller, components: { ...controller.components, TeamReso
     <PublicNavigation v-if="publicCatalog" />
     <DashboardNavigation v-else />
     <img v-if="authed && !publicCatalog && view==='start'" class="rd-background" src="/media/redesign/ascii-background.jpg" alt="" aria-hidden="true">
-    <a v-if="authed && !publicCatalog" class="rd-referral" href="#referrals" @click.prevent="go('referrals')" :aria-current="view==='referrals'?'page':null"><span aria-hidden="true">↗</span> Refer a friend</a>
     <div v-if="startCopyError" class="rd-copy-error" role="alert">{{startCopyError}}<br><button class="btn sm" @click="startCopyError=''">Dismiss</button></div>
     <span class="rd-sr-only" role="status">{{startCopied ? 'Copied to clipboard' : ''}}</span>
     <div class="layout" :class="{solo:publicCatalog}">
