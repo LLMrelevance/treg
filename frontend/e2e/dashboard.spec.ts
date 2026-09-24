@@ -188,7 +188,7 @@ test('the public search page lands the fitting platforms in their cards', async 
   await page.getByLabel('Describe the job').press('Enter')
   await expect(page.getByRole('button', { name: 'Google Search Console' })).toBeVisible()
   await expect(page).toHaveURL(/\/search\?q=why/)
-  await expect(page.locator('.sp-tile.landed')).toHaveCount(1)
+  await expect(page.locator('.sp-tile.landed')).toHaveCount(2)                     // the vendor's tile and its platform's
   await page.getByRole('button', { name: 'Google Search Console' }).click()          // signed out: sign in first
   await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible()
   await page.keyboard.press('Escape')

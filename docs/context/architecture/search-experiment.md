@@ -129,7 +129,8 @@ audience differs:
   unjudged, or `name`: no strong fit, and the query is a name (the judge's name probability at or
   over `find_name_min`, or exactly a platform's name or slug). Its rows are what the name offers:
   the platforms whose name contains it, the one it starts first, each cut to its first 40
-  endpoints; else a provider of that name's endpoints; unjudged. A name the catalog does not carry
+  endpoints; else a provider of that name's endpoints; unjudged. The event's `named` says which
+  (`platform` or `provider`), and /search groups the answer by it. A name the catalog does not carry
   falls through to the judged verdict. Kept rows are best fit first (no `interleave.bucketed` lexical order inside a bucket),
   each with its fit and the catalog's own price shape; the event carries `high` so the pages draw
   the strong cut from the server's setting. The probability is shown to people; agents still never

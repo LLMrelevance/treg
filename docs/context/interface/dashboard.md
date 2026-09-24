@@ -1034,14 +1034,17 @@ fit is its best provider's. The page never re-ranks providers.
   (`LandingNavigation.vue`; "Open dashboard" for a member), the landing tokens, and the landing
   hero's glyph field (`/media/landing/hero-particles.js`, mounted through `window.tregMountField`
   and ticked by this page). One viewport tall, never scrolls; a long answer scrolls inside its
-  panel. Every platform is a tile in a Matter.js pile (`state/pile.ts`) on the floor of the page:
-  tiles can be picked up and thrown, the recall's platforms hop while the judge reads, the fitting
-  ones leave the physics world and fly to their answer cards, and the next search drops them back
-  in; × or Esc clears the answer the same way. A described job is answered **by vendor**: one card
-  per provider under its own logo (`/logos/<provider>.svg`), its jobs with their prices, and the
-  platform of its best job beside the name, where that platform's tile lands on the first card
-  that names it (later cards show a still copy). A bare name (`name`, titled "Tools for …") is
-  answered by platform, each card listing its jobs with provider counts. An empty box submits its placeholder. Reduced motion
+  panel. Every platform and every vendor is a tile in a Matter.js pile (`state/pile.ts`) on the
+  floor of the page, keyed `p:`/`v:` since a slug can be both; the vendors come from
+  `/catalog/platforms`' `providers`. A platform tile opens its platform, a vendor tile its busiest
+  platform. Tiles can be picked up and thrown, the recall's platforms and vendors hop while the
+  judge reads, the fitting ones leave the physics world and fly to their answer cards, and the next
+  search drops them back in; × or Esc clears the answer the same way. A described job is answered
+  **by vendor** (so is a vendor's name, `named: provider`): one card per provider, the vendor's tile landing in the logo place and, on the
+  first card naming it, the platform's tile beside the platform name (later cards show a still
+  copy), with the vendor's jobs and prices. A bare name (`name`, titled "Tools for …") is answered
+  by platform: each platform's tile lands in its card's logo place, the cards list jobs with
+  provider counts, and the vendors on those platforms stay lit in the pile. An empty box submits its placeholder. Reduced motion
   settles the pile unseen and skips the flights. `?q=` runs a search on load and is what **Share**
   copies. Any result (a card, a job line, a tile) opens that platform in the dashboard: directly
   for a member; otherwise sign-in first, the destination kept in localStorage for ten minutes and
@@ -1049,6 +1052,16 @@ fit is its best provider's. The page never re-ranks providers.
   visitor on that platform rather than on Getting started. The server serves the new frontend here
   to every visitor while the rollout is enabled (there is no legacy view of this page) and 404s
   when the rollout switch forces legacy.
+
+**Analytics for finds** (PostHog through `track`, anonymous until sign-in, when the visitor's
+earlier events join the identified person): `search_opened` (`ref`: the landing's Tools link sends
+`?ref=landing-nav` or `landing-footer`, else the referring host), `catalog_find` (a find ran:
+`surface` search or catalog, `words`, `auto`), `search_answered` (`verdict`, `results`,
+`providers`, `top_fit`), `search_result_clicked` (`from` card, job or tile; `platform`,
+`provider`, `rank`, `signed_in`) and `search_copied` (`scope` all, job or share). The landing's
+Tools links also send `nav_clicked`. A cohort of people who performed `catalog_find`, followed
+through `signup_completed`, `tool_called` and `topup_completed`, is the search-to-conversion
+funnel.
 
 ## Code surfaces (every page)
 Snippet blocks (`.lc-codewrap` on Getting started, the in-app CLI tutorial's `.term` panes, the

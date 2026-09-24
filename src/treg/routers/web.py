@@ -411,7 +411,7 @@ async def catalog_index(treg_session: str = Cookie(default=""), db: AsyncSession
     # this page would quietly contradict the number on the landing.
     cat = catalog_store.load()
     total_eps = len(cat.endpoints)
-    providers = sorted({e["provider"] for e in cat.endpoints})
+    providers = sorted({e["provider"] for e in cat.endpoints if e["kind"] != "routed"})   # treg is no vendor
 
     cats: dict[str, list[dict]] = {}
     for row in rows:

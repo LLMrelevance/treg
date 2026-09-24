@@ -110,9 +110,10 @@ class Judged:
     rows: list[tuple[dict, float | None]]   # what is shown; probability None when unjudged
     judgement: judge_infra.Judgement
     kept: list[tuple[dict, float]] | None = None   # the judge's rows at or over keep; None = abstained
+    named: str = ""   # on NAME: what the name named, "platform" or "provider" (the pages group by it)
 
 
-def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[dict]:
+def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> tuple[str, list[dict]]:
     """What a bare name offers: the endpoints on the platforms whose name or slug contains it (the
     Catalog box's platform filter); else, when the name is a provider's, that provider's endpoints.
     Platform first, because "tiktok" means the platform, not the one provider that happens to be
@@ -122,7 +123,7 @@ def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[
     endpoints (Tag Manager's raw API surface), the jobs most providers sell first."""
     q = query.strip().lower()
     if not q:
-        return []
+        return "", []
     shown = [e for e in cat.endpoints if catalog_store.browsable(e)]
     sellers: dict[str, int] = {}
     for e in shown:
@@ -148,8 +149,8 @@ def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[
             return (not _is_named(q, slug, plat), not (_short(plat["label"]).startswith(q) or slug.startswith(q)),
                     featured is None, featured or 0, -jobs, slug)
         slugs = sorted(slugs, key=rank)[:MAX_NAME_PLATFORMS]
-        return [e for slug in slugs for e in jobs_first(on[slug])[:MAX_NAME_ROWS_PER_PLATFORM]]
-    return jobs_first([e for e in shown if q in (e["provider"].lower(), provider_display(e["provider"]).lower())])
+        return "platform", [e for slug in slugs for e in jobs_first(on[slug])[:MAX_NAME_ROWS_PER_PLATFORM]]
+    return "provider", jobs_first([e for e in shown if q in (e["provider"].lower(), provider_display(e["provider"]).lower())])
 
 
 def _short(label: str) -> str:
@@ -190,9 +191,9 @@ async def judge(query: str, cands: list[tuple[dict, float]], cat: catalog_store.
     strong = bool(scored) and scored[0][1] >= high
     kept = [(ep, p) for ep, p in scored if p >= keep]
     if not strong and ((j.extra or {}).get("name", 0.0) >= float(s.find_name_min) or names_a_platform(query, cat)):
-        named = name_rows(query, cat, provider_display)
-        if named:
-            return Judged(NAME, [(ep, None) for ep in named], j, kept)
+        named, rows = name_rows(query, cat, provider_display)
+        if rows:
+            return Judged(NAME, [(ep, None) for ep in rows], j, kept, named)
     return Judged(STRONG if strong else CLOSEST if kept else NONE, kept, j, kept)
 
 
@@ -203,9 +204,10 @@ async def stream(query: str, provider_display) -> AsyncIterator[dict]:
     cat = catalog_store.load()
     cands = catalog_store.candidates(query, cat, max(1, int(get_settings().find_candidates)))
     yield {"event": "candidates",
-           "candidates": [{"id": ep["id"], "platform": ep.get("platform") or ""} for ep, _ in cands]}
+           "candidates": [{"id": ep["id"], "platform": ep.get("platform") or "", "provider": ep["provider"]}
+                          for ep, _ in cands]}
     judged = await judge(query, cands, cat, provider_display)
-    yield {"event": "judged", "verdict": judged.verdict, "read": len(cands),
+    yield {"event": "judged", "verdict": judged.verdict, "named": judged.named, "read": len(cands),
            "high": float(get_settings().search_judge_high),
            "rows": [_row(ep, cat, provider_display, p) for ep, p in judged.rows]}
     _, baseline_total = catalog_store.search(query, cat, 0)

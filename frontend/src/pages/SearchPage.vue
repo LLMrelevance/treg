@@ -3,10 +3,11 @@ import { useDashboard } from '../state/context'
 import { Pile, poseTransform, tileSize } from '../state/pile'
 import { groupBest, jobGroups } from '../state/find.js'
 
-// /search: every platform in the catalog is a tile, dropped under gravity (state/pile.ts, Matter.js)
-// into a pile on the floor of the page. A described job (GET /catalog/find, see state/find.js) makes
-// the platforms its keyword recall touched hop while the judge reads them; the platforms that fit
-// then leave the pile and fly to their answer cards. The next search drops them back in.
+// /search: every platform and every vendor in the catalog is a tile, dropped under gravity
+// (state/pile.ts, Matter.js) into a pile on the floor of the page. A described job (GET
+// /catalog/find, see state/find.js) makes the platforms and vendors its keyword recall touched hop
+// while the judge reads them; the ones that fit then leave the pile and fly to their places on the
+// answer cards. The next search drops them back in.
 //
 // The page is exactly one viewport tall: the pile's floor is the bottom of the screen, and a long
 // answer scrolls inside its own panel, never the page.
@@ -28,12 +29,28 @@ export default {
   data(){ return { text:'', examples:EXAMPLES, size:48, floor:220, reduced:false, landed:[], dragging:null, flung:null } },
   computed: {
     platforms(){ return this.plats.list.filter(p=>(p.category||'Other')!=='Other'); },
+    // The pile: a tile per platform and a tile per vendor on those platforms, keyed `p:`/`v:` because
+    // a slug can be both ("tiktok-ads"). A tile opens its platform, a vendor its busiest platform.
+    vendors(){
+      const home={};
+      for(const p of this.platforms) for(const s of p.providers||[]) home[s]=home[s]||p.slug;   // busiest platform first
+      return Object.keys(home).sort().map(slug=>({slug, label:this.provName(slug), home:home[slug]}));
+    },
+    // `bad` is the tile's platLogoBad key, shared with every other place that draws that logo.
+    tiles(){
+      return [...this.platforms.map(p=>({key:'p:'+p.slug, slug:p.slug, label:this.platShort(p.label), home:p.slug,
+                                          src:'/logos/platforms/'+p.slug+'.svg', bad:p.slug})),
+              ...this.vendors.map(v=>({...v, key:'v:'+v.slug, src:'/logos/'+v.slug+'.svg', bad:'v:'+v.slug}))];
+    },
+    // On a platform answer (a bare name) no vendor lands; the vendors on those platforms stay lit.
+    litVendors(){ return this.byVendor ? new Set() : new Set(this.find.rows.map(r=>'v:'+r.provider)); },
     // A described job is answered by vendor: one card per vendor, best fit first, under the
-    // vendor's own logo, listing the jobs that vendor sells here. A bare name ("google") asks what
-    // is on those platforms, so it is answered by platform, each card listing its jobs.
-    byVendor(){ return this.find.verdict!=='name'; },
-    // Every card names one platform; the first card on a platform is where that platform's tile
-    // lands (`lands`), later ones show a still copy of it.
+    // vendor's own logo, listing the jobs that vendor sells here. A platform's name ("google") asks
+    // what is on those platforms, so it is answered by platform; a vendor's name ("hunter") by vendor.
+    byVendor(){ return this.find.verdict!=='name' || this.find.named==='provider'; },
+    // Where tiles land (pile keys): `logo`, the card's logo place, takes the vendor's tile on a
+    // vendor card and the platform's on a platform card; `mark`, beside the platform name, takes
+    // the platform's tile on the first vendor card naming it. Later cards show a still copy.
     cards(){
       if(this.find.phase!=='done') return [];
       const byVendor=this.byVendor, seen=new Set();
@@ -41,13 +58,15 @@ export default {
         const platform_label=this.platShort(r.platform_label||r.platform);
         return {slug, platform:r.platform, platform_label, label:byVendor ? r.provider_display||r.provider : platform_label};
       }, 'rows').slice(0,12).map(c=>{
-        const card={...c, jobs:jobGroups(c.rows), lands:!seen.has(c.platform)};
+        const mark=byVendor && !seen.has(c.platform) ? 'p:'+c.platform : null;
         seen.add(c.platform);
-        return card;
+        return {...c, jobs:jobGroups(c.rows), logo:byVendor ? 'v:'+c.slug : 'p:'+c.platform, mark};
       });
     },
-    reading(){ return this.findBusy ? new Set(this.findCandidatePlatforms) : new Set(); },
-    readingList(){ return this.platforms.map(p=>p.slug).filter(s=>this.reading.has(s)); },
+    reading(){
+      return this.findBusy ? new Set([...this.findCandidatePlatforms.map(s=>'p:'+s), ...this.findCandidateVendors.map(s=>'v:'+s)]) : new Set();
+    },
+    readingList(){ return this.tiles.map(t=>t.key).filter(k=>this.reading.has(k)); },
   },
   watch: {
     'plats.list'(){ this.$nextTick(()=>this.fit(true)); },
@@ -82,7 +101,13 @@ export default {
     this.loadPlatforms();
     this.mountField();
     this.$nextTick(()=>this.fit(true));
-    const q=new URLSearchParams(location.search).get('q');
+    const params=new URLSearchParams(location.search), q=params.get('q');
+    // Where visitors come to /search from: `?ref=` (the landing's Tools link says `landing-nav` or
+    // `landing-footer`), else the referring host. The person this merges into after sign-in is
+    // what the search-to-signup funnel reads (see interface/dashboard.md).
+    let referrer=''; try{ referrer=document.referrer ? new URL(document.referrer).hostname : ''; }catch(e){}
+    this.track('search_opened', {ref:params.get('ref') || (referrer && referrer!==location.hostname ? referrer : 'direct'),
+      has_q:!!q, signed_in:this.sessionChecked ? !!this.authed : null});
     if(q){ this.text=q; this.ask(); }
   },
   beforeUnmount(){
@@ -128,21 +153,21 @@ export default {
     },
     // The scan light moves several times a second while the judge reads: set on the element, not
     // through a reactive field, so it does not re-render every tile on every step.
-    scanTo(slug){
+    scanTo(key){
       this.els[this.scanned]?.classList.remove('scan');
-      this.scanned=slug;
-      this.els[slug]?.classList.add('scan');
+      this.scanned=key;
+      this.els[key]?.classList.add('scan');
     },
     // The answer panel scrolls its landed tiles along; one re-seat per frame, however fast it scrolls.
     onPanelScroll(){
       if(this.scrollRaf) return;
       this.scrollRaf=requestAnimationFrame(()=>{ this.scrollRaf=0; this.place(false); });
     },
-    tileRef(slug, el){
-      if(!el){ delete this.els[slug]; return; }
-      if(this.els[slug]===el) return;
-      this.els[slug]=el;
-      const pose=this.pile?.poseOf(slug);
+    tileRef(key, el){
+      if(!el){ delete this.els[key]; return; }
+      if(this.els[key]===el) return;
+      this.els[key]=el;
+      const pose=this.pile?.poseOf(key);
       if(pose){ el.style.transform=poseTransform(pose, this.size); el.style.visibility='visible'; }
     },
     // Tiles in the pile can be picked up and thrown; a press that barely moves is a click and
@@ -151,59 +176,60 @@ export default {
       if(e.button!==0) return;
       const sb=this.$refs.stage.getBoundingClientRect();
       const start={x:e.clientX, y:e.clientY};
-      const held=this.pile.grab(p.slug, e.clientX-sb.left, e.clientY-sb.top);
+      const held=this.pile.grab(p.key, e.clientX-sb.left, e.clientY-sb.top);
       let moved=false;
-      if(held){ e.preventDefault(); this.dragging=p.slug; }
+      if(held){ e.preventDefault(); this.dragging=p.key; }
       const move=ev=>{
         if(Math.hypot(ev.clientX-start.x, ev.clientY-start.y)>5) moved=true;
         if(held) this.pile.drag(ev.clientX-sb.left, ev.clientY-sb.top);
       };
       const up=()=>{
         removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
-        if(held){ this.pile.release(); this.flung=p.slug; clearTimeout(this.flungTimer); this.flungTimer=setTimeout(()=>{ this.flung=null; }, 1500); }
+        if(held){ this.pile.release(); this.flung=p.key; clearTimeout(this.flungTimer); this.flungTimer=setTimeout(()=>{ this.flung=null; }, 1500); }
         this.dragging=null;
-        if(!moved) this.findGoDashboard(p.slug);
+        if(!moved){ this.findTrackClick('tile', p.home, p.key.startsWith('v:') ? {provider:p.slug} : {}); this.findGoDashboard(p.home); }
       };
       addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
     },
     // Size the page to the viewport, size the tiles to the page, and (re)build the pile. The first
     // build drops the tiles from above so the pile forms on screen; a resize settles it unseen.
     fit(first){
-      const stage=this.$refs.stage; if(!stage || !this.pile || !this.platforms.length) return;
+      const stage=this.$refs.stage; if(!stage || !this.pile || !this.tiles.length) return;
       if(first && this.built) return;
       stage.style.height=Math.max(520, innerHeight-stage.getBoundingClientRect().top-scrollY)+'px';
       const W=stage.clientWidth, H=stage.clientHeight;
-      const size=tileSize(W, H, this.platforms.length, W<640 ? 0.22 : 0.25);
+      const size=tileSize(W, H, this.tiles.length, W<640 ? 0.22 : 0.25);
       const rebuild=!this.built || size!==this.size;
       this.size=size; this.pile.size=size;
       // Room for the settled pile under the question box: the tiles' area, loosely packed, across the width.
-      this.floor=Math.round(this.platforms.length*size*size/(0.62*W) + size*0.8);
+      this.floor=Math.round(this.tiles.length*size*size/(0.62*W) + size*0.8);
       this.pile.bounds(W, H);
       if(rebuild){
         this.pile.clear();
-        const inPile=this.platforms.filter(p=>!this.landed.includes(p.slug));
-        if(this.reduced || this.built){ inPile.forEach(p=>this.pile.add(p.slug)); this.pile.settle(); }
+        const inPile=this.tiles.map(t=>t.key).filter(k=>!this.landed.includes(k));
+        if(this.reduced || this.built){ inPile.forEach(k=>this.pile.add(k)); this.pile.settle(); }
         // An answer can land before the last tile has dropped (a shared ?q= link, a cached judge):
         // a tile already on its card is not dropped into the pile behind it.
-        else inPile.forEach((p,i)=>setTimeout(()=>{ if(!this.landed.includes(p.slug)) this.pile.add(p.slug); }, i*16));
+        else inPile.forEach((k,i)=>setTimeout(()=>{ if(!this.landed.includes(k)) this.pile.add(k); }, i*10));
         this.built=true;
       }
       this.$nextTick(()=>this.place(false));
     },
-    // The answer arrived: each fitting platform's tile leaves the pile from where it lies and flies
-    // to the logo slot of its card.
+    // The answer arrived: each fitting tile leaves the pile from where it lies and flies to its
+    // place on a card (`cards`: logo and mark).
     land(){
       const slots=this.measureSlots(), flying=[];
       // Every tile to its start pose first, one layout for all of them, then every flight at once.
       this.cards.forEach((c,i)=>{
-        const slug=c.platform;
-        const el=this.els[slug]; if(!c.lands || !el || !slots[slug] || this.landed.includes(slug)) return;
-        const pose=this.pile.remove(slug);
-        const from=pose || {x:slots[slug].x, y:this.$refs.stage.clientHeight, angle:0};
-        el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
-        el.style.visibility='visible';
-        flying.push([el, i]);
-        this.landed.push(slug);
+        for(const key of [c.logo, c.mark]){
+          const el=this.els[key]; if(!key || !el || !slots[key] || this.landed.includes(key)) continue;
+          const pose=this.pile.remove(key);
+          const from=pose || {x:slots[key].x, y:this.$refs.stage.clientHeight, angle:0};
+          el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
+          el.style.visibility='visible';
+          flying.push([el, i]);
+          this.landed.push(key);
+        }
       });
       if(flying.length) this.$refs.stage.getBoundingClientRect();
       for(const [el, i] of flying){
@@ -217,13 +243,13 @@ export default {
     place(animated, slots=this.measureSlots()){
       const stage=this.$refs.stage; if(!stage) return;
       const panel=this.$refs.panel?.getBoundingClientRect(), sb=stage.getBoundingClientRect();
-      for(const slug of this.landed){
-        const el=this.els[slug], s=slots[slug]; if(!el || !s) continue;
+      for(const key of this.landed){
+        const el=this.els[key], s=slots[key]; if(!el || !s) continue;
         if(!animated){ el.style.transition='none'; el.style.transitionDelay='0s'; }
         el.style.transform=`translate(${s.x}px,${s.y}px) scale(${s.w/this.size})`;
         const inView=!panel || (s.y+sb.top>=panel.top-4 && s.y+sb.top+s.w<=panel.bottom+4);
         el.style.visibility=inView ? 'visible' : 'hidden';
-        this.slotAt[slug]=s;
+        this.slotAt[key]=s;
       }
     },
     measureSlots(){
@@ -234,18 +260,28 @@ export default {
     },
     // A new question: the last answer's tiles fall back into the pile from where they sat.
     dropLanded(){
-      for(const slug of this.landed){
-        const el=this.els[slug], s=this.slotAt[slug];
+      for(const key of this.landed){
+        const el=this.els[key], s=this.slotAt[key];
         if(el){ el.style.transition='none'; el.style.transitionDelay='0s'; }
-        this.pile.add(slug, s ? s.x : undefined, s ? s.y : undefined);
+        this.pile.add(key, s ? s.x : undefined, s ? s.y : undefined);
       }
       this.landed=[];
     },
     tileClass(p){
-      return {read:this.reading.has(p.slug), landed:this.landed.includes(p.slug), held:this.dragging===p.slug || this.flung===p.slug,
-        dim:(this.findBusy && !this.reading.has(p.slug)) || (this.find.phase==='done' && this.cards.length && !this.landed.includes(p.slug))};
+      const k=p.key;
+      return {read:this.reading.has(k), landed:this.landed.includes(k), held:this.dragging===k || this.flung===k,
+        dim:(this.findBusy && !this.reading.has(k))
+          || (this.find.phase==='done' && this.cards.length && !this.landed.includes(k) && !this.litVendors.has(k))};
     },
     pct(p){ return p==null ? '' : Math.round(p*100)+'%'; },
+    openCard(c, i){
+      this.findTrackClick('card', c.platform, {provider:this.byVendor ? c.slug : undefined, rank:i+1});
+      this.findGoDashboard(c.platform);
+    },
+    openJob(c, i, g){
+      this.findTrackClick('job', g.platform, {provider:g.rows[0]?.provider, rank:i+1});
+      this.findGoDashboard(g.platform);
+    },
     // A job line's corner: its price, and on a platform card how many vendors sell it.
     jobMeta(g){
       const n=this.findProviders(g).length;
@@ -259,7 +295,7 @@ export default {
 <div class="sp" :class="{answered:find.phase==='done' && cards.length}" ref="stage">
   <section class="sp-top">
     <div v-if="find.phase==='idle' || findBusy" class="sp-hero" :class="{quiet:findBusy}">
-      <span class="sp-count">{{platforms.length}} platforms<template v-if="toolCountText"> · {{toolCountText}} tools</template></span>
+      <span class="sp-count">{{platforms.length}} platforms · {{vendors.length}} providers<template v-if="toolCountText"> · {{toolCountText}} tools</template></span>
       <h1 class="hero-h1">What does your agent<br><span>need to do?</span></h1>
     </div>
 
@@ -289,19 +325,15 @@ export default {
         </span>
       </div>
       <div class="sp-cards">
-        <article v-for="c in cards" :key="c.slug" class="sp-card" :class="{weak:findWeak(c)}">
-          <!-- A vendor card: the vendor's logo, and its platform's tile lands beside the platform name.
-               A platform card: the tile lands in the logo's place. -->
+        <article v-for="(c, ci) in cards" :key="c.slug" class="sp-card" :class="{weak:findWeak(c)}">
+          <!-- A vendor card: the vendor's tile lands in the logo place, and its platform is named
+               under it. A platform card (a bare name): the platform's logo. -->
           <header>
-            <span v-if="!byVendor" class="sp-slot sp-slot-lg" :data-slot="c.platform" aria-hidden="true"></span>
-            <span v-else class="sp-mark sp-logo" aria-hidden="true">
-              <img v-if="!platLogoBad['v:'+c.slug]" :src="'/logos/'+c.slug+'.svg'" alt="" @error="platLogoBad['v:'+c.slug]=true">
-              <span v-else class="sp-i" :style="{background:platTileBg(c.slug)}">{{platInitial({label:c.label, slug:c.slug})}}</span>
-            </span>
-            <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)">
+            <span class="sp-slot sp-slot-lg" :data-slot="c.logo" aria-hidden="true"></span>
+            <button class="sp-plat" type="button" @click="openCard(c, ci)">
               <span class="sp-vendor">{{c.label}}</span>
               <small v-if="byVendor">
-                <span v-if="c.lands" class="sp-slot" :data-slot="c.platform" aria-hidden="true"></span>
+                <span v-if="c.mark" class="sp-slot" :data-slot="c.mark" aria-hidden="true"></span>
                 <span v-else class="sp-slot sp-mark" aria-hidden="true">
                   <img v-if="!platLogoBad[c.platform]" :src="'/logos/platforms/'+c.platform+'.svg'" alt="" @error="platLogoBad[c.platform]=true">
                   <span v-else class="sp-i" :style="{background:platTileBg(c.platform)}">{{platInitial({label:c.platform_label, slug:c.platform})}}</span>
@@ -310,7 +342,7 @@ export default {
           </header>
           <ul>
             <li v-for="g in c.jobs.slice(0,3)" :key="g.key">
-              <button type="button" @click="findGoDashboard(g.platform)" :title="g.rows.map(r=>r.id).join(', ')">
+              <button type="button" @click="openJob(c, ci, g)" :title="g.rows.map(r=>r.id).join(', ')">
                 <span class="sp-job">{{g.label}}</span>
                 <span class="sp-m">{{jobMeta(g)}}</span>
               </button>
@@ -334,7 +366,7 @@ export default {
     </div>
     <p class="sp-meta" aria-live="polite">
       <template v-if="find.phase==='recall'">Looking through the catalog…</template>
-      <template v-else-if="find.phase==='reading'"><i class="dot"></i>{{find.candidates.length}} candidates on {{findCandidatePlatforms.length}} platforms. Reading them for your job…</template>
+      <template v-else-if="find.phase==='reading'"><i class="dot"></i>{{find.candidates.length}} candidates on {{findCandidatePlatforms.length}} platforms from {{findCandidateVendors.length}} providers. Reading them for your job…</template>
     </p>
     <div class="sp-chips" v-if="find.phase==='idle' || find.phase==='done' && !cards.length">
       <button v-for="ex in examples.slice(1)" :key="ex" class="sp-chip" type="button" @click="pick(ex)">{{ex}}</button>
@@ -342,9 +374,9 @@ export default {
   </form>
 
   <div class="sp-floor" :style="{height:floor+'px'}" aria-hidden="true"></div>
-  <button v-for="p in platforms" :key="p.slug" :ref="el=>tileRef(p.slug, el)" class="sp-tile" :class="tileClass(p)"
-          :style="{width:size+'px', height:size+'px'}" type="button" tabindex="-1" aria-hidden="true" :title="platShort(p.label)" @pointerdown="press(p, $event)">
-    <img v-if="!platLogoBad[p.slug]" :src="'/logos/platforms/'+p.slug+'.svg'" alt="" draggable="false" @error="platLogoBad[p.slug]=true">
+  <button v-for="p in tiles" :key="p.key" :ref="el=>tileRef(p.key, el)" class="sp-tile" :class="tileClass(p)"
+          :style="{width:size+'px', height:size+'px'}" type="button" tabindex="-1" aria-hidden="true" :title="p.label" @pointerdown="press(p, $event)">
+    <img v-if="!platLogoBad[p.bad]" :src="p.src" alt="" draggable="false" @error="platLogoBad[p.bad]=true">
     <span v-else class="sp-i" :style="{background:platTileBg(p.slug)}">{{platInitial(p)}}</span>
   </button>
 </div>
@@ -406,9 +438,6 @@ html.sp-lock,html.sp-lock body{overflow:hidden;overscroll-behavior:none}
 .sp-mark{flex:none;box-sizing:border-box;border:1px solid var(--l-line);background:#fff;display:grid;place-items:center;overflow:hidden;border-radius:22%}
 .sp-mark img{width:58%;height:58%;object-fit:contain}
 .sp-mark .sp-i{width:100%;height:100%;display:grid;place-items:center;color:#fff;font-weight:600;font-size:9px}
-.sp-logo{width:40px;height:40px;border-radius:10px}
-.sp-logo img{width:64%;height:64%}
-.sp-logo .sp-i{font-size:inherit}
 .sp-slot{flex:none;width:18px;height:18px}
 .sp-slot-lg{width:40px;height:40px}
 .sp-plat{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit;color:var(--l-ink);cursor:pointer;
