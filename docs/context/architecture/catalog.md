@@ -50,8 +50,15 @@ sources:
   - src/treg/domain/catalog/routing/paths.py
   - src/treg/domain/catalog/routing/plan.py
   - src/treg/domain/catalog/routing/synthetic.py
+  - src/treg/application/call/async_bridge.py
   - src/treg/application/call/route.py
+  - src/treg/catalog/wiza.yaml
+  - src/treg/catalog/examples/wiza.people.email.find.json
+  - src/treg/catalog/examples/wiza.people.email.find.terminal.json
+  - src/treg/catalog/examples/wiza.people.phone.find.json
+  - src/treg/catalog/examples/wiza.people.phone.find.terminal.json
   - tests/test_routing.py
+  - tests/test_wiza.py
   - .github/workflows/catalog-drift.yml
   - scripts/catalog_drift.py
   - scripts/catalog_ingest.py
@@ -471,6 +478,11 @@ in one axis differs in poll target, status vocabulary and result location togeth
 against v1), so a field-wise merge only produced descriptors nobody had written down. `catalog_store`
 serves the effective descriptor on the normalized endpoint. An explicit endpoint `async: false` opts
 a utility or synchronous endpoint out of the provider default; absence means inherit.
+
+An async endpoint may also declare `terminal_example_response`. Its ordinary `example_response`
+remains the submission response shown by the catalog, while adapter verification uses the terminal
+fixture returned by the poll endpoint. This lets an async tool join a routed capability without
+pretending that its kickoff body is the final enrichment result.
 
 **Poll mode in practice.** Every listed provider polls a static catalog id (`poll.endpoint`), which
 the CLI reaches through `/call/<id>` on any credential tier. Replicate offers both `urls.get` and the
@@ -1745,6 +1757,14 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   the idempotency label (a success, or a terminal failure after a paid child, replays without
   touching a provider) and writes one audit row
   (`credential_tier: routed`) beside the children's.
+  An async child uses the shared async bridge to submit once and poll through ordinary authenticated
+  child calls. The final poll response, not the kickoff response, is passed to the adapter. Routed
+  execution waits for up to 60 seconds. If the task is still processing, or a foreground poll
+  cannot prove a declared terminal state, it returns HTTP 202 with `_treg.outcome: pending`, the
+  provider and endpoint, child call reference, poll descriptor, `reserved_micro`, and
+  `charged_micro: null`. A pending attempt stops that waterfall because the child may still complete
+  and charge; the existing async worker owns eventual settlement. Only declared terminal misses and
+  failures may continue under the normal bounded fallback rules.
 - **Hit rate** — `CallRecord.hit` (nullable, alembic `0009`, last column) is the adapter's verdict
   written at settle; `stats.observed` publishes `hit_rate`/`hit_samples` (floor 20) and, for
   per-success endpoints, reads historical rows too (a 2xx with `cost_observed_micro == 0` is a miss).

@@ -1110,10 +1110,15 @@ def main(argv: list[str]) -> int:
             if effective_async is not None:
                 check_async_descriptor(effective_async, where, str(service), endpoint_index,
                                        cost, errors)
+                terminal_ex = ep.get("terminal_example_response")
+                if terminal_ex is not None and not (CATALOG / str(terminal_ex)).is_file():
+                    fail(errors, where, f"terminal_example_response '{terminal_ex}' does not exist")
             elif isinstance(cost, dict) and cost.get("settle") == "usage":
                 # Usage evidence is read from the TERMINAL response by the worker; a synchronous
                 # response path has no consumer for it and would silently settle the reserve.
                 fail(errors, where, "cost.settle 'usage' requires an async descriptor")
+            elif ep.get("terminal_example_response") is not None:
+                fail(errors, where, "terminal_example_response requires an async descriptor")
             if ep.get("resource_ownership") is not None:
                 check_resource_ownership(ep["resource_ownership"], where, inp, errors)
             if ep.get("managed_resource") is not None:

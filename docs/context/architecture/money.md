@@ -14,6 +14,8 @@ sources:
   - src/treg/application/call/intake.py
   - src/treg/application/call/resolve.py
   - src/treg/application/call/service.py
+  - src/treg/application/call/async_bridge.py
+  - src/treg/application/call/route.py
   - src/treg/application/call/reserve.py
   - src/treg/application/call/settle.py
   - src/treg/catalog/tomba.yaml
@@ -249,6 +251,14 @@ response unchanged and cron retries. Only the winning finalizer archives termina
 An async status declared as `billed_failure` is still presented as failure by the CLI, but the
 worker settles its usage evidence and records the terminal outcome; this covers cancellation after
 billable work without manufacturing a successful result.
+
+Routed tools and Enrich Arena may wait for an async child through the shared async bridge. Every
+poll still uses the ordinary call path, so BYOK remains unmetered and platform polls enforce task
+ownership. Foreground polling and the worker may observe the same terminal response, but the task
+row lock lets only one close the original hold. A foreground timeout or inconclusive poll response
+returns a pending result with the reservation still open; the worker later settles or releases it.
+Terminal UI and routed results read the task's settled amount, while pending results expose only the
+maximum reservation.
 
 The worker selects due candidates, acquires provider/global concurrency slots, then atomically
 claims each still-due row. `attempts` fences stale workers from changing a newer claim's state.
