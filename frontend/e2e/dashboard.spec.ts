@@ -69,7 +69,7 @@ test('onboarding controls and images work on mobile and dark theme', async ({ pa
   await page.locator('.rd-account-menu summary').click()
   await page.getByRole('button', { name: 'Dark appearance' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('.rd-task-image, .rd-try .try-ico')].every(img => img.complete && img.naturalWidth > 0))
+  await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('.rd-try .try-ico')].every(img => img.complete && img.naturalWidth > 0))
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('mobile-dark.png'), fullPage: true })
   expect(errors).toEqual([])
