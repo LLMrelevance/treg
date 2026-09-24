@@ -27,6 +27,8 @@ import details from './details.js'
 import admin from './admin.js'
 import snippets from './snippets.js'
 import tryTool from './tryTool.js'
+import find from './find.js'
+import findComputed from './findComputed.js'
 import lifecycle from './lifecycle.js'
 import billingComputed from './billingComputed.js'
 import catalogComputed from './catalogComputed.js'
@@ -36,8 +38,8 @@ import onboardingComputed from './onboardingComputed.js'
 import detailsComputed from './detailsComputed.js'
 export default {
  data,
- computed: {...resourcesComputed, ...billingComputed, ...catalogComputed, ...sessionComputed, ...agentsComputed, ...onboardingComputed, ...detailsComputed},
- methods: {...resources, setElement(name, element) { this.elements[name] = element }, ...session, ...team, ...keys, ...agents, ...projects, ...governance, ...activity, ...billing, ...referrals, ...secrets, ...tools, ...skills, ...format, ...onboarding, ...analytics, ...help, ...connections, ...sharing, ...navigation, ...catalog, ...details, ...admin, ...snippets, ...tryTool, ...lifecycle},
+ computed: {...resourcesComputed, ...billingComputed, ...catalogComputed, ...sessionComputed, ...agentsComputed, ...onboardingComputed, ...detailsComputed, ...findComputed},
+ methods: {...resources, setElement(name, element) { this.elements[name] = element }, ...session, ...team, ...keys, ...agents, ...projects, ...governance, ...activity, ...billing, ...referrals, ...secrets, ...tools, ...skills, ...format, ...onboarding, ...analytics, ...help, ...connections, ...sharing, ...navigation, ...catalog, ...details, ...admin, ...snippets, ...tryTool, ...find, ...lifecycle},
  watch:{
     // a11y (WCAG 2.4.3): when a dialog/drawer opens, move focus INTO it (was left on the trigger)
     newTool(v){ this.focusOverlay(v); }, newSkill(v){ this.focusOverlay(v); }, newOrg(v){ this.focusOverlay(v); },
@@ -45,6 +47,9 @@ export default {
     tryTool(v){ this.focusOverlay(v); }, 'welcome.on'(v){ this.focusOverlay(v); }, reqAsk(v){ this.focusOverlay(v); },
     'welcome.agent'(v){ try{ localStorage.setItem('treg-agent', v); }catch(e){} },  // see _restoreAgent
     activeOrgId(){ this.resetRenameForm(); },  // team switch or first load: prefill the rename form
+    // Editing the box after a find starts a new question: the answer to the old one goes away
+    // and the shelves go back to filtering by name.
+    q(v){ if(this.findActive && this.view==='connections' && v.trim()!==this.find.q) this.findExit(); },
   },
  provide() { return provideDashboard(this) },
  async mounted() {

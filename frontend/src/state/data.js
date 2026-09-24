@@ -1,5 +1,6 @@
 import { createElements } from './context'
 import { LS } from './constants.js'
+import { FIND_EMPTY } from './find.js'
 export default function data(){
     let cfg={active:null,orgs:{}}; try{ cfg=JSON.parse(localStorage.getItem(LS))||cfg; }catch(e){}
     return {
@@ -68,6 +69,8 @@ export default function data(){
       // Endpoint catalog (GET /catalog/*): the platform axis of the marketplace. Everything here is
       // optional — a server without the catalog routes just renders no platform shelf.
       plats:{list:[], loaded:false, loading:false},
+      // Find tools for a job (state/find.js): phase idle | recall | reading | done | error
+      find:{...FIND_EMPTY}, findCopied:'',
       platSlug:null, platData:null, platErr:'', platLoading:false,
       platShelfOpen:{},    // category → its featured shelf has been expanded to the full tile list
       // The ledger's filter bar. All three narrow the SAME row list, and a section with no

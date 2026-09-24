@@ -17,6 +17,7 @@ export default {
     // Same Vue views as the signed-in marketplace — this is one UI, not a second implementation.
     catalogFromPath(p){
       if(p==='/catalog' || p==='/catalog/') return {view:'connections', slug:null};
+      if(p==='/search' || p==='/search/') return {view:'find', slug:null};
       const m=/^\/catalog\/([^/]+)\/?$/.exec(p||'');
       return m ? {view:'platform', slug:decodeURIComponent(m[1])} : null;
     },
@@ -26,6 +27,10 @@ export default {
     viewFromHash(){ let v=(location.hash||'').replace('#','');
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
       return ['tools','orgs','activity','usage','admin','help','secrets','start','resources','connections','referrals'].includes(v)?v:null; },
+// Land on a public catalog URL (see catalogFromPath): the finder page, a platform shelf, or the index.
+    openCatalogRoute(r){
+      if(r.view==='find'){ this.view='find'; this.loadPlatforms(); return; }
+      if(r.slug) this.openPlatform(r.slug, true); else this.go('connections', true); },
 openPlatform(slug, fromPop){ this.resetConfirms();
       this.detail=null; this.platSlug=slug; this.view='platform'; this.platOpen={}; this.epOpen={}; this.epTab={}; this.platEx={}; this.platActionsOpen=false;
       this.platClearFilters(); this.platCopied='';
@@ -53,7 +58,9 @@ async loadPlatform(){ if(!this.platSlug) return;
 // Tile furniture. Catalog labels carry a parenthetical or an em-dash gloss ("Google Search
     // (SERPs, keyword data)") that reads as noise under a logo — the tile shows the name, the
     // title attribute keeps the whole thing.
-    platShort(label){ return String(label||'').split(' — ')[0].split(' (')[0].trim(); },
+    // The name filter behind the Catalog search box, shared by the shelves and the tab counts.
+    platNameHit(p, q){ return ((p.label||'')+' '+(p.slug||'')+' '+(p.providers||[]).join(' ')).toLowerCase().includes(q); },
+platShort(label){ return String(label||'').split(' — ')[0].split(' (')[0].trim(); },
 platInitial(pl){ return (this.platShort(pl.label)||pl.slug||'?').slice(0,1).toUpperCase(); },
 // Deterministic hue from the slug: an undrawn platform keeps the same colour across reloads
     // and differs from its neighbours, with no colour table to maintain.

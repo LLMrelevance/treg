@@ -128,3 +128,66 @@ test('mainline team resources survive navigation and open the voice tools', asyn
   await drawer.getByRole('button', { name: 'API', exact: true }).click()
   await expect(drawer.locator('pre')).toContainText('"reference_id": "test-private-voice"')
 })
+
+// /catalog/find needs a relevance judge the disposable server does not have, so the stream is
+// mocked here: the browser tests pin the pages' handling of the two events, not the judge.
+async function mockFind(page: Page, rows: object[], verdict = 'strong') {
+  await page.route('**/catalog/find?**', route => route.fulfill({
+    contentType: 'application/x-ndjson',
+    body: JSON.stringify({ event: 'candidates', candidates: [
+      { id: 'google-search-console.performance', platform: 'search-console' },
+      { id: 'reddit.search', platform: 'reddit' }] }) + '\n'
+      + JSON.stringify({ event: 'judged', verdict, read: 2, high: 0.7, rows }) + '\n',
+  }))
+}
+const consoleRow = { id: 'google-search-console.performance', name: 'Search performance',
+  provider: 'google-search-console', provider_display: 'Google Search Console', platform: 'search-console',
+  platform_label: 'Google Search Console', capability: 'search-console.performance',
+  capability_description: 'Clicks, impressions, CTR & top queries', cost: { type: 'free' }, p: 0.84 }
+
+test('the catalog search box answers a described job and lights the shelves', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await signIn(page)
+  await mockFind(page, [consoleRow])
+  await page.goto('/app#connections')
+  const box = page.getByRole('textbox', { name: 'Search' })
+  await box.fill('tiktok')
+  await expect(page.getByRole('button', { name: /Search all tools for/ })).toBeVisible()   // a name filters, Enter still searches
+  await box.fill('why is my blog losing google traffic')
+  await expect(page.getByRole('button', { name: /Find tools for/ })).toBeVisible()   // a job, not a name
+  await expect(page.getByText(/No catalogued platforms/)).toHaveCount(0)
+  await box.press('Enter')
+  await expect(page.getByText('Clicks, impressions, CTR & top queries')).toBeVisible()
+  await expect(page.getByText(/1 tool for/)).toBeVisible()
+  await expect(page.locator('.pt-card.find-hit')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Clear the search' }).click()
+  await expect(page.locator('.pt-card.find-hit')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('the public search page lands the fitting platforms in their cards', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await mockFind(page, [consoleRow])
+  await page.goto('/search')
+  await expect(page.getByRole('heading', { name: /What does your agent/ })).toBeVisible()
+  await expect(page.locator('.sp-tile').first()).toBeVisible()
+  await page.getByLabel('Describe the job').press('Enter')                          // empty: the placeholder is the query
+  await expect(page.getByLabel('Describe the job')).toHaveValue(/Find the emails of CTOs/)
+  await expect(page).toHaveURL(/\/search\?q=Find/)
+  await page.getByLabel('Describe the job').fill('why is my blog losing google traffic')
+  await page.getByLabel('Describe the job').press('Enter')
+  await expect(page.getByRole('button', { name: 'Google Search Console' })).toBeVisible()
+  await expect(page).toHaveURL(/\/search\?q=why/)
+  await expect(page.locator('.sp-tile.landed')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Google Search Console' }).click()          // signed out: sign in first
+  await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Copy for your agent' })).toBeVisible()
+  await mockFind(page, [], 'none')
+  await page.getByLabel('Describe the job').fill('wire money to my landlord')
+  await page.getByLabel('Describe the job').press('Enter')
+  await expect(page.getByText('Nothing in the catalog does this yet.')).toBeVisible()
+  expect(errors).toEqual([])
+})

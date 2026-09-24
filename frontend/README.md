@@ -72,6 +72,8 @@ Production defaults to the frozen legacy Dashboard frontend. Configure the Web s
   include stable account buckets; email changes, team switches and browser changes do not reshuffle them.
 
 Anonymous visitors (including the public catalog and token-only browsers) stay on legacy.
+The one exception is `/search`, which exists only in this frontend: it is served to every visitor
+while rollout is enabled and returns 404 when rollout is disabled.
 After browser sign-in, the reload selects the account's frontend. All dashboard, catalog and
 shared-link entries use the same selection and private, no-store HTML. Frontend selection grants
 no API permissions. Legacy JavaScript is frozen under its own revision-qualified asset URLs.

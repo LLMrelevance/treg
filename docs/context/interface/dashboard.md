@@ -56,6 +56,12 @@ sources:
   - frontend/src/state/boot.js
   - frontend/src/state/catalog.js
   - frontend/src/state/catalogComputed.js
+  - frontend/src/state/find.js
+  - frontend/src/state/findComputed.js
+  - frontend/src/state/pile.ts
+  - frontend/src/components/FindAnswer.vue
+  - frontend/src/pages/SearchPage.vue
+  - frontend/src/components/LandingNavigation.vue
   - frontend/src/state/connections.js
   - frontend/src/state/constants.js
   - frontend/src/state/context.ts
@@ -998,6 +1004,43 @@ registry loads. Browser tests in `frontend/e2e/` cover navigation and interactio
 CSS classes or template source spelling. `tests/test_catalog_api.py` locks the server half: the section order, the
 merged/single split, the domain resolution ladder, and a delivery-mode path segment never becoming a
 subject.
+
+## Find tools for a job (Catalog search box, `/search`)
+
+Both surfaces read `GET /catalog/find` (see `architecture/search-experiment.md`) through
+`state/find.js`, which parses the NDJSON stream, aborts a superseded request, and keeps one `find`
+state (`idle | recall | reading | done | error`). `state/findComputed.js` groups the judged rows by
+capability: the job is the card, its providers are the lines in the server's order, and the card's
+fit is its best provider's. The page never re-ranks providers.
+
+- **Catalog search** (`CatalogPage.vue`, `view==='connections'`, signed in or on the public
+  catalog). A large box under the page title, not the corner search the other views use. A short
+  query is a name and keeps the instant platform filter; four words or a question mark makes it a
+  job and shows **Find tools ↵** (`isJobQuery`). Enter renders `FindAnswer.vue` between the box and
+  the tabs: one list, a row per job (platform, providers, lowest price, a fit bar), strong fits
+  first and weaker ones after them in a lighter tone, with no bucket labels; **Copy** appears on
+  hover, the row opens the platform. `closest` adds one line saying nothing fits closely; `none` is
+  a single sentence with Request a tool pre-filled. The shelves stay: platforms the answer landed on
+  sort first with a match count, the rest dim. Clearing the box (× or Esc) returns to browsing. A
+  name that matches no platform says so and points at Enter, instead of the old "no catalogued
+  platforms on this server" message; tab counts follow the name filter. The page title's catalog
+  size is computed from `/catalog/platforms` (`toolCountText`), never hard-coded.
+- **`/search`** (`SearchPage.vue`, a public view like `/catalog`, public for members too). It
+  looks like the landing page's first screen, not the dashboard: the landing top bar
+  (`LandingNavigation.vue`; "Open dashboard" for a member), the landing tokens, and the landing
+  hero's glyph field (`/media/landing/hero-particles.js`, mounted through `window.tregMountField`
+  and ticked by this page). One viewport tall, never scrolls; a long answer scrolls inside its
+  panel. Every platform is a tile in a Matter.js pile (`state/pile.ts`) on the floor of the page:
+  tiles can be picked up and thrown, the recall's platforms hop while the judge reads, the fitting
+  ones leave the physics world and fly to their answer cards, and the next search drops them back
+  in; × or Esc clears the answer the same way. An empty box submits its placeholder. Reduced motion
+  settles the pile unseen and skips the flights. `?q=` runs a search on load and is what **Share**
+  copies. Any result (a card, a job line, a tile) opens that platform in the dashboard: directly
+  for a member; otherwise sign-in first, the destination kept in localStorage for ten minutes and
+  resumed by boot (`findResume`) however sign-in returns, and first-run onboarding leaves a
+  visitor on that platform rather than on Getting started. The server serves the new frontend here
+  to every visitor while the rollout is enabled (there is no legacy view of this page) and 404s
+  when the rollout switch forces legacy.
 
 ## Code surfaces (every page)
 Snippet blocks (`.lc-codewrap` on Getting started, the in-app CLI tutorial's `.term` panes, the
