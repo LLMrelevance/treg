@@ -82,4 +82,3 @@ async def await_terminal(
         if outcome in {"success", "failure", "billed_failure"}:
             return AsyncResult(outcome, extracted.task_id, response, raw, document)
         last_detail = "provider is still processing"
-

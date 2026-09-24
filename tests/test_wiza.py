@@ -176,6 +176,13 @@ def test_wiza_catalog_covers_every_official_path_and_bounds_async_platform_use()
     assert catalog.by_id["wiza.people.reveal.start"]["cost"]["value"] == 8
     assert catalog.by_id["wiza.people.email.find"]["terminal_example_file"]
     assert catalog.by_id["wiza.people.phone.find"]["terminal_example_file"]
+    for endpoint_id in ("wiza.people.email.find", "wiza.people.phone.find"):
+        _, body = catalog.adapters[endpoint_id].to_upstream({
+            "full_name": "Jane Example", "domain": "example.com",
+        })
+        assert body["individual_reveal"] == {
+            "full_name": "Jane Example", "domain": "example.com",
+        }
     assert all(catalog.by_id[eid]["input"]["body"]["size"]["enum"] == [1]
                for eid in ("wiza.people.search", "wiza.companies.search"))
     assert all(catalog.by_id[eid]["input"]["body"]["size"]["required"] is True
@@ -225,7 +232,7 @@ async def test_wiza_routed_email_waits_for_terminal_result_and_settles_exact_usa
     assert result.headers["x-treg-cost-micro"] == "50000"
     assert await _balance(clients) == before - 50_000
     assert calls[0][2] == {
-        "individual_reveal": {"full_name": "Jane Example", "company_domain": "example.com"},
+        "individual_reveal": {"full_name": "Jane Example", "domain": "example.com"},
         "enrichment_level": "partial",
         "email_options": {"accept_work": True, "accept_personal": False, "accept_generic": False},
     }

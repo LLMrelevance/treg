@@ -211,8 +211,8 @@ endpoints:
             profile_url: {type: string, required: false}
             email: {type: string, required: false}
             full_name: {type: string, required: false}
-            company_name: {type: string, required: false}
-            company_domain: {type: string, required: false}
+            company: {type: string, required: false}
+            domain: {type: string, required: false}
         enrichment_level: {type: string, required: true, enum: [partial], example: partial}
         email_options:
           type: object
@@ -272,8 +272,8 @@ endpoints:
             profile_url: {type: string, required: false}
             email: {type: string, required: false}
             full_name: {type: string, required: false}
-            company_name: {type: string, required: false}
-            company_domain: {type: string, required: false}
+            company: {type: string, required: false}
+            domain: {type: string, required: false}
         enrichment_level: {type: string, required: true, enum: [phone], example: phone}
     body_allowlist: true
     platform_request: {body.enrichment_level: phone}

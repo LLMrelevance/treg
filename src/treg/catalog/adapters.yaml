@@ -123,7 +123,7 @@ adapters:
   wiza.people.email.find:
     accepts: [[full_name, domain], [first_name, last_name, domain], [linkedin_url]]
     in: {full_name: body.individual_reveal.full_name,
-         domain: body.individual_reveal.company_domain,
+         domain: body.individual_reveal.domain,
          linkedin_url: body.individual_reveal.profile_url}
     in_expr: {body.individual_reveal.full_name: "join(first_name, last_name)"}
     const: {body.enrichment_level: partial,
@@ -352,7 +352,7 @@ adapters:
     in: {linkedin_url: body.individual_reveal.profile_url,
          email: body.individual_reveal.email,
          full_name: body.individual_reveal.full_name,
-         domain: body.individual_reveal.company_domain}
+         domain: body.individual_reveal.domain}
     in_expr: {body.individual_reveal.full_name: "join(first_name, last_name)"}
     const: {body.enrichment_level: phone}
     out: {phone: "coalesce(data.mobile_phone, data.phone_number, data.phones[0].number)",
