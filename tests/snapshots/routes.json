@@ -77,6 +77,15 @@
       "GET",
       "HEAD"
     ],
+    "name": "catalog_find",
+    "path": "/catalog/find"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "catalog_endpoint",
     "path": "/catalog/endpoints/{endpoint_id}"
   },
@@ -97,6 +106,15 @@
     ],
     "name": "catalog_index",
     "path": "/catalog"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "search_page",
+    "path": "/search"
   },
   {
     "kind": "APIRoute",

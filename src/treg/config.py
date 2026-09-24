@@ -319,6 +319,16 @@ class Settings(BaseSettings):
     # Past this the search answers from the baseline alone; the row records `judge_error=timeout`.
     # Measured at 30 candidates: about 1.2-1.5 s per answer on a quiet day, so 1.5 sits on the edge.
     typesafe_timeout_s: float = 2.5
+    # "Find tools for a job" (application.catalog_find): the same judge served to PEOPLE on the
+    # dashboard's Catalog page and the public /search page. Its recall is wider than the MCP
+    # experiment's: the judge scores a request's candidates in parallel, so 60 costs no more wall
+    # time than 30 and lets rows the lexical order ranks low (a Search Console report for "why is
+    # my blog losing traffic") reach the judge at all. A person is waiting on a page that animates
+    # the wait, so the timeout is looser than an agent's search. Rate limits bound anonymous use.
+    find_candidates: int = 60
+    find_timeout_s: float = 6.0
+    find_max_per_ip_hour: int = 40
+    find_max_per_hour: int = 3000
     # DEFAULT per-org, per-UTC-day limit on tier-4 spend, for a team that has not set its own
     # `Org.daily_cap_micro`. 0 = no default limit. A team may set its own figure to anything,
     # including 0 for no limit — the limit is the team's protection against a runaway agent

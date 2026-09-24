@@ -73,12 +73,17 @@ def _record_dashboard_served(user: User, new: bool) -> None:
 
 
 def _dashboard_index(user: User | None = None) -> Path:
-    settings = get_settings()
     new = _new_dashboard(user)
     if user is not None:
         _record_dashboard_served(user, new)
     if not new:
         return _WEB_DIR / "dashboard-legacy" / "index.html"
+    return _new_dashboard_index()
+
+
+def _new_dashboard_index() -> Path:
+    """The new frontend's index, whoever asks: the rollout decision is `_dashboard_index`'s."""
+    settings = get_settings()
     if settings.frontend_dev:
         host = urlsplit(settings.public_url).hostname
         if "sqlite" not in settings.database_url or host not in {"localhost", "127.0.0.1", "::1"}:
@@ -130,7 +135,7 @@ app = catalog_pages_router
 # `/catalog/<slug>` is registered after the JSON routes so /catalog/platforms, /catalog/search,
 # /catalog/endpoints/… and /catalog/examples/… keep matching first. Registration order alone is a
 # thin guarantee, so the reserved names are also refused explicitly below.
-_CATALOG_RESERVED = {"platforms", "search", "endpoints", "examples"}
+_CATALOG_RESERVED = {"platforms", "search", "find", "endpoints", "examples"}
 
 _GH = "https://github.com/superdesigndev/treg"
 
@@ -303,7 +308,7 @@ def _page(title: str, description: str, path: str, body: str, ld: list[dict],
 
 
 def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
-                      prerender: str, user: User | None = None) -> HTMLResponse:
+                      prerender: str, user: User | None = None, *, index: Path | None = None) -> HTMLResponse:
     """Serve the dashboard SPA at a PUBLIC catalog URL, with the head a crawler needs.
 
     The public catalog is not a second implementation of the marketplace — it IS the marketplace.
@@ -324,7 +329,7 @@ def _spa_catalog_page(title: str, description: str, path: str, ld: list[dict],
        implementation this design avoids. It carries the TEXT (names, summaries, providers, prices),
        which is what a crawler that does not run scripts is here for.
     """
-    index = _dashboard_index(user)
+    index = index or _dashboard_index(user)
     if not index.exists():
         return HTMLResponse("<h3>tools-registry API. Dashboard not bundled.</h3>")
     base = get_settings().public_url.rstrip("/")
@@ -468,6 +473,28 @@ async def catalog_index(treg_session: str = Cookie(default=""), db: AsyncSession
         f"Browse {total_eps:,} endpoints across {len(rows)} platforms and {len(providers)} providers "
         "— SEO, social, enrichment, ads and scraping data. One key, priced per call, no provider signup.",
         "/catalog", ld, prerender, await _user_from_session(treg_session, db))
+
+
+@app.get("/search", include_in_schema=False)
+async def search_page():
+    """Find tools by describing the job: the new frontend's public find view over `/catalog/find`.
+
+    Only the new frontend has this page, so it is served to every visitor while the rollout is
+    enabled (anonymous included), with no per-user rollout check, and is absent when the rollout
+    switch forces legacy."""
+    if not get_settings().dashboard_rollout_enabled:
+        raise HTTPException(status_code=404, detail="not found")
+    rows = _platform_rows()
+    prerender = (_PRERENDER_CSS
+                 + "<h1>Find tools for a job</h1>"
+                 + '<p class="lede">Describe what your agent needs to do in plain words, and the tools in '
+                   f"the treg catalog that can do it rise out of the {len(rows)} platforms. "
+                   'Prefer to browse? <a href="/catalog">The catalog</a> lists every platform.</p>')
+    return _spa_catalog_page(
+        "Find tools for your agent | treg",
+        "Describe the job in plain words and see which tools in the treg catalog can do it, "
+        "priced per call, callable through one key.",
+        "/search", [], prerender, index=_new_dashboard_index())
 
 
 @app.get("/catalog/{slug}", include_in_schema=False)

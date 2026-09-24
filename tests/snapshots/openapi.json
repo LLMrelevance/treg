@@ -5314,6 +5314,45 @@
         "summary": "Catalog Endpoint"
       }
     },
+    "/catalog/find": {
+      "get": {
+        "description": "Open, rate limited: find the endpoints that can do a described JOB (application.catalog_find).\n\nStreams newline-delimited JSON, two events: `candidates` (the lexical recall, immediately) and\n`judged` (the relevance judge's kept rows and a verdict, when it answers). The pages that call\nthis animate the gap between them. Agents keep `/catalog/search` and MCP `catalog_search`.",
+        "operationId": "catalog_find_catalog_find_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catalog Find"
+      }
+    },
     "/catalog/platforms": {
       "get": {
         "description": "Open: the platform shelves of the endpoint catalog, busiest first.",

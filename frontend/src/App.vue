@@ -14,9 +14,11 @@ import AdminPage from './pages/AdminPage.vue'
 import GettingStartedPage from './pages/GettingStartedPage.vue'
 import ReferralsPage from './pages/ReferralsPage.vue'
 import HelpPage from './pages/HelpPage.vue'
+import SearchPage from './pages/SearchPage.vue'
 import SignedOutPage from './components/SignedOutPage.vue'
 import BrandMark from './components/BrandMark.vue'
 import PublicNavigation from './components/PublicNavigation.vue'
+import LandingNavigation from './components/LandingNavigation.vue'
 import DashboardNavigation from './components/DashboardNavigation.vue'
 import ConnectTokenDialog from './dialogs/ConnectTokenDialog.vue'
 import TopUpDialog from './dialogs/TopUpDialog.vue'
@@ -36,7 +38,7 @@ import RunToolDialog from './dialogs/RunToolDialog.vue'
 import CallDetailsDialog from './dialogs/CallDetailsDialog.vue'
 import TryEndpointDialog from './dialogs/TryEndpointDialog.vue'
 import SignInDialog from './components/SignInDialog.vue'
-export default { ...controller, components: { ...controller.components, TeamResourcesPage, FishVoiceDialog, CatalogPage, ProviderPage, PlatformPage, ToolsPage, DetailPage, SecretsPage, TeamPage, ActivityPage, AdminPage, GettingStartedPage, ReferralsPage, HelpPage, SignedOutPage, BrandMark, PublicNavigation, DashboardNavigation, ConnectTokenDialog, TopUpDialog, AgentGuideDialog, ConnectionMethodDialog, ResourcePickerDialog, ExtraCredentialDialog, EditToolDialog, AcceptInvitesDialog, WelcomeDialog, CopyToolDialog, ImportSkillDialog, RequestToolDialog, ShareDialog, RecipeDialog, RunToolDialog, CallDetailsDialog, TryEndpointDialog, SignInDialog } }
+export default { ...controller, components: { ...controller.components, TeamResourcesPage, FishVoiceDialog, CatalogPage, ProviderPage, PlatformPage, ToolsPage, DetailPage, SecretsPage, TeamPage, ActivityPage, AdminPage, GettingStartedPage, ReferralsPage, HelpPage, SearchPage, SignedOutPage, BrandMark, PublicNavigation, LandingNavigation, DashboardNavigation, ConnectTokenDialog, TopUpDialog, AgentGuideDialog, ConnectionMethodDialog, ResourcePickerDialog, ExtraCredentialDialog, EditToolDialog, AcceptInvitesDialog, WelcomeDialog, CopyToolDialog, ImportSkillDialog, RequestToolDialog, ShareDialog, RecipeDialog, RunToolDialog, CallDetailsDialog, TryEndpointDialog, SignInDialog } }
 </script>
 
 <template>
@@ -59,14 +61,17 @@ export default { ...controller, components: { ...controller.components, TeamReso
          (org switcher, global tool search, member nav) is furniture for a job they have not started.
          They get the marketing site's nav instead, so /catalog reads as part of treg.to rather than
          as a dashboard someone forgot to lock. -->
-    <PublicNavigation v-if="publicCatalog" />
+    <LandingNavigation v-if="view==='find'" />
+    <PublicNavigation v-else-if="publicCatalog" />
     <DashboardNavigation v-else />
     <img v-if="authed && !publicCatalog && view==='start'" class="rd-background" src="/media/redesign/ascii-background.jpg" alt="" aria-hidden="true">
     <div v-if="startCopyError" class="rd-copy-error" role="alert">{{startCopyError}}<br><button class="btn sm" @click="startCopyError=''">Dismiss</button></div>
     <span class="rd-sr-only" role="status">{{startCopied ? 'Copied to clipboard' : ''}}</span>
     <div class="layout" :class="{solo:publicCatalog}">
-      <main id="maincontent" tabindex="-1">
-        <div v-if="!publicCatalog && (view==='tools'||view==='resources'||view==='connections')" class="rd-view-search search"><img src="/media/redesign/search.svg" alt=""><input :ref="el => setElement('search', el)" v-model="q" :placeholder="view==='connections'?'Search the catalog…':view==='resources'?'Search team resources…':'Search your own tools…'" aria-label="Search"></div>
+      <main id="maincontent" tabindex="-1" :class="{flush:view==='find'}">
+        <!-- The Catalog page has its own, larger search (CatalogPage.vue): there it also finds tools
+             for a described job. -->
+        <div v-if="!publicCatalog && (view==='tools'||view==='resources')" class="rd-view-search search"><img src="/media/redesign/search.svg" alt=""><input :ref="el => setElement('search', el)" v-model="q" :placeholder="view==='resources'?'Search team resources…':'Search your own tools…'" aria-label="Search"></div>
         <div v-if="err" class="banner">{{err}}</div>
         <div v-if="pendingInvites.length" class="banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span>You've been invited:</span>
@@ -78,6 +83,9 @@ export default { ...controller, components: { ...controller.components, TeamReso
 
         <!-- TOOLS -->
         <CatalogPage v-if="view==='connections'" />
+
+        <!-- FIND: /search, a described job answered over the platform pile -->
+        <SearchPage v-if="view==='find'" />
 
         <!-- MARKETPLACE: one integration -->
         <ProviderPage v-if="view==='provider' && mkProvider" />

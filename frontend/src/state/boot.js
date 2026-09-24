@@ -68,11 +68,14 @@ export default async function boot(){
       // Share-born arrival (/app/skills/x?invite_org=N from the invite email): accept silently and
       // enter that team — the emailed "Sign in & accept" click was the consent. Otherwise the normal
       // first-run / invite-banner flow.
+      // A result clicked on /search before sign-in: continue to it now.
+      if(this.findResume()){ this.maybeOnboard(); return; }
       if(mkRoute){ this.maybeOnboard(); this.openProvider(mkRoute, true); return; }
       // Signed in on a /catalog URL: the same views, but as a member — so `publicCatalog` is
       // dropped and the shell comes back in full (vault, activity, try-it).
-      if(catRoute){ this.publicCatalog=false; this.maybeOnboard();
-        if(catRoute.slug) this.openPlatform(catRoute.slug, true); else this.go('connections', true);
+      // /search stays a public page for members too: it is a place to ask, not a dashboard view.
+      if(catRoute){ this.publicCatalog=catRoute.view==='find'; if(catRoute.view!=='find') this.maybeOnboard();
+        this.openCatalogRoute(catRoute);
         return; }
       const pfRoute=this.platformFromHash();
       if(pfRoute){ this.maybeOnboard(); this.openPlatform(pfRoute, true); return; }
@@ -90,8 +93,8 @@ export default async function boot(){
       // A token holder on a /catalog URL is a member, not a public visitor: same treatment as the
       // session branch. Without this the route falls through to viewFromHash() — which is null for
       // a path route — and a shelf link lands on Getting started instead.
-      if(catRoute){ this.publicCatalog=false;
-        if(catRoute.slug) this.openPlatform(catRoute.slug, true); else this.go('connections', true);
+      if(catRoute){ this.publicCatalog=catRoute.view==='find';
+        this.openCatalogRoute(catRoute);
         return; }
       const pfTok=this.platformFromHash();
       if(mkRoute) this.openProvider(mkRoute, true); else if(pfTok) this.openPlatform(pfTok, true); else if(route) this.openDetail(route.kind, route.name, true);
@@ -108,7 +111,7 @@ export default async function boot(){
       // Platform tab (the provider shelf) fills for a signed-out visitor too — only /connections
       // needs a session, and its failure is caught. Without this the tab reads "Platform 0" and
       // renders blank in an incognito window.
-      if(catRoute.slug) this.openPlatform(catRoute.slug, true); else { this.view='connections'; this.loadConnections(); }
+      if(catRoute.view==='find'){ this.view='find'; this.loadPlatforms(); } else if(catRoute.slug) this.openPlatform(catRoute.slug, true); else { this.view='connections'; this.loadConnections(); }
       return; }
     if(!inv && !linkOrg && !route && !qs.get('invite_expired') && !ref && !oauthSignin){ location.replace('/'); return; }  // logged-out plain visit → the marketing landing owns the front door. `ref` is a use-case page's CTA (/app?ref=p1), so keep that attribution while opening sign-in in place.
     if(route){ this.shareGate=route; this.demo.signin=true; }  // shared link while logged out: the focused gate (no sandbox mint, no tour); after sign-in the boot lands on it (email verify reloads in place; OAuth restores via the treg-next stash)
