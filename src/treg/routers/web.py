@@ -485,11 +485,15 @@ async def search_page():
     if not get_settings().dashboard_rollout_enabled:
         raise HTTPException(status_code=404, detail="not found")
     rows = _platform_rows()
-    prerender = (_PRERENDER_CSS
-                 + "<h1>Find tools for a job</h1>"
-                 + '<p class="lede">Describe what your agent needs to do in plain words, and the tools in '
-                   f"the treg catalog that can do it rise out of the {len(rows)} platforms. "
-                   'Prefer to browse? <a href="/catalog">The catalog</a> lists every platform.</p>')
+    # Until the page's script runs, a visitor sees the page's own ground and nothing else: a
+    # different first screen that swaps out would read as a loading step. The words are for readers
+    # that never run the script, so they are visually hidden rather than drawn.
+    prerender = ('<style>#prerender{position:fixed;inset:0;z-index:100;background:#f4f4f1}'
+                 '#prerender>div{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}</style>'
+                 "<div><h1>What does your agent need to do?</h1>"
+                 '<p>Describe the job in plain words and see which tools in the treg catalog can do it, '
+                 f'across {len(rows)} platforms. Prefer to browse? <a href="/catalog">The catalog</a> '
+                 "lists every platform.</p></div>")
     return _spa_catalog_page(
         "Find tools for your agent | treg",
         "Describe the job in plain words and see which tools in the treg catalog can do it, "

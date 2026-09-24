@@ -69,6 +69,7 @@ export default {
   mounted(){
     this.reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
     document.documentElement.classList.add('sp-lock');
+    document.getElementById('prerender')?.remove();   // the server's placeholder (routers/web.py search_page)
     this.pile=new Pile(poses=>{
       for(const [id,p] of poses){ const el=this.els[id]; if(!el) continue; el.style.transform=poseTransform(p, this.size); el.style.visibility='visible'; }
     });

@@ -31,6 +31,9 @@ export default async function boot(){
       if(v==='billing'){ this.orgTab='billing'; v='orgs'; }
       if(['tools','orgs','activity','usage','admin','help','secrets','start','resources','connections','referrals'].includes(v)) this.go(v, true);
     });
+    // /search needs no session to draw, so it does not wait for one: the page paints now, and the
+    // session (the top bar's buttons, a result clicked before sign-in) follows when /auth/me answers.
+    if(this.catalogFromPath(location.pathname)?.view==='find'){ this.publicCatalog=true; this.view='find'; this.bootReady=true; }
     this.meta = await fetch('/meta',{headers:{'ngrok-skip-browser-warning':'1'}}).then(r=>r.json()).catch(()=>this.meta);
     this.proxy = this.meta.public_url || location.origin;
     this.initAnalytics();
@@ -64,6 +67,7 @@ export default async function boot(){
       } }
     this._restoreAgent();
     const me = await fetch('/auth/me',{credentials:'include',headers:{'ngrok-skip-browser-warning':'1'}}).then(r=>r.ok?r.json():null).catch(()=>null);
+    this.sessionChecked=true;
     if(me){ this.sessionMode=true; this.me=me.email; this.isAdmin=!!me.is_superadmin; this.onboarded=!!me.onboarded; this.icHash=me.intercom_user_hash||''; await this.loadAll(); this.analyticsIdentify(); this.initIntercom();
       // Share-born arrival (/app/skills/x?invite_org=N from the invite email): accept silently and
       // enter that team — the emailed "Sign in & accept" click was the consent. Otherwise the normal
