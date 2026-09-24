@@ -1,7 +1,7 @@
 <script>
 import { useDashboard } from '../state/context'
 import { Pile, poseTransform, tileSize } from '../state/pile'
-import { groupBest } from '../state/find.js'
+import { groupBest, jobGroups } from '../state/find.js'
 
 // /search: every platform in the catalog is a tile, dropped under gravity (state/pile.ts, Matter.js)
 // into a pile on the floor of the page. A described job (GET /catalog/find, see state/find.js) makes
@@ -10,13 +10,16 @@ import { groupBest } from '../state/find.js'
 //
 // The page is exactly one viewport tall: the pile's floor is the bottom of the screen, and a long
 // answer scrolls inside its own panel, never the page.
+//
+// The examples are the jobs the landing and use-case pages sell (/people-search, /ugc, /use-cases/*),
+// one each, shortened from those pages' own prompts. Keep each one a strong fit on /catalog/find.
 const EXAMPLES = [
-  'Find the emails of CTOs at Series A fintech startups in Berlin',
-  'Which competitors are running Facebook ads right now?',
-  'Why is my blog losing Google traffic?',
-  'Apple stock closing prices for last year',
-  'Make a 10 second product video from a photo',
-  'What are people on Reddit saying about our new pricing?',
+  'Find heads of growth at US SaaS companies and their work emails',
+  'Show me every ad Notion is running on Meta right now',
+  'Keywords stripe.com ranks for on Google',
+  'Make a talking UGC video ad for my product',
+  'What is Reddit saying about our pricing?',
+  'Does ChatGPT mention my brand?',
 ]
 const LAND = 'transform .8s cubic-bezier(.3,1.2,.4,1)'
 
@@ -25,11 +28,23 @@ export default {
   data(){ return { text:'', examples:EXAMPLES, size:48, floor:220, reduced:false, landed:[], dragging:null, flung:null } },
   computed: {
     platforms(){ return this.plats.list.filter(p=>(p.category||'Other')!=='Other'); },
-    // One card per platform the answer landed on, best fit first; each lists its jobs.
+    // A described job is answered by vendor: one card per vendor, best fit first, under the
+    // vendor's own logo, listing the jobs that vendor sells here. A bare name ("google") asks what
+    // is on those platforms, so it is answered by platform, each card listing its jobs.
+    byVendor(){ return this.find.verdict!=='name'; },
+    // Every card names one platform; the first card on a platform is where that platform's tile
+    // lands (`lands`), later ones show a still copy of it.
     cards(){
       if(this.find.phase!=='done') return [];
-      return groupBest(this.findGroups, this.find.verdict, g=>g.platform,
-        (g, slug)=>({slug, label:this.platShort(g.platform_label||g.platform)}), 'groups').slice(0,12);
+      const byVendor=this.byVendor, seen=new Set();
+      return groupBest(this.find.rows, r=>byVendor ? r.provider : r.platform, (r, slug)=>{
+        const platform_label=this.platShort(r.platform_label||r.platform);
+        return {slug, platform:r.platform, platform_label, label:byVendor ? r.provider_display||r.provider : platform_label};
+      }, 'rows').slice(0,12).map(c=>{
+        const card={...c, jobs:jobGroups(c.rows), lands:!seen.has(c.platform)};
+        seen.add(c.platform);
+        return card;
+      });
     },
     reading(){ return this.findBusy ? new Set(this.findCandidatePlatforms) : new Set(); },
     readingList(){ return this.platforms.map(p=>p.slug).filter(s=>this.reading.has(s)); },
@@ -181,13 +196,14 @@ export default {
       const slots=this.measureSlots(), flying=[];
       // Every tile to its start pose first, one layout for all of them, then every flight at once.
       this.cards.forEach((c,i)=>{
-        const el=this.els[c.slug]; if(!el || !slots[c.slug] || this.landed.includes(c.slug)) return;
-        const pose=this.pile.remove(c.slug);
-        const from=pose || {x:slots[c.slug].x, y:this.$refs.stage.clientHeight, angle:0};
+        const slug=c.platform;
+        const el=this.els[slug]; if(!c.lands || !el || !slots[slug] || this.landed.includes(slug)) return;
+        const pose=this.pile.remove(slug);
+        const from=pose || {x:slots[slug].x, y:this.$refs.stage.clientHeight, angle:0};
         el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
         el.style.visibility='visible';
         flying.push([el, i]);
-        this.landed.push(c.slug);
+        this.landed.push(slug);
       });
       if(flying.length) this.$refs.stage.getBoundingClientRect();
       for(const [el, i] of flying){
@@ -230,6 +246,11 @@ export default {
         dim:(this.findBusy && !this.reading.has(p.slug)) || (this.find.phase==='done' && this.cards.length && !this.landed.includes(p.slug))};
     },
     pct(p){ return p==null ? '' : Math.round(p*100)+'%'; },
+    // A job line's corner: its price, and on a platform card how many vendors sell it.
+    jobMeta(g){
+      const n=this.findProviders(g).length;
+      return [!this.byVendor && n+' provider'+(n===1?'':'s'), this.findPrice(g)].filter(Boolean).join(' · ');
+    },
   },
 }
 </script>
@@ -257,6 +278,7 @@ export default {
       <div class="sp-panel-h">
         <span v-if="find.verdict==='strong'" class="sp-title">Best fit for <b>{{find.q}}</b></span>
         <span v-else-if="find.verdict==='closest'" class="sp-title warn">No strong fit for <b>{{find.q}}</b>. Closest matches:</span>
+        <span v-else-if="find.verdict==='name'" class="sp-title">Tools for <b>{{find.q}}</b></span>
         <span v-else class="sp-title">Keyword matches for <b>{{find.q}}</b>. Matching by meaning is unavailable right now.</span>
         <span class="sp-actions">
           <button class="sp-share" type="button" @click="findShare()">{{findCopied==='share'?'Link copied':'Share'}}</button>
@@ -268,19 +290,33 @@ export default {
       </div>
       <div class="sp-cards">
         <article v-for="c in cards" :key="c.slug" class="sp-card" :class="{weak:findWeak(c)}">
+          <!-- A vendor card: the vendor's logo, and its platform's tile lands beside the platform name.
+               A platform card: the tile lands in the logo's place. -->
           <header>
-            <span class="sp-slot" :data-slot="c.slug" aria-hidden="true"></span>
-            <button class="sp-plat" type="button" @click="findGoDashboard(c.slug)">{{c.label}}</button>
+            <span v-if="!byVendor" class="sp-slot sp-slot-lg" :data-slot="c.platform" aria-hidden="true"></span>
+            <span v-else class="sp-mark sp-logo" aria-hidden="true">
+              <img v-if="!platLogoBad['v:'+c.slug]" :src="'/logos/'+c.slug+'.svg'" alt="" @error="platLogoBad['v:'+c.slug]=true">
+              <span v-else class="sp-i" :style="{background:platTileBg(c.slug)}">{{platInitial({label:c.label, slug:c.slug})}}</span>
+            </span>
+            <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)">
+              <span class="sp-vendor">{{c.label}}</span>
+              <small v-if="byVendor">
+                <span v-if="c.lands" class="sp-slot" :data-slot="c.platform" aria-hidden="true"></span>
+                <span v-else class="sp-slot sp-mark" aria-hidden="true">
+                  <img v-if="!platLogoBad[c.platform]" :src="'/logos/platforms/'+c.platform+'.svg'" alt="" @error="platLogoBad[c.platform]=true">
+                  <span v-else class="sp-i" :style="{background:platTileBg(c.platform)}">{{platInitial({label:c.platform_label, slug:c.platform})}}</span>
+                </span>{{c.platform_label}}</small></button>
             <span v-if="c.p!=null" class="sp-fit">{{pct(c.p)}}</span>
           </header>
           <ul>
-            <li v-for="g in c.groups.slice(0,3)" :key="g.key">
+            <li v-for="g in c.jobs.slice(0,3)" :key="g.key">
               <button type="button" @click="findGoDashboard(g.platform)" :title="g.rows.map(r=>r.id).join(', ')">
                 <span class="sp-job">{{g.label}}</span>
-                <span class="sp-m">{{g.rows.length}} provider{{g.rows.length===1?'':'s'}}<template v-if="findPrice(g)"> · {{findPrice(g)}}</template></span>
+                <span class="sp-m">{{jobMeta(g)}}</span>
               </button>
             </li>
           </ul>
+          <span v-if="c.jobs.length>3" class="sp-more">+{{c.jobs.length-3}} more</span>
         </article>
       </div>
     </div>
@@ -367,9 +403,20 @@ html.sp-lock,html.sp-lock body{overflow:hidden;overscroll-behavior:none}
 .sp-card:hover{box-shadow:var(--l-shadow-lg)}
 @keyframes sp-in{from{opacity:0}}
 .sp-card header{display:flex;align-items:center;gap:10px}
-.sp-slot{flex:none;width:40px;height:40px}
-.sp-plat{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit;font-size:15px;font-weight:550;color:var(--l-ink);cursor:pointer}
-.sp-plat:hover{text-decoration:underline;text-underline-offset:3px}
+.sp-mark{flex:none;box-sizing:border-box;border:1px solid var(--l-line);background:#fff;display:grid;place-items:center;overflow:hidden;border-radius:22%}
+.sp-mark img{width:58%;height:58%;object-fit:contain}
+.sp-mark .sp-i{width:100%;height:100%;display:grid;place-items:center;color:#fff;font-weight:600;font-size:9px}
+.sp-logo{width:40px;height:40px;border-radius:10px}
+.sp-logo img{width:64%;height:64%}
+.sp-logo .sp-i{font-size:inherit}
+.sp-slot{flex:none;width:18px;height:18px}
+.sp-slot-lg{width:40px;height:40px}
+.sp-plat{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit;color:var(--l-ink);cursor:pointer;
+  display:flex;flex-direction:column;gap:1px}
+.sp-vendor{font-size:15px;font-weight:550;overflow-wrap:anywhere}
+.sp-plat small{font-size:12px;color:var(--l-muted);display:flex;align-items:center;gap:6px}
+.sp-plat:hover .sp-vendor{text-decoration:underline;text-underline-offset:3px}
+.sp-more{font-size:12px;color:var(--l-muted)}
 .sp-fit{font-family:var(--mono);font-size:11.5px;padding:2px 9px;border-radius:999px;background:var(--l-inverse);color:var(--l-inverse-ink);font-variant-numeric:tabular-nums}
 .sp-card.weak .sp-fit{background:none;color:var(--l-muted);border:1px solid var(--l-line2)}
 .sp-card ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}

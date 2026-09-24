@@ -582,12 +582,7 @@ def _hosted() -> bool:
     return host in PUBLIC_HOST_ALIASES
 
 
-def _pub(e: dict) -> bool:
-    """An endpoint the PUBLIC pages may count or list: hidden utility kinds out, and the
-    `kind: routed` meta-rows (PR #242) out with them — a routed row delegates to children that
-    are already on the page, so anywhere public it double-counts and surfaces a provider named
-    "treg", which the brand rules say must never appear as a vendor."""
-    return e["kind"] not in catalog_store.HIDDEN_KINDS and e.get("kind") != "routed"
+_pub = catalog_store.browsable
 
 
 def _catalog_census() -> tuple[int, int]:

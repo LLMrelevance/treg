@@ -71,7 +71,7 @@ export default function data(){
       // optional — a server without the catalog routes just renders no platform shelf.
       plats:{list:[], loaded:false, loading:false},
       // Find tools for a job (state/find.js): phase idle | recall | reading | done | error
-      find:{...FIND_EMPTY}, findCopied:'',
+      find:{...FIND_EMPTY}, findCopied:'', findSoon:false,
       platSlug:null, platData:null, platErr:'', platLoading:false,
       platShelfOpen:{},    // category → its featured shelf has been expanded to the full tile list
       // The ledger's filter bar. All three narrow the SAME row list, and a section with no

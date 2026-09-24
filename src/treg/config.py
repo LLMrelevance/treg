@@ -327,7 +327,12 @@ class Settings(BaseSettings):
     # the wait, so the timeout is looser than an agent's search. Rate limits bound anonymous use.
     find_candidates: int = 60
     find_timeout_s: float = 6.0
-    find_max_per_ip_hour: int = 40
+    # The judge's probability that a find query is only a name ("google", "semrush") at or above
+    # which, with no strong fit, the answer is what that platform or provider offers.
+    find_name_min: float = 0.8
+    # The Catalog box searches by itself when typing pauses, so one person exploring runs several
+    # finds a minute; the per-deployment cap is what bounds the bill.
+    find_max_per_ip_hour: int = 120
     find_max_per_hour: int = 3000
     # DEFAULT per-org, per-UTC-day limit on tier-4 spend, for a team that has not set its own
     # `Org.daily_cap_micro`. 0 = no default limit. A team may set its own figure to anything,

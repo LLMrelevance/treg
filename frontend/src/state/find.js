@@ -6,6 +6,9 @@
 // The state of no search; `high` is the server's strong cut and arrives with each answer.
 export const FIND_EMPTY = {q:'', phase:'idle', candidates:[], rows:[], verdict:'', read:0, high:1, error:''}
 const FIND_OPEN = 'treg-find-open'
+// The Catalog box searches by itself once typing pauses this long: people did not discover Enter.
+const FIND_DEBOUNCE_MS = 700
+const FIND_MIN_CHARS = 2
 
 // A short query is a NAME ("tiktok") and keeps the instant platform filter; a sentence is a JOB.
 export function isJobQuery(text){
@@ -13,10 +16,10 @@ export function isJobQuery(text){
   return t.split(/\s+/).filter(Boolean).length>=4 || /\?$/.test(t);
 }
 
-// Group items under a key, into each group's `field` list; a group's fit is its best member's, and groups sort best first unless
-// the answer is unjudged (keyword order is the server's). Shared by the Catalog list (per job) and
-// the /search cards (per platform).
-export function groupBest(items, verdict, keyOf, make, field){
+// Group items under a key, into each group's `field` list; a group's fit is its best member's, and
+// groups sort best first. Unjudged rows (the keyword page, a bare name's answer) carry no fit, so
+// the stable sort keeps the server's order for them.
+export function groupBest(items, keyOf, make, field){
   const by=new Map();
   for(const it of items){
     const key=keyOf(it);
@@ -25,9 +28,14 @@ export function groupBest(items, verdict, keyOf, make, field){
     g[field].push(it);
     if(it.p!=null && (g.p==null || it.p>g.p)) g.p=it.p;
   }
-  const out=[...by.values()];
-  if(verdict!=='keyword') out.sort((a,b)=>(b.p||0)-(a.p||0));
-  return out;
+  return [...by.values()].sort((a,b)=>(b.p||0)-(a.p||0));
+}
+
+// Rows grouped by job: one group per capability on a platform (an uncatalogued endpoint is its own
+// job), its providers in the server's order. Shared by the Catalog list and the /search cards.
+export function jobGroups(rows){
+  return groupBest(rows, r=>(r.capability||r.id)+'|'+r.platform,
+    (r, key)=>({key, label:r.capability_description||r.name, platform:r.platform, platform_label:r.platform_label}), 'rows');
 }
 
 async function* ndjson(res){
@@ -45,7 +53,27 @@ async function* ndjson(res){
 export default {
   findIsJob(text){ return isJobQuery(text); },
 
-  async findRun(text){
+  // Typing in the Catalog box: an answer for older text gives way at once (so a name filters the
+  // shelves as you type), and the finder runs when typing pauses. `findSoon` is true while one is
+  // scheduled, so the page does not call a half-typed job "no platform".
+  findSchedule(text){
+    this.findUnschedule();
+    const q=String(text||'').trim();
+    if(!q){ this.findExit(); return; }
+    if(this.findActive && q!==this.find.q) this.findExit();
+    if(q.length<FIND_MIN_CHARS || q===this.find.q) return;
+    this.findSoon=true;
+    this.elements.findTimer=setTimeout(()=>this.findRun(q, {auto:true}), FIND_DEBOUNCE_MS);
+  },
+
+  findUnschedule(){
+    clearTimeout(this.elements.findTimer);
+    this.elements.findTimer=null;
+    this.findSoon=false;
+  },
+
+  async findRun(text, {auto=false}={}){
+    this.findUnschedule();
     const q=String(text||'').trim();
     if(!q) return;
     this.elements.findAbort?.abort?.();
@@ -53,7 +81,7 @@ export default {
     this.elements.findAbort=ctl;
     this.find={...FIND_EMPTY, q, phase:'recall'};
     this.loadPlatforms();
-    this.track('catalog_find', {surface:this.view==='find'?'search':'catalog', words:q.split(/\s+/).length});
+    this.track('catalog_find', {surface:this.view==='find'?'search':'catalog', words:q.split(/\s+/).length, auto});
     try{
       const res=await fetch('/catalog/find?q='+encodeURIComponent(q), {signal:ctl.signal, credentials:'include',
         headers:{'accept':'application/x-ndjson','ngrok-skip-browser-warning':'1'}});
@@ -79,6 +107,7 @@ export default {
   },
 
   findExit(){
+    this.findUnschedule();
     this.elements.findAbort?.abort?.();
     this.elements.findAbort=null;
     this.find={...FIND_EMPTY};
@@ -114,8 +143,11 @@ export default {
     setTimeout(()=>{ if(this.findCopied===key) this.findCopied=''; }, 1600);
   },
 
-  // A judged job under the server's strong cut draws lighter; keyword rows carry no fit to judge.
-  findWeak(g){ return this.find.verdict!=='keyword' && (g.p==null || g.p<this.find.high); },
+  // A judged job under the server's strong cut draws lighter; unjudged rows carry no fit to judge.
+  findWeak(g){ return g.p!=null && g.p<this.find.high; },
+
+  // The distinct vendors selling one job.
+  findProviders(g){ return [...new Set(g.rows.map(r=>r.provider))]; },
 
   // The cheapest line of a job, priced the way every other catalog price is (`capCheapest`).
   findPrice(g){ return this.capCheapest(g.rows)?.label || ''; },
