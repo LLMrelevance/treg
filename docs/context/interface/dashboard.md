@@ -211,6 +211,10 @@ URLs. No query parameter, team selection or analytics service controls assignmen
 shared-link and catalog entries use this decision and `private, no-store` plus `Vary: Cookie`.
 Environment changes require restarting Web processes. Existing tabs switch on reload; the version
 stamp also incorporates rollout settings to offer a refresh when assignment policy changes.
+Every signed-in selection emits `dashboard_served` (variant, assignment, bucket, percentage) and
+sets the `dashboard_variant` and `dashboard_bucket` person properties. Analytics only observes the
+decision: PostHog persons carry no user ID to recompute the bucket from, and the bucket alone cannot
+date an account's switch when the percentage moves.
 
 The legacy snapshot is deprecated and scheduled for removal after rollout, not a second maintained
 Dashboard. New features and routine fixes belong only in `frontend/`; normal main-branch syncs must

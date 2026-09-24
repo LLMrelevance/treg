@@ -18,7 +18,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTe
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from .. import adsconv, agent_pages, oauth_providers
+from .. import adsconv, agent_pages, analytics, oauth_providers
 from ..domain import referrals
 from ..domain.catalog import store as catalog_store
 from ..domain.identity import session as sess
@@ -33,19 +33,51 @@ from .auth_helpers import OAUTH_RETURN_COOKIE, _is_https, _take_oauth_return
 from .signup_cookies import _remember_referral
 
 
-def _new_dashboard(user: User | None) -> bool:
+def _dashboard_bucket(user_id: int) -> int:
+    return int.from_bytes(hashlib.sha256(f"dashboard-v2:{user_id}".encode()).digest()[:8], "big") % 100
+
+
+def _dashboard_assignment(user: User) -> str:
+    """Why this account gets its frontend: `off`, `allowlist` or `bucket`."""
     settings = get_settings()
-    if not settings.dashboard_rollout_enabled or user is None:
+    if not settings.dashboard_rollout_enabled:
+        return "off"
+    return "allowlist" if user.id in settings.dashboard_rollout_user_ids else "bucket"
+
+
+def _new_dashboard(user: User | None) -> bool:
+    if user is None:
         return False
-    if user.id in settings.dashboard_rollout_user_ids:
-        return True
-    bucket = int.from_bytes(hashlib.sha256(f"dashboard-v2:{user.id}".encode()).digest()[:8], "big") % 100
-    return bucket < settings.dashboard_rollout_percent
+    assignment = _dashboard_assignment(user)
+    if assignment != "bucket":
+        return assignment == "allowlist"
+    return _dashboard_bucket(user.id) < get_settings().dashboard_rollout_percent
+
+
+def _record_dashboard_served(user: User, new: bool) -> None:
+    """Tell product analytics which frontend this account was served.
+
+    The bucket alone cannot say when an account switched (the percentage moves) or whether it
+    ever opened the Dashboard, and PostHog persons carry no user ID to recompute it from. The
+    person property lets any funnel break down by frontend; the event dates each exposure.
+    """
+    variant = "new" if new else "legacy"
+    bucket = _dashboard_bucket(user.id)
+    analytics.capture(user.email, "dashboard_served", {
+        "variant": variant,
+        "assignment": _dashboard_assignment(user),
+        "bucket": bucket,
+        "rollout_percent": get_settings().dashboard_rollout_percent,
+        "$set": {"dashboard_variant": variant, "dashboard_bucket": bucket},
+    })
 
 
 def _dashboard_index(user: User | None = None) -> Path:
     settings = get_settings()
-    if not _new_dashboard(user):
+    new = _new_dashboard(user)
+    if user is not None:
+        _record_dashboard_served(user, new)
+    if not new:
         return _WEB_DIR / "dashboard-legacy" / "index.html"
     if settings.frontend_dev:
         host = urlsplit(settings.public_url).hostname
