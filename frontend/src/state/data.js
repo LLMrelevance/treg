@@ -6,6 +6,7 @@ export default function data(){
     return {
       elements: createElements(),
       bootReady: false, bootFailed: false,
+      sessionChecked: false,  // /auth/me has answered (a page drawn before boot finishes waits on this for sign-in state)
       theme: localStorage.getItem('treg-theme')||'light',
       mobileNav: false,  // mobile sidebar toggle
       // True when this load is a PUBLIC catalog URL (/catalog, /catalog/<slug>). The catalog API is
