@@ -41,7 +41,8 @@ async def await_terminal(
 
     A timeout is deliberately *pending*, not an error: the durable async worker still owns the
     original hold and will settle it later.  Poll transport/server failures are retried within the
-    same deadline; a caller-visible 4xx is terminal for this foreground wait.
+    same deadline.  A caller-visible 4xx ends the foreground wait as pending because it cannot prove
+    that the already-accepted provider task is terminal.
     """
     try:
         kickoff = json.loads(submission)
@@ -71,7 +72,7 @@ async def await_terminal(
         if not 200 <= response.status < 300:
             last_detail = f"poll returned HTTP {response.status}"
             if 400 <= response.status < 500 and response.status not in (408, 429):
-                return AsyncResult("error", extracted.task_id, response, raw, detail=last_detail)
+                return AsyncResult("pending", extracted.task_id, response, raw, detail=last_detail)
             continue
         try:
             document = json.loads(raw)

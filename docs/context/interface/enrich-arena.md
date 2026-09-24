@@ -490,12 +490,13 @@ original intermittent failure. Audit/archive drains alone cannot release this re
 Waterfall uses ascending quoted prices, retaining planner order for ties, and the bounded error fallback policy. It stops
 at the first structural hit: the adapter supplies the contract's required fields. Found work email
 does not mean verified deliverability; phone found does not mean a live line. A negative mailbox
-verification verdict is a successful answer. An async attempt that remains in progress is saved and
-shown as pending with its reservation and call reference. Pending stops only that entry's Waterfall;
-Battle may finish other explicitly selected providers concurrently. Terminal attempts show the
-actual settled charge, not the maximum reservation. Each step shows queued/running, pending,
-found/no match, error/timeout, skipped/not attempted, timing, charge, and the reason for stopping
-or skipping.
+verification verdict is a successful answer. An async attempt that remains in progress, or whose
+foreground poll cannot prove a declared terminal state, is saved and shown as pending with its
+reservation and call reference. Pending stops only that entry's Waterfall; Battle may finish other
+explicitly selected providers concurrently. Only a declared terminal provider status permits the
+entry to advance. Terminal attempts show the actual settled charge, not the maximum reservation.
+Each step shows queued/running, pending, found/no match, error/timeout, skipped/not attempted,
+timing, charge, and the reason for stopping or skipping.
 
 ## Additional vendor calls and issue reports
 

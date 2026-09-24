@@ -10,6 +10,7 @@ from sqlmodel import select
 
 from treg import api as A
 from treg import oauth_providers as P
+from treg.application import asynctasks as async_task_app
 from treg.application.call import service as call_service
 from treg.application.call import route as call_route
 from treg.application.call.types import UpstreamResponse
@@ -284,6 +285,75 @@ async def test_wiza_routed_timeout_is_pending_keeps_hold_and_does_not_resubmit(
         task = (await db.execute(select(AsyncTaskRecord))).scalars().first()
         assert task.status == "pending" and task.reserved_micro == 150_000
         assert await db.get(Hold, task.call_id) is not None
+
+
+async def test_wiza_routed_poll_404_stays_pending_without_paid_fallback(
+    clients, monkeypatch, wiza_platform_on,
+):
+    monkeypatch.setenv("TREG_PLATFORM_KEY_HUNTER", "PLATFORM-HUNTER")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "wiza,hunter")
+    get_settings.cache_clear()
+    endpoint = catalog_store.load().by_id["wiza.people.email.find"]
+    monkeypatch.setitem(endpoint["async"], "interval", 0.01)
+    calls = []
+
+    async def relay(request, upstream_url, tool, secrets, client, **kwargs):
+        def response(status, doc):
+            payload = json.dumps(doc).encode()
+
+            async def stream():
+                yield payload
+
+            async def close():
+                return None
+
+            return UpstreamResponse(
+                status, ((b"content-type", b"application/json"),), stream(), close)
+
+        provider = "wiza" if "wiza.co" in upstream_url else "hunter"
+        calls.append((provider, request.method))
+        if provider == "hunter":
+            return response(200, {"data": {"email": "fallback@example.com", "score": 90}})
+        if request.method == "POST":
+            return response(200, {"data": {"id": 655, "status": "queued"}})
+        return response(404, {"status": {"code": 404, "message": "Not ready"}})
+
+    monkeypatch.setattr(call_service, "relay", relay)
+    before = await _balance(clients)
+    result = await clients.post(
+        "/call/treg.people.email.find",
+        headers={"X-Treg-Route-Prefer": "wiza"},
+        json={"full_name": "Jane Example", "domain": "example.com"},
+    )
+    assert result.status_code == 202, result.text
+    assert result.json()["_treg"]["outcome"] == "pending"
+    assert result.json()["_treg"]["charged_micro"] is None
+    assert calls == [("wiza", "POST"), ("wiza", "GET")]
+    assert await _balance(clients) == before - 75_000
+
+    async with session_maker() as db:
+        task = (await db.execute(select(AsyncTaskRecord))).scalars().one()
+        call_id = task.call_id
+        task.next_check_at = task.created_at
+        db.add(task)
+        await db.commit()
+        assert task.status == "pending" and await db.get(Hold, call_id) is not None
+
+    async def terminal_poll(row, client):
+        return 200, json.dumps({
+            "data": {"id": 655, "status": "finished", "name": "Jane Example",
+                     "email": "jane@example.com", "email_status": "valid",
+                     "credits": {"api_credits": {"total": 2}}},
+        }).encode()
+
+    monkeypatch.setattr(async_task_app, "_poll", terminal_poll)
+    settled = await async_task_app.settle_due()
+    assert settled.settled == 1
+    assert await _balance(clients) == before - 50_000
+    async with session_maker() as db:
+        task = await db.get(AsyncTaskRecord, call_id)
+        assert task.status == "settled" and task.settled_micro == 50_000
+        assert await db.get(Hold, call_id) is None
 
 
 async def test_wiza_failed_reveal_releases_hold_and_is_a_waterfall_miss(

@@ -11,7 +11,7 @@ from treg.application import arena
 from treg.application.call import service
 from treg.domain import arena as rules
 from treg.infra.db import session_maker
-from treg.models import ArenaEvaluation, ArenaRun, Hold, LedgerEntry
+from treg.models import ArenaEvaluation, ArenaRun, AsyncTaskRecord, Hold, LedgerEntry
 from treg.timeutil import utcnow_naive
 from test_marketplace_call import _balance, platform_on  # noqa: F401
 from test_routing import enrichment_on, _relay_by_provider  # noqa: F401
@@ -134,6 +134,42 @@ async def test_wiza_arena_timeout_is_shown_as_pending_with_reservation(clients, 
     assert attempt["charged_micro"] is None and result["charge_pending"] is True
     assert attempt["call_ref"] and attempt["task_id"] == "778"
     assert len(seen) == 1
+    get_settings.cache_clear()
+
+
+async def test_wiza_arena_poll_404_stops_waterfall_while_task_is_live(clients, monkeypatch):
+    from treg.config import get_settings
+
+    monkeypatch.setenv("TREG_PLATFORM_KEY_WIZA", "PLATFORM-WIZA")
+    monkeypatch.setenv("TREG_PLATFORM_KEY_LUSHA", "PLATFORM-LUSHA")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "wiza,lusha")
+    get_settings.cache_clear()
+    endpoint = arena.catalog_store.load().by_id["wiza.people.phone.find"]
+    monkeypatch.setitem(endpoint["async"], "interval", 0.01)
+    seen = []
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "wiza": [
+            (200, {"data": {"id": 779, "status": "queued"}}),
+            (404, {"status": {"code": 404, "message": "Not ready"}}),
+        ],
+        "lusha": [(200, {"results": [{"phones": [{"number": "+15550000000"}]}]})],
+    }, seen))
+    response = await clients.post("/arena/plans", json={
+        "capability": "people.phone.find", "identity": IDENTITY,
+        "mode": "waterfall", "providers": ["wiza", "lusha"],
+        "max_cost_micro": 1_000_000,
+    })
+    assert response.status_code == 200, response.text
+    result = await finish(clients, response.json())
+    attempts = {attempt["provider"]: attempt for attempt in result["results"]}
+    assert attempts["wiza"]["state"] == "pending"
+    assert attempts["wiza"]["charged_micro"] is None
+    assert attempts["lusha"]["state"] == "not_attempted"
+    assert [call[:2] for call in seen] == [("wiza", "POST"), ("wiza", "GET")]
+    assert result["charge_pending"] is True
+    async with session_maker() as db:
+        task = (await db.execute(select(AsyncTaskRecord))).scalars().one()
+        assert task.status == "pending" and await db.get(Hold, task.call_id) is not None
     get_settings.cache_clear()
 
 

@@ -487,7 +487,11 @@ async def run_routed(parent: CallContext, ep: dict, body_bytes: bytes, get_heade
 
             waited = await async_bridge.await_terminal(
                 descriptor, kickoff_raw, poll_task, timeout_s=ROUTED_ASYNC_WAIT_SECONDS)
-            if waited.outcome == "pending":
+            # Once submission produced a task id, only a declared terminal provider status can
+            # permit waterfall fallback.  A bridge error with an id is still an uncertain live
+            # task, so keep the hold/worker ownership and surface it as pending.
+            if waited.outcome == "pending" or (
+                    waited.outcome == "error" and waited.task_id):
                 tried.append(Attempt(cand.endpoint["id"], cand.endpoint["provider"], "pending",
                                      202, 0, "provider is still processing", ignored=ignored))
                 async_view = {
@@ -523,9 +527,7 @@ async def run_routed(parent: CallContext, ep: dict, body_bytes: bytes, get_heade
                 errors += 1
                 tried.append(Attempt(cand.endpoint["id"], cand.endpoint["provider"], "error",
                                      response.status if response else None, 0, waited.detail[:120]))
-                if errors > MAX_ERROR_FALLBACKS or not plan.contract.idempotent:
-                    break
-                continue
+                break
             charged = await _async_cost(parent, child.call_ref, 0 if cand.tier != "platform" else reserved)
         spent += charged
         if async_outcome == "failure":

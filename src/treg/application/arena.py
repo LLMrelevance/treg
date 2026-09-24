@@ -667,7 +667,10 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
                     waited = await async_bridge.await_terminal(
                         descriptor, kickoff, poll_task,
                         timeout_s=max(0, timeout_s - elapsed - wait_margin))
-                    if waited.outcome == "pending":
+                    # A task id means the provider accepted work that may still complete and
+                    # charge.  No non-terminal bridge outcome may advance a waterfall entry.
+                    if waited.outcome == "pending" or (
+                            waited.outcome == "error" and waited.task_id):
                         a.update(
                             state="pending", output={}, raw=doc, status=202,
                             reserved_micro=reserved, charged_micro=None,
@@ -680,7 +683,8 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
                         a.update(state="error", output={}, raw=doc,
                                  status=waited.response.status if waited.response else None,
                                  reserved_micro=reserved, charged_micro=None,
-                                 task_id=waited.task_id, detail=waited.detail or "Async polling failed.")
+                                 task_id=waited.task_id, async_uncertain=True,
+                                 detail=waited.detail or "Async polling failed.")
                         return
                     response = waited.response
                     buf = bytearray(waited.raw)
@@ -809,6 +813,9 @@ async def _run(run_id, mode, capability, payload, caller, client, client_ip, onl
                     continue
                 if a["state"] == "pending":
                     stopped[entry] = "Stopped while this asynchronous service is still processing."
+                    continue
+                if a.get("async_uncertain"):
+                    stopped[entry] = "Stopped because the asynchronous service may still be processing."
                     continue
                 if a.get("failure_kind") in route._GLOBAL_REFUSALS:
                     payload["stop_reason"] = "Stopped by the team's balance or usage policy."

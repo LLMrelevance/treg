@@ -1759,11 +1759,12 @@ to choose (`docs/CAPABILITY-ROUTING-PLAN.md`). Everything else in the catalog st
   (`credential_tier: routed`) beside the children's.
   An async child uses the shared async bridge to submit once and poll through ordinary authenticated
   child calls. The final poll response, not the kickoff response, is passed to the adapter. Routed
-  execution waits for up to 60 seconds. If the task is still processing, it returns HTTP 202 with
-  `_treg.outcome: pending`, the provider and endpoint, child call reference, poll descriptor,
-  `reserved_micro`, and `charged_micro: null`. A pending attempt stops that waterfall because the
-  child may still complete and charge; the existing async worker owns eventual settlement. Terminal
-  misses and failures may continue under the normal bounded fallback rules.
+  execution waits for up to 60 seconds. If the task is still processing, or a foreground poll
+  cannot prove a declared terminal state, it returns HTTP 202 with `_treg.outcome: pending`, the
+  provider and endpoint, child call reference, poll descriptor, `reserved_micro`, and
+  `charged_micro: null`. A pending attempt stops that waterfall because the child may still complete
+  and charge; the existing async worker owns eventual settlement. Only declared terminal misses and
+  failures may continue under the normal bounded fallback rules.
 - **Hit rate** — `CallRecord.hit` (nullable, alembic `0009`, last column) is the adapter's verdict
   written at settle; `stats.observed` publishes `hit_rate`/`hit_samples` (floor 20) and, for
   per-success endpoints, reads historical rows too (a 2xx with `cost_observed_micro == 0` is a miss).
