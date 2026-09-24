@@ -94,13 +94,14 @@ async def test_a_bare_name_is_answered_with_what_it_offers(clients, monkeypatch)
     monkeypatch.setattr(judge_infra, "judge", _fake_judge({}, name=0.96))
     _, events = await _find(clients, "tiktok")
     judged = events[1]
-    assert judged["verdict"] == "name" and judged["rows"][0]["platform"] == "tiktok"
+    assert judged["verdict"] == "name" and judged["named"] == "platform" and judged["rows"][0]["platform"] == "tiktok"
     assert all(row["p"] is None for row in judged["rows"])
     assert {row["platform"] for row in judged["rows"]} >= {"tiktok", "tiktok-ads"}
 
     # a provider's name, with no platform of that name, is that provider's endpoints
     _, events = await _find(clients, "semrush")
-    assert events[1]["verdict"] == "name" and {r["provider"] for r in events[1]["rows"]} == {"semrush"}
+    assert events[1]["verdict"] == "name" and events[1]["named"] == "provider"
+    assert {r["provider"] for r in events[1]["rows"]} == {"semrush"}
 
     # exactly a platform's name counts even when the judge is unsure
     monkeypatch.setattr(judge_infra, "judge", _fake_judge({}, name=0.6))

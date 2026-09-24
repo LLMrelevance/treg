@@ -1040,7 +1040,7 @@ fit is its best provider's. The page never re-ranks providers.
   platform. Tiles can be picked up and thrown, the recall's platforms and vendors hop while the
   judge reads, the fitting ones leave the physics world and fly to their answer cards, and the next
   search drops them back in; × or Esc clears the answer the same way. A described job is answered
-  **by vendor**: one card per provider, the vendor's tile landing in the logo place and, on the
+  **by vendor** (so is a vendor's name, `named: provider`): one card per provider, the vendor's tile landing in the logo place and, on the
   first card naming it, the platform's tile beside the platform name (later cards show a still
   copy), with the vendor's jobs and prices. A bare name (`name`, titled "Tools for …") is answered
   by platform: each platform's tile lands in its card's logo place, the cards list jobs with

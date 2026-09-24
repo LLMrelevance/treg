@@ -45,9 +45,9 @@ export default {
     // On a platform answer (a bare name) no vendor lands; the vendors on those platforms stay lit.
     litVendors(){ return this.byVendor ? new Set() : new Set(this.find.rows.map(r=>'v:'+r.provider)); },
     // A described job is answered by vendor: one card per vendor, best fit first, under the
-    // vendor's own logo, listing the jobs that vendor sells here. A bare name ("google") asks what
-    // is on those platforms, so it is answered by platform, each card listing its jobs.
-    byVendor(){ return this.find.verdict!=='name'; },
+    // vendor's own logo, listing the jobs that vendor sells here. A platform's name ("google") asks
+    // what is on those platforms, so it is answered by platform; a vendor's name ("hunter") by vendor.
+    byVendor(){ return this.find.verdict!=='name' || this.find.named==='provider'; },
     // Where tiles land (pile keys): `logo`, the card's logo place, takes the vendor's tile on a
     // vendor card and the platform's on a platform card; `mark`, beside the platform name, takes
     // the platform's tile on the first vendor card naming it. Later cards show a still copy.
