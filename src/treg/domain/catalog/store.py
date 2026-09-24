@@ -46,6 +46,14 @@ KINDS = ("data", "action", "account", "utility", "routed")
 DEFAULT_KIND = "data"
 HIDDEN_KINDS = frozenset({"account", "utility"})  # served, but never inflate the browse counts
 
+
+def browsable(ep: dict) -> bool:
+    """An endpoint the PUBLIC pages may count or list: hidden utility kinds out, and the
+    `kind: routed` meta-rows (PR #242) out with them - a routed row delegates to children that
+    are already on the page, so anywhere public it double-counts and surfaces a provider named
+    "treg", which the brand rules say must never appear as a vendor."""
+    return ep["kind"] not in HIDDEN_KINDS and ep.get("kind") != "routed"
+
 # How much the recorded PRICE is worth as evidence (cost.confidence). It is a claim about the
 # price, not about the endpoint: `verified: 2026-07-28` says the route answered, `confidence:
 # verified` says the money figure was confirmed against something re-checkable.

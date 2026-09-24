@@ -36,7 +36,7 @@ class Judgement:
     tokens_out: int | None = None
     error: str | None = None        # timeout | http_<status> | <ExceptionType>; None when answered
     cached: bool = False
-    extra: dict[str, float] | None = None   # the caller's `extra` questions by id; None = abstained
+    extra: dict[str, float] | None = None   # answers to the caller's `extra` questions; None = abstained
 
 
 def candidate_view(ep: dict, capability_text: str) -> dict:
@@ -96,12 +96,12 @@ async def judge(query: str, candidates: list[dict], *, api_key: str, model: str,
     maps ids to further questions about the same state (the query alone, say); they ride in the same
     request and come back as `Judgement.extra`. Neither changes what a caller passing none sends."""
     if not candidates:
-        return Judgement(probs=[], ms=0, extra={} if extra else None)
+        return Judgement(probs=[], ms=0, extra={})
     ids = [c["id"] for c in candidates]
     key = _cache_key(model, query, ids, criteria, extra)
     cached = _cache_get(key)
     if cached is not None:
-        return Judgement(probs=cached[0], ms=0, cached=True, extra=cached[1] if extra else None)
+        return Judgement(probs=cached[0], ms=0, cached=True, extra=cached[1])
     questions = {f"c{i}": _question(i, criteria) for i in range(len(candidates))}
     questions.update({f"x_{k}": q for k, q in (extra or {}).items()})
     body = {
@@ -123,7 +123,7 @@ async def judge(query: str, candidates: list[dict], *, api_key: str, model: str,
         usage = data.get("usage") or {}
         _cache_put(key, (probs, extras))
         return Judgement(probs=probs, ms=ms, tokens_in=usage.get("input_tokens"),
-                         tokens_out=usage.get("output_tokens"), extra=extras if extra else None)
+                         tokens_out=usage.get("output_tokens"), extra=extras)
     except httpx.TimeoutException:
         return Judgement(probs=None, ms=int((time.perf_counter() - t0) * 1000), error="timeout")
     except Exception as exc:  # noqa: BLE001 — an abstaining judge, never a failed search

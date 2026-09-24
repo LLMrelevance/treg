@@ -107,8 +107,9 @@ def _row(ep: dict, cat: catalog_store.Catalog, provider_display, p: float | None
 @dataclass
 class Judged:
     verdict: str
-    rows: list[tuple[dict, float | None]]   # (endpoint, probability); probability None on KEYWORD
+    rows: list[tuple[dict, float | None]]   # what is shown; probability None when unjudged
     judgement: judge_infra.Judgement
+    kept: list[tuple[dict, float]] | None = None   # the judge's rows at or over keep; None = abstained
 
 
 def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[dict]:
@@ -122,7 +123,7 @@ def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[
     q = query.strip().lower()
     if not q:
         return []
-    shown = [e for e in cat.endpoints if e["kind"] not in catalog_store.HIDDEN_KINDS and e["kind"] != "routed"]
+    shown = [e for e in cat.endpoints if catalog_store.browsable(e)]
     sellers: dict[str, int] = {}
     for e in shown:
         if e["capability"]:
@@ -141,10 +142,10 @@ def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[
         # before one that merely mentions it ("Douyin (TikTok China)"); then the Catalog shelves'
         # own featured rank, then the most jobs.
         def rank(slug: str) -> tuple:
-            plat, short = cat.platforms[slug], _short(cat.platforms[slug]["label"])
+            plat = cat.platforms[slug]
             featured = plat.get("featured")
             jobs = len({e["capability"] for e in on[slug] if e["capability"]})
-            return (q not in (short, slug), not (short.startswith(q) or slug.startswith(q)),
+            return (not _is_named(q, slug, plat), not (_short(plat["label"]).startswith(q) or slug.startswith(q)),
                     featured is None, featured or 0, -jobs, slug)
         slugs = sorted(slugs, key=rank)[:MAX_NAME_PLATFORMS]
         return [e for slug in slugs for e in jobs_first(on[slug])[:MAX_NAME_ROWS_PER_PLATFORM]]
@@ -152,14 +153,20 @@ def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[
 
 
 def _short(label: str) -> str:
-    """A platform label without its gloss: "Google Analytics (GA4)" -> "google analytics"."""
+    """A platform label without its gloss, lowercased: "Google Analytics (GA4)" -> "google analytics".
+    The same cut as the pages' `platShort` (frontend/src/state/catalog.js), so a name matches what
+    the shelves show."""
     return label.split(" — ")[0].split(" (")[0].strip().lower()
 
 
+def _is_named(q: str, slug: str, plat: dict) -> bool:
+    """`q` (lowercased) is exactly this platform's name or slug ("google ads", "tiktok-shop")."""
+    q = " ".join(q.split())
+    return q in (_short(plat["label"]), slug, slug.replace("-", " "))
+
+
 def names_a_platform(query: str, cat: catalog_store.Catalog) -> bool:
-    """The query is exactly a platform's name or slug ("google ads", "tiktok-shop")."""
-    q = " ".join(query.lower().split())
-    return any(q in (_short(p["label"]), slug, slug.replace("-", " ")) for slug, p in cat.platforms.items())
+    return any(_is_named(query.lower(), slug, p) for slug, p in cat.platforms.items())
 
 
 async def judge(query: str, cands: list[tuple[dict, float]], cat: catalog_store.Catalog,
@@ -181,14 +188,12 @@ async def judge(query: str, cands: list[tuple[dict, float]], cat: catalog_store.
     keep, high = float(s.search_judge_keep), float(s.search_judge_high)
     scored = sorted(zip((ep for ep, _ in cands), j.probs), key=lambda t: -t[1])
     strong = bool(scored) and scored[0][1] >= high
-    is_name = (j.extra or {}).get("name", 0.0) >= float(s.find_name_min) or names_a_platform(query, cat)
-    if not strong and is_name:
+    kept = [(ep, p) for ep, p in scored if p >= keep]
+    if not strong and ((j.extra or {}).get("name", 0.0) >= float(s.find_name_min) or names_a_platform(query, cat)):
         named = name_rows(query, cat, provider_display)
         if named:
-            return Judged(NAME, [(ep, None) for ep in named], j)
-    kept = [(ep, p) for ep, p in scored if p >= keep]
-    verdict = STRONG if strong else CLOSEST if kept else NONE
-    return Judged(verdict, kept, j)
+            return Judged(NAME, [(ep, None) for ep in named], j, kept)
+    return Judged(STRONG if strong else CLOSEST if kept else NONE, kept, j, kept)
 
 
 async def stream(query: str, provider_display) -> AsyncIterator[dict]:
@@ -213,18 +218,13 @@ def _log(query: str, *, source: str, baseline_total: int, cands: list[tuple[dict
     tables the MCP experiment and the keyword route already write, so the misses land in one
     report. Fire-and-forget, like every audit write."""
     j = judged.judgement
-    if judged.verdict == NAME:   # the rows shown are the name's, unjudged; keep what the judge said
-        keep = float(get_settings().search_judge_keep)
-        judged_rows = [[ep["id"], round(p, 3)] for (ep, _), p in zip(cands, j.probs or []) if p >= keep]
-    else:
-        judged_rows = [[ep["id"], round(p, 3)] for ep, p in judged.rows] if j.probs is not None else None
-    owner = "name" if judged.verdict == NAME else "baseline"
     audit.record_search(
         query=query, source=source, org_id=None, user_email=None,
         mode="find", arm="judged",
         baseline_ids=[ep["id"] for ep, _ in cands],
-        judged=judged_rows,
-        shown=[[ep["id"], "judged" if p is not None else owner] for ep, p in judged.rows],
+        judged=None if judged.kept is None else [[ep["id"], round(p, 3)] for ep, p in judged.kept],
+        shown=[[ep["id"], "judged" if p is not None else "name" if judged.verdict == NAME else "baseline"]
+               for ep, p in judged.rows],
         baseline_total=int(baseline_total), differs=False,
         judge_ms=j.ms, judge_tokens_in=j.tokens_in, judge_tokens_out=j.tokens_out, judge_error=j.error)
     if judged.verdict == NONE or (judged.verdict == KEYWORD and not judged.rows):

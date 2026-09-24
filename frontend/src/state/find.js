@@ -7,7 +7,7 @@
 export const FIND_EMPTY = {q:'', phase:'idle', candidates:[], rows:[], verdict:'', read:0, high:1, error:''}
 const FIND_OPEN = 'treg-find-open'
 // The Catalog box searches by itself once typing pauses this long: people did not discover Enter.
-export const FIND_DEBOUNCE_MS = 700
+const FIND_DEBOUNCE_MS = 700
 const FIND_MIN_CHARS = 2
 
 // A short query is a NAME ("tiktok") and keeps the instant platform filter; a sentence is a JOB.
@@ -16,14 +16,10 @@ export function isJobQuery(text){
   return t.split(/\s+/).filter(Boolean).length>=4 || /\?$/.test(t);
 }
 
-// An answer the judge did not score row by row: its order is the server's. `keyword` is the lexical
-// page of an abstaining judge; `name` is what a bare name ("google", "semrush") offers.
-export function unjudged(verdict){ return verdict==='keyword' || verdict==='name'; }
-
-// Group items under a key, into each group's `field` list; a group's fit is its best member's, and groups sort best first unless
-// the answer is unjudged. Shared by the Catalog list (per job) and
-// the /search cards (per platform).
-export function groupBest(items, verdict, keyOf, make, field){
+// Group items under a key, into each group's `field` list; a group's fit is its best member's, and
+// groups sort best first. Unjudged rows (the keyword page, a bare name's answer) carry no fit, so
+// the stable sort keeps the server's order for them.
+export function groupBest(items, keyOf, make, field){
   const by=new Map();
   for(const it of items){
     const key=keyOf(it);
@@ -32,9 +28,14 @@ export function groupBest(items, verdict, keyOf, make, field){
     g[field].push(it);
     if(it.p!=null && (g.p==null || it.p>g.p)) g.p=it.p;
   }
-  const out=[...by.values()];
-  if(!unjudged(verdict)) out.sort((a,b)=>(b.p||0)-(a.p||0));
-  return out;
+  return [...by.values()].sort((a,b)=>(b.p||0)-(a.p||0));
+}
+
+// Rows grouped by job: one group per capability on a platform (an uncatalogued endpoint is its own
+// job), its providers in the server's order. Shared by the Catalog list and the /search cards.
+export function jobGroups(rows){
+  return groupBest(rows, r=>(r.capability||r.id)+'|'+r.platform,
+    (r, key)=>({key, label:r.capability_description||r.name, platform:r.platform, platform_label:r.platform_label}), 'rows');
 }
 
 async function* ndjson(res){
@@ -143,7 +144,10 @@ export default {
   },
 
   // A judged job under the server's strong cut draws lighter; unjudged rows carry no fit to judge.
-  findWeak(g){ return !unjudged(this.find.verdict) && (g.p==null || g.p<this.find.high); },
+  findWeak(g){ return g.p!=null && g.p<this.find.high; },
+
+  // The distinct vendors selling one job.
+  findProviders(g){ return [...new Set(g.rows.map(r=>r.provider))]; },
 
   // The cheapest line of a job, priced the way every other catalog price is (`capCheapest`).
   findPrice(g){ return this.capCheapest(g.rows)?.label || ''; },
