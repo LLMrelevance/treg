@@ -10,13 +10,16 @@ import { groupBest, jobGroups } from '../state/find.js'
 //
 // The page is exactly one viewport tall: the pile's floor is the bottom of the screen, and a long
 // answer scrolls inside its own panel, never the page.
+//
+// The examples are the jobs the landing and use-case pages sell (/people-search, /ugc, /use-cases/*),
+// one each, shortened from those pages' own prompts. Keep each one a strong fit on /catalog/find.
 const EXAMPLES = [
-  'Find the emails of CTOs at Series A fintech startups in Berlin',
-  'Which competitors are running Facebook ads right now?',
-  'Why is my blog losing Google traffic?',
-  'Apple stock closing prices for last year',
-  'Make a 10 second product video from a photo',
-  'What are people on Reddit saying about our new pricing?',
+  'Find heads of growth at US SaaS companies and their work emails',
+  'Show me every ad Notion is running on Meta right now',
+  'Keywords stripe.com ranks for on Google',
+  'Make a talking UGC video ad for my product',
+  'What is Reddit saying about our pricing?',
+  'Does ChatGPT mention my brand?',
 ]
 const LAND = 'transform .8s cubic-bezier(.3,1.2,.4,1)'
 
