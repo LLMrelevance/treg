@@ -113,3 +113,22 @@ def test_rollout_policy_changes_refresh_stamp(monkeypatch):
     before = _app_version()
     monkeypatch.setattr(settings, 'dashboard_rollout_enabled', not settings.dashboard_rollout_enabled)
     assert _app_version() != before
+
+
+async def test_signed_in_entries_record_the_served_frontend(clients, monkeypatch, posthog_events):
+    first, second = await identities()
+    settings = get_settings()
+    monkeypatch.setattr(settings, 'dashboard_rollout_enabled', True)
+    monkeypatch.setattr(settings, 'dashboard_rollout_percent', 0)
+    monkeypatch.setattr(settings, 'dashboard_rollout_user_ids', {first.id})
+    for user in (first, second):
+        clients.cookies.set(session.COOKIE, session.make_session(user.id, token_version=user.token_version))
+        await clients.get('/app')
+    clients.cookies.clear()
+    await clients.get('/app')
+    events = await posthog_events('dashboard_served')
+    assert [(e['distinct_id'], e['properties']['variant'], e['properties']['assignment']) for e in events] == [
+        (first.email, 'new', 'allowlist'), (second.email, 'legacy', 'bucket')]
+    assert events[1]['properties']['$set'] == {
+        'dashboard_variant': 'legacy', 'dashboard_bucket': events[1]['properties']['bucket']}
+    assert events[1]['properties']['rollout_percent'] == 0
