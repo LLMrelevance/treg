@@ -1016,7 +1016,10 @@ fit is its best provider's. The page never re-ranks providers.
 - **Catalog search** (`CatalogPage.vue`, `view==='connections'`, signed in or on the public
   catalog). A large box under the page title, not the corner search the other views use. A short
   query is a name and keeps the instant platform filter; four words or a question mark makes it a
-  job and shows **Find tools ↵** (`isJobQuery`). Enter renders `FindAnswer.vue` between the box and
+  job and shows **Find tools ↵** (`isJobQuery`). The finder runs by itself once typing pauses
+  (`findSchedule`, `FIND_DEBOUNCE_MS`), because people did not discover Enter; Enter runs it at once.
+  Typing again drops the previous answer so a name filters the shelves meanwhile, and "No platform
+  is called that" waits while a find is scheduled (`findSoon`). The answer renders `FindAnswer.vue` between the box and
   the tabs: one list, a row per job (platform, providers, lowest price, a fit bar), strong fits
   first and weaker ones after them in a lighter tone, with no bucket labels; **Copy** appears on
   hover, the row opens the platform. `closest` adds one line saying nothing fits closely; `none` is

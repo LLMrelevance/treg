@@ -156,8 +156,8 @@ test('the catalog search box answers a described job and lights the shelves', as
   await expect(page.getByRole('button', { name: /Search all tools for/ })).toBeVisible()   // a name filters, Enter still searches
   await box.fill('why is my blog losing google traffic')
   await expect(page.getByRole('button', { name: /Find tools for/ })).toBeVisible()   // a job, not a name
-  await expect(page.getByText(/No catalogued platforms/)).toHaveCount(0)
-  await box.press('Enter')
+  await expect(page.getByText(/No catalogued platforms|No platform is called that/)).toHaveCount(0)
+  // no Enter: the answer arrives once typing pauses
   await expect(page.getByText('Clicks, impressions, CTR & top queries')).toBeVisible()
   await expect(page.getByText(/1 tool for/)).toBeVisible()
   await expect(page.locator('.pt-card.find-hit')).toHaveCount(1)

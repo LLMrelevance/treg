@@ -6,6 +6,9 @@
 // The state of no search; `high` is the server's strong cut and arrives with each answer.
 export const FIND_EMPTY = {q:'', phase:'idle', candidates:[], rows:[], verdict:'', read:0, high:1, error:''}
 const FIND_OPEN = 'treg-find-open'
+// The Catalog box searches by itself once typing pauses this long: people did not discover Enter.
+export const FIND_DEBOUNCE_MS = 700
+const FIND_MIN_CHARS = 2
 
 // A short query is a NAME ("tiktok") and keeps the instant platform filter; a sentence is a JOB.
 export function isJobQuery(text){
@@ -49,7 +52,27 @@ async function* ndjson(res){
 export default {
   findIsJob(text){ return isJobQuery(text); },
 
-  async findRun(text){
+  // Typing in the Catalog box: an answer for older text gives way at once (so a name filters the
+  // shelves as you type), and the finder runs when typing pauses. `findSoon` is true while one is
+  // scheduled, so the page does not call a half-typed job "no platform".
+  findSchedule(text){
+    this.findUnschedule();
+    const q=String(text||'').trim();
+    if(!q){ this.findExit(); return; }
+    if(this.findActive && q!==this.find.q) this.findExit();
+    if(q.length<FIND_MIN_CHARS || q===this.find.q) return;
+    this.findSoon=true;
+    this.elements.findTimer=setTimeout(()=>this.findRun(q, {auto:true}), FIND_DEBOUNCE_MS);
+  },
+
+  findUnschedule(){
+    clearTimeout(this.elements.findTimer);
+    this.elements.findTimer=null;
+    this.findSoon=false;
+  },
+
+  async findRun(text, {auto=false}={}){
+    this.findUnschedule();
     const q=String(text||'').trim();
     if(!q) return;
     this.elements.findAbort?.abort?.();
@@ -57,7 +80,7 @@ export default {
     this.elements.findAbort=ctl;
     this.find={...FIND_EMPTY, q, phase:'recall'};
     this.loadPlatforms();
-    this.track('catalog_find', {surface:this.view==='find'?'search':'catalog', words:q.split(/\s+/).length});
+    this.track('catalog_find', {surface:this.view==='find'?'search':'catalog', words:q.split(/\s+/).length, auto});
     try{
       const res=await fetch('/catalog/find?q='+encodeURIComponent(q), {signal:ctl.signal, credentials:'include',
         headers:{'accept':'application/x-ndjson','ngrok-skip-browser-warning':'1'}});
@@ -83,6 +106,7 @@ export default {
   },
 
   findExit(){
+    this.findUnschedule();
     this.elements.findAbort?.abort?.();
     this.elements.findAbort=null;
     this.find={...FIND_EMPTY};
