@@ -3,10 +3,11 @@ import { useDashboard } from '../state/context'
 import { Pile, poseTransform, tileSize } from '../state/pile'
 import { groupBest, jobGroups } from '../state/find.js'
 
-// /search: every vendor in the catalog is a tile, dropped under gravity (state/pile.ts, Matter.js)
-// into a pile on the floor of the page. A described job (GET /catalog/find, see state/find.js) makes
-// the vendors its keyword recall touched hop while the judge reads them; the vendors that fit then
-// leave the pile and fly to the logo place of their answer cards. The next search drops them back in.
+// /search: every platform and every vendor in the catalog is a tile, dropped under gravity
+// (state/pile.ts, Matter.js) into a pile on the floor of the page. A described job (GET
+// /catalog/find, see state/find.js) makes the platforms and vendors its keyword recall touched hop
+// while the judge reads them; the ones that fit then leave the pile and fly to their places on the
+// answer cards. The next search drops them back in.
 //
 // The page is exactly one viewport tall: the pile's floor is the bottom of the screen, and a long
 // answer scrolls inside its own panel, never the page.
@@ -28,30 +29,43 @@ export default {
   data(){ return { text:'', examples:EXAMPLES, size:48, floor:220, reduced:false, landed:[], dragging:null, flung:null } },
   computed: {
     platforms(){ return this.plats.list.filter(p=>(p.category||'Other')!=='Other'); },
-    // The pile: one tile per vendor on those platforms. A tile opens the vendor's busiest platform.
+    // The pile: a tile per platform and a tile per vendor on those platforms, keyed `p:`/`v:` because
+    // a slug can be both ("tiktok-ads"). A tile opens its platform, a vendor its busiest platform.
     vendors(){
       const home={};
       for(const p of this.platforms) for(const s of p.providers||[])            // busiest platform first
         if(!home[s] && this.plats.providers[s]) home[s]=p.slug;                    // named vendors only
       return Object.keys(home).sort().map(slug=>({slug, label:this.plats.providers[slug]||slug, home:home[slug]}));
     },
-    // On a platform answer (a bare name) no tile lands; the vendors on it stay lit instead.
-    litVendors(){ return this.byVendor ? new Set() : new Set(this.find.rows.map(r=>r.provider)); },
+    tiles(){
+      return [...this.platforms.map(p=>({key:'p:'+p.slug, vendor:false, slug:p.slug, label:this.platShort(p.label), home:p.slug})),
+              ...this.vendors.map(v=>({key:'v:'+v.slug, vendor:true, ...v}))];
+    },
+    // On a platform answer (a bare name) no vendor lands; the vendors on those platforms stay lit.
+    litVendors(){ return this.byVendor ? new Set() : new Set(this.find.rows.map(r=>'v:'+r.provider)); },
     // A described job is answered by vendor: one card per vendor, best fit first, under the
     // vendor's own logo, listing the jobs that vendor sells here. A bare name ("google") asks what
     // is on those platforms, so it is answered by platform, each card listing its jobs.
     byVendor(){ return this.find.verdict!=='name'; },
-    // A vendor card is where that vendor's tile lands; every card names the platform of its best job.
+    // Where tiles land: a vendor card takes its vendor's tile in the logo place and, on the first
+    // card naming that platform (`lands`), the platform's tile beside the platform name; later
+    // cards show a still copy. A platform card takes the platform's tile in the logo place.
     cards(){
       if(this.find.phase!=='done') return [];
-      const byVendor=this.byVendor;
+      const byVendor=this.byVendor, seen=new Set();
       return groupBest(this.find.rows, r=>byVendor ? r.provider : r.platform, (r, slug)=>{
         const platform_label=this.platShort(r.platform_label||r.platform);
         return {slug, platform:r.platform, platform_label, label:byVendor ? r.provider_display||r.provider : platform_label};
-      }, 'rows').slice(0,12).map(c=>({...c, jobs:jobGroups(c.rows)}));
+      }, 'rows').slice(0,12).map(c=>{
+        const card={...c, jobs:jobGroups(c.rows), lands:!seen.has(c.platform)};
+        seen.add(c.platform);
+        return card;
+      });
     },
-    reading(){ return this.findBusy ? new Set(this.findCandidateVendors) : new Set(); },
-    readingList(){ return this.vendors.map(v=>v.slug).filter(s=>this.reading.has(s)); },
+    reading(){
+      return this.findBusy ? new Set([...this.findCandidatePlatforms.map(s=>'p:'+s), ...this.findCandidateVendors.map(s=>'v:'+s)]) : new Set();
+    },
+    readingList(){ return this.tiles.map(t=>t.key).filter(k=>this.reading.has(k)); },
   },
   watch: {
     'plats.list'(){ this.$nextTick(()=>this.fit(true)); },
@@ -155,16 +169,16 @@ export default {
       if(e.button!==0) return;
       const sb=this.$refs.stage.getBoundingClientRect();
       const start={x:e.clientX, y:e.clientY};
-      const held=this.pile.grab(p.slug, e.clientX-sb.left, e.clientY-sb.top);
+      const held=this.pile.grab(p.key, e.clientX-sb.left, e.clientY-sb.top);
       let moved=false;
-      if(held){ e.preventDefault(); this.dragging=p.slug; }
+      if(held){ e.preventDefault(); this.dragging=p.key; }
       const move=ev=>{
         if(Math.hypot(ev.clientX-start.x, ev.clientY-start.y)>5) moved=true;
         if(held) this.pile.drag(ev.clientX-sb.left, ev.clientY-sb.top);
       };
       const up=()=>{
         removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
-        if(held){ this.pile.release(); this.flung=p.slug; clearTimeout(this.flungTimer); this.flungTimer=setTimeout(()=>{ this.flung=null; }, 1500); }
+        if(held){ this.pile.release(); this.flung=p.key; clearTimeout(this.flungTimer); this.flungTimer=setTimeout(()=>{ this.flung=null; }, 1500); }
         this.dragging=null;
         if(!moved) this.findGoDashboard(p.home);
       };
@@ -173,23 +187,23 @@ export default {
     // Size the page to the viewport, size the tiles to the page, and (re)build the pile. The first
     // build drops the tiles from above so the pile forms on screen; a resize settles it unseen.
     fit(first){
-      const stage=this.$refs.stage; if(!stage || !this.pile || !this.vendors.length) return;
+      const stage=this.$refs.stage; if(!stage || !this.pile || !this.tiles.length) return;
       if(first && this.built) return;
       stage.style.height=Math.max(520, innerHeight-stage.getBoundingClientRect().top-scrollY)+'px';
       const W=stage.clientWidth, H=stage.clientHeight;
-      const size=tileSize(W, H, this.vendors.length, W<640 ? 0.22 : 0.25);
+      const size=tileSize(W, H, this.tiles.length, W<640 ? 0.22 : 0.25);
       const rebuild=!this.built || size!==this.size;
       this.size=size; this.pile.size=size;
       // Room for the settled pile under the question box: the tiles' area, loosely packed, across the width.
-      this.floor=Math.round(this.vendors.length*size*size/(0.62*W) + size*0.8);
+      this.floor=Math.round(this.tiles.length*size*size/(0.62*W) + size*0.8);
       this.pile.bounds(W, H);
       if(rebuild){
         this.pile.clear();
-        const inPile=this.vendors.filter(p=>!this.landed.includes(p.slug));
-        if(this.reduced || this.built){ inPile.forEach(p=>this.pile.add(p.slug)); this.pile.settle(); }
+        const inPile=this.tiles.map(t=>t.key).filter(k=>!this.landed.includes(k));
+        if(this.reduced || this.built){ inPile.forEach(k=>this.pile.add(k)); this.pile.settle(); }
         // An answer can land before the last tile has dropped (a shared ?q= link, a cached judge):
         // a tile already on its card is not dropped into the pile behind it.
-        else inPile.forEach((p,i)=>setTimeout(()=>{ if(!this.landed.includes(p.slug)) this.pile.add(p.slug); }, i*16));
+        else inPile.forEach((k,i)=>setTimeout(()=>{ if(!this.landed.includes(k)) this.pile.add(k); }, i*10));
         this.built=true;
       }
       this.$nextTick(()=>this.place(false));
@@ -199,16 +213,15 @@ export default {
     land(){
       const slots=this.measureSlots(), flying=[];
       // Every tile to its start pose first, one layout for all of them, then every flight at once.
-      this.cards.forEach((c,i)=>{
-        const slug=c.slug;
-        const el=this.els[slug]; if(!this.byVendor || !el || !slots[slug] || this.landed.includes(slug)) return;
+      this.cards.forEach((c,i)=>{ for(const slug of this.byVendor ? ['v:'+c.slug, c.lands && 'p:'+c.platform] : ['p:'+c.platform]){
+        const el=this.els[slug]; if(!slug || !el || !slots[slug] || this.landed.includes(slug)) continue;
         const pose=this.pile.remove(slug);
         const from=pose || {x:slots[slug].x, y:this.$refs.stage.clientHeight, angle:0};
         el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
         el.style.visibility='visible';
         flying.push([el, i]);
         this.landed.push(slug);
-      });
+      } });
       if(flying.length) this.$refs.stage.getBoundingClientRect();
       for(const [el, i] of flying){
         el.style.transition=this.reduced ? 'none' : LAND;
@@ -246,9 +259,10 @@ export default {
       this.landed=[];
     },
     tileClass(p){
-      return {read:this.reading.has(p.slug), landed:this.landed.includes(p.slug), held:this.dragging===p.slug || this.flung===p.slug,
-        dim:(this.findBusy && !this.reading.has(p.slug))
-          || (this.find.phase==='done' && this.cards.length && !this.landed.includes(p.slug) && !this.litVendors.has(p.slug))};
+      const k=p.key;
+      return {read:this.reading.has(k), landed:this.landed.includes(k), held:this.dragging===k || this.flung===k,
+        dim:(this.findBusy && !this.reading.has(k))
+          || (this.find.phase==='done' && this.cards.length && !this.landed.includes(k) && !this.litVendors.has(k))};
     },
     pct(p){ return p==null ? '' : Math.round(p*100)+'%'; },
     // A job line's corner: its price, and on a platform card how many vendors sell it.
@@ -264,7 +278,7 @@ export default {
 <div class="sp" :class="{answered:find.phase==='done' && cards.length}" ref="stage">
   <section class="sp-top">
     <div v-if="find.phase==='idle' || findBusy" class="sp-hero" :class="{quiet:findBusy}">
-      <span class="sp-count">{{vendors.length}} providers<template v-if="toolCountText"> · {{toolCountText}} tools</template></span>
+      <span class="sp-count">{{platforms.length}} platforms · {{vendors.length}} providers<template v-if="toolCountText"> · {{toolCountText}} tools</template></span>
       <h1 class="hero-h1">What does your agent<br><span>need to do?</span></h1>
     </div>
 
@@ -298,15 +312,12 @@ export default {
           <!-- A vendor card: the vendor's tile lands in the logo place, and its platform is named
                under it. A platform card (a bare name): the platform's logo. -->
           <header>
-            <span v-if="byVendor" class="sp-slot sp-slot-lg" :data-slot="c.slug" aria-hidden="true"></span>
-            <span v-else class="sp-mark sp-logo" aria-hidden="true">
-              <img v-if="!platLogoBad[c.platform]" :src="'/logos/platforms/'+c.platform+'.svg'" alt="" @error="platLogoBad[c.platform]=true">
-              <span v-else class="sp-i" :style="{background:platTileBg(c.platform)}">{{platInitial({label:c.label, slug:c.platform})}}</span>
-            </span>
+            <span class="sp-slot sp-slot-lg" :data-slot="byVendor ? 'v:'+c.slug : 'p:'+c.platform" aria-hidden="true"></span>
             <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)">
               <span class="sp-vendor">{{c.label}}</span>
               <small v-if="byVendor">
-                <span class="sp-slot sp-mark" aria-hidden="true">
+                <span v-if="c.lands" class="sp-slot" :data-slot="'p:'+c.platform" aria-hidden="true"></span>
+                <span v-else class="sp-slot sp-mark" aria-hidden="true">
                   <img v-if="!platLogoBad[c.platform]" :src="'/logos/platforms/'+c.platform+'.svg'" alt="" @error="platLogoBad[c.platform]=true">
                   <span v-else class="sp-i" :style="{background:platTileBg(c.platform)}">{{platInitial({label:c.platform_label, slug:c.platform})}}</span>
                 </span>{{c.platform_label}}</small></button>
@@ -338,7 +349,7 @@ export default {
     </div>
     <p class="sp-meta" aria-live="polite">
       <template v-if="find.phase==='recall'">Looking through the catalog…</template>
-      <template v-else-if="find.phase==='reading'"><i class="dot"></i>{{find.candidates.length}} candidates from {{findCandidateVendors.length}} providers. Reading them for your job…</template>
+      <template v-else-if="find.phase==='reading'"><i class="dot"></i>{{find.candidates.length}} candidates on {{findCandidatePlatforms.length}} platforms from {{findCandidateVendors.length}} providers. Reading them for your job…</template>
     </p>
     <div class="sp-chips" v-if="find.phase==='idle' || find.phase==='done' && !cards.length">
       <button v-for="ex in examples.slice(1)" :key="ex" class="sp-chip" type="button" @click="pick(ex)">{{ex}}</button>
@@ -346,9 +357,9 @@ export default {
   </form>
 
   <div class="sp-floor" :style="{height:floor+'px'}" aria-hidden="true"></div>
-  <button v-for="p in vendors" :key="p.slug" :ref="el=>tileRef(p.slug, el)" class="sp-tile" :class="tileClass(p)"
+  <button v-for="p in tiles" :key="p.key" :ref="el=>tileRef(p.key, el)" class="sp-tile" :class="tileClass(p)"
           :style="{width:size+'px', height:size+'px'}" type="button" tabindex="-1" aria-hidden="true" :title="p.label" @pointerdown="press(p, $event)">
-    <img v-if="!platLogoBad['v:'+p.slug]" :src="'/logos/'+p.slug+'.svg'" alt="" draggable="false" @error="platLogoBad['v:'+p.slug]=true">
+    <img v-if="!platLogoBad[p.key]" :src="p.vendor ? '/logos/'+p.slug+'.svg' : '/logos/platforms/'+p.slug+'.svg'" alt="" draggable="false" @error="platLogoBad[p.key]=true">
     <span v-else class="sp-i" :style="{background:platTileBg(p.slug)}">{{platInitial(p)}}</span>
   </button>
 </div>
