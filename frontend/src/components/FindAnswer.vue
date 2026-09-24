@@ -40,8 +40,8 @@ export default {
       <button class="fa-link" type="button" @click="findRequestTool()">Request a better tool</button></p>
 
     <ul class="fa-list">
-      <li v-for="g in shown" :key="g.key" class="fa-row" :class="{weak:findWeak(g)}">
-        <button class="fa-main" type="button" @click="findOpen(g)">
+      <li v-for="(g, i) in shown" :key="g.key" class="fa-row" :class="{weak:findWeak(g)}">
+        <button class="fa-main" type="button" @click="findOpen(g, i+1)">
           <span class="fa-logo" :class="{gen:platLogoBad[g.platform]}"
                 :style="platLogoBad[g.platform] ? {background:platTileBg(g.platform)} : null">
             <img v-if="!platLogoBad[g.platform]" :src="'/logos/platforms/'+g.platform+'.svg'" alt="" @error="platLogoBad[g.platform]=true">

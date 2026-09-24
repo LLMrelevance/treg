@@ -101,7 +101,13 @@ export default {
     this.loadPlatforms();
     this.mountField();
     this.$nextTick(()=>this.fit(true));
-    const q=new URLSearchParams(location.search).get('q');
+    const params=new URLSearchParams(location.search), q=params.get('q');
+    // Where visitors come to /search from: `?ref=` (the landing's Tools link says `landing-nav` or
+    // `landing-footer`), else the referring host. The person this merges into after sign-in is
+    // what the search-to-signup funnel reads (see interface/dashboard.md).
+    let referrer=''; try{ referrer=document.referrer ? new URL(document.referrer).hostname : ''; }catch(e){}
+    this.track('search_opened', {ref:params.get('ref') || (referrer && referrer!==location.hostname ? referrer : 'direct'),
+      has_q:!!q, signed_in:this.sessionChecked ? !!this.authed : null});
     if(q){ this.text=q; this.ask(); }
   },
   beforeUnmount(){
@@ -181,7 +187,7 @@ export default {
         removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
         if(held){ this.pile.release(); this.flung=p.key; clearTimeout(this.flungTimer); this.flungTimer=setTimeout(()=>{ this.flung=null; }, 1500); }
         this.dragging=null;
-        if(!moved) this.findGoDashboard(p.home);
+        if(!moved){ this.findTrackClick('tile', p.home, p.key.startsWith('v:') ? {provider:p.slug} : {}); this.findGoDashboard(p.home); }
       };
       addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
     },
@@ -268,6 +274,14 @@ export default {
           || (this.find.phase==='done' && this.cards.length && !this.landed.includes(k) && !this.litVendors.has(k))};
     },
     pct(p){ return p==null ? '' : Math.round(p*100)+'%'; },
+    openCard(c, i){
+      this.findTrackClick('card', c.platform, {provider:this.byVendor ? c.slug : undefined, rank:i+1});
+      this.findGoDashboard(c.platform);
+    },
+    openJob(c, i, g){
+      this.findTrackClick('job', g.platform, {provider:g.rows[0]?.provider, rank:i+1});
+      this.findGoDashboard(g.platform);
+    },
     // A job line's corner: its price, and on a platform card how many vendors sell it.
     jobMeta(g){
       const n=this.findProviders(g).length;
@@ -311,12 +325,12 @@ export default {
         </span>
       </div>
       <div class="sp-cards">
-        <article v-for="c in cards" :key="c.slug" class="sp-card" :class="{weak:findWeak(c)}">
+        <article v-for="(c, ci) in cards" :key="c.slug" class="sp-card" :class="{weak:findWeak(c)}">
           <!-- A vendor card: the vendor's tile lands in the logo place, and its platform is named
                under it. A platform card (a bare name): the platform's logo. -->
           <header>
             <span class="sp-slot sp-slot-lg" :data-slot="c.logo" aria-hidden="true"></span>
-            <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)">
+            <button class="sp-plat" type="button" @click="openCard(c, ci)">
               <span class="sp-vendor">{{c.label}}</span>
               <small v-if="byVendor">
                 <span v-if="c.mark" class="sp-slot" :data-slot="c.mark" aria-hidden="true"></span>
@@ -328,7 +342,7 @@ export default {
           </header>
           <ul>
             <li v-for="g in c.jobs.slice(0,3)" :key="g.key">
-              <button type="button" @click="findGoDashboard(g.platform)" :title="g.rows.map(r=>r.id).join(', ')">
+              <button type="button" @click="openJob(c, ci, g)" :title="g.rows.map(r=>r.id).join(', ')">
                 <span class="sp-job">{{g.label}}</span>
                 <span class="sp-m">{{jobMeta(g)}}</span>
               </button>

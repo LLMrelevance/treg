@@ -1053,6 +1053,16 @@ fit is its best provider's. The page never re-ranks providers.
   to every visitor while the rollout is enabled (there is no legacy view of this page) and 404s
   when the rollout switch forces legacy.
 
+**Analytics for finds** (PostHog through `track`, anonymous until sign-in, when the visitor's
+earlier events join the identified person): `search_opened` (`ref`: the landing's Tools link sends
+`?ref=landing-nav` or `landing-footer`, else the referring host), `catalog_find` (a find ran:
+`surface` search or catalog, `words`, `auto`), `search_answered` (`verdict`, `results`,
+`providers`, `top_fit`), `search_result_clicked` (`from` card, job or tile; `platform`,
+`provider`, `rank`, `signed_in`) and `search_copied` (`scope` all, job or share). The landing's
+Tools links also send `nav_clicked`. A cohort of people who performed `catalog_find`, followed
+through `signup_completed`, `tool_called` and `topup_completed`, is the search-to-conversion
+funnel.
+
 ## Code surfaces (every page)
 Snippet blocks (`.lc-codewrap` on Getting started, the in-app CLI tutorial's `.term` panes, the
 standalone `/tutorial`, the connect/setup instruction panes, the ledger's `treg call` line and captured

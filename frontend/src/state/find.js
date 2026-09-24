@@ -4,7 +4,7 @@
 // both pages draw the wait on the first one. State lives in `find` (data.js); the in-flight request's
 // AbortController lives in `elements` because it is a handle, not state to render.
 // The state of no search; `high` is the server's strong cut and arrives with each answer.
-export const FIND_EMPTY = {q:'', phase:'idle', candidates:[], rows:[], verdict:'', read:0, high:1, error:''}
+export const FIND_EMPTY = {q:'', phase:'idle', candidates:[], rows:[], verdict:'', read:0, high:1, error:'', auto:false}
 const FIND_OPEN = 'treg-find-open'
 // The Catalog box searches by itself once typing pauses this long: people did not discover Enter.
 const FIND_DEBOUNCE_MS = 700
@@ -79,9 +79,9 @@ export default {
     this.elements.findAbort?.abort?.();
     const ctl=new AbortController();
     this.elements.findAbort=ctl;
-    this.find={...FIND_EMPTY, q, phase:'recall'};
+    this.find={...FIND_EMPTY, q, phase:'recall', auto};
     this.loadPlatforms();
-    this.track('catalog_find', {surface:this.view==='find'?'search':'catalog', words:q.split(/\s+/).length, auto});
+    this.track('catalog_find', {surface:this.findSurface(), words:q.split(/\s+/).length, auto});
     try{
       const res=await fetch('/catalog/find?q='+encodeURIComponent(q), {signal:ctl.signal, credentials:'include',
         headers:{'accept':'application/x-ndjson','ngrok-skip-browser-warning':'1'}});
@@ -96,8 +96,11 @@ export default {
       for await (const ev of ndjson(res)){
         if(ctl.signal.aborted) return;
         if(ev.event==='candidates') this.find={...this.find, phase:'reading', candidates:ev.candidates||[]};
-        else if(ev.event==='judged') this.find={...this.find, phase:'done', rows:ev.rows||[], verdict:ev.verdict,
-          read:ev.read||0, high:ev.high??1};
+        else if(ev.event==='judged'){
+          this.find={...this.find, phase:'done', rows:ev.rows||[], verdict:ev.verdict, read:ev.read||0, high:ev.high??1};
+          this.track('search_answered', {surface:this.findSurface(), verdict:ev.verdict, results:this.find.rows.length,
+            providers:new Set(this.find.rows.map(r=>r.provider)).size, top_fit:this.find.rows[0]?.p ?? null, auto});
+        }
       }
       if(this.find.phase!=='done' && !ctl.signal.aborted) this.find={...this.find, phase:'error', error:'The answer was cut off. Try again.'};
     }catch(e){
@@ -139,6 +142,7 @@ export default {
   // so a label change does not replace the answer (and re-land its tiles on /search).
   async findCopyText(text, key){
     if(!(await this.toClipboard(text))) return;
+    this.track('search_copied', {surface:this.findSurface(), scope:key==='all' || key==='share' ? key : 'job', verdict:this.find.verdict});
     this.findCopied=key;
     setTimeout(()=>{ if(this.findCopied===key) this.findCopied=''; }, 1600);
   },
@@ -152,8 +156,19 @@ export default {
   // The cheapest line of a job, priced the way every other catalog price is (`capCheapest`).
   findPrice(g){ return this.capCheapest(g.rows)?.label || ''; },
 
+  // Analytics: which page a find ran on. /search is the public page; the Catalog box is the other.
+  findSurface(){ return this.view==='find' ? 'search' : 'catalog'; },
+
+  // One answer row, card or pile tile followed out of a find (`search_result_clicked`): what it was
+  // (`from`: card | job | tile), its platform and vendor, and its place in the answer.
+  findTrackClick(from, platform, extra={}){
+    this.track('search_result_clicked', {surface:this.findSurface(), from, platform, verdict:this.find.verdict,
+      signed_in:!!this.authed, ...extra});
+  },
+
   // Open the platform shelf the row lives on, with its ledger filtered to this job's capability.
-  findOpen(group){
+  findOpen(group, rank){
+    this.findTrackClick('job', group.platform, {provider:group.rows[0]?.provider, rank});
     this.openPlatform(group.platform);
     this.platQ=group.rows[0]?.name || group.label;
   },
