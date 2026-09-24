@@ -1052,3 +1052,13 @@ a:hover{text-decoration-color:var(--muted)}
 @media (prefers-reduced-motion:reduce){.cat-find,.pt-card{transition:none}}
 /* /search is one viewport tall and owns its own edges (pages/SearchPage.vue). */
 main.flush,.redesign main.flush{padding:0;max-width:none}
+
+/* Toasts (App.vue): a solid card over the page, bottom right, its main action last. */
+.app-toast{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom, 0px));z-index:200;
+  width:min(340px, calc(100vw - 36px));box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:12px;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line2);border-radius:var(--r);box-shadow:var(--shadow-lg);
+  font-family:var(--sans);font-size:13.5px;line-height:1.45;animation:app-toast-in .22s var(--ease-out)}
+.app-toast p{margin:0}
+.app-toast-a{display:flex;justify-content:flex-end;gap:8px}
+@keyframes app-toast-in{from{opacity:0;transform:translateY(6px)}}
+@media (prefers-reduced-motion:reduce){.app-toast{animation:none}}
