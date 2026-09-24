@@ -1034,14 +1034,15 @@ fit is its best provider's. The page never re-ranks providers.
   (`LandingNavigation.vue`; "Open dashboard" for a member), the landing tokens, and the landing
   hero's glyph field (`/media/landing/hero-particles.js`, mounted through `window.tregMountField`
   and ticked by this page). One viewport tall, never scrolls; a long answer scrolls inside its
-  panel. Every platform is a tile in a Matter.js pile (`state/pile.ts`) on the floor of the page:
-  tiles can be picked up and thrown, the recall's platforms hop while the judge reads, the fitting
-  ones leave the physics world and fly to their answer cards, and the next search drops them back
-  in; × or Esc clears the answer the same way. A described job is answered **by vendor**: one card
-  per provider under its own logo (`/logos/<provider>.svg`), its jobs with their prices, and the
-  platform of its best job beside the name, where that platform's tile lands on the first card
-  that names it (later cards show a still copy). A bare name (`name`, titled "Tools for …") is
-  answered by platform, each card listing its jobs with provider counts. An empty box submits its placeholder. Reduced motion
+  panel. Every vendor is a tile (its `/logos/<provider>.svg`) in a Matter.js pile (`state/pile.ts`)
+  on the floor of the page; the vendors come from `/catalog/platforms`' `providers`, and a tile
+  opens its vendor's busiest platform. Tiles can be picked up and thrown, the recall's vendors hop
+  while the judge reads, the fitting ones leave the physics world and fly to their answer cards,
+  and the next search drops them back in; × or Esc clears the answer the same way. A described
+  job is answered **by vendor**: one card per provider, its tile landing in the card's logo place,
+  its jobs with their prices, and the platform of its best job named under it. A bare name
+  (`name`, titled "Tools for …") is answered by platform, each card listing its jobs with provider
+  counts; no tile lands, and the vendors on those platforms stay lit. An empty box submits its placeholder. Reduced motion
   settles the pile unseen and skips the flights. `?q=` runs a search on load and is what **Share**
   copies. Any result (a card, a job line, a tile) opens that platform in the dashboard: directly
   for a member; otherwise sign-in first, the destination kept in localStorage for ten minutes and

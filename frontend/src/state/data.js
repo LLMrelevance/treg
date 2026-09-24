@@ -69,7 +69,7 @@ export default function data(){
       platLogoBad:{},  // platform slug → we have no /logos/platforms/<slug>.svg, so draw the initial tile
       // Endpoint catalog (GET /catalog/*): the platform axis of the marketplace. Everything here is
       // optional — a server without the catalog routes just renders no platform shelf.
-      plats:{list:[], loaded:false, loading:false},
+      plats:{list:[], providers:{}, loaded:false, loading:false},
       // Find tools for a job (state/find.js): phase idle | recall | reading | done | error
       find:{...FIND_EMPTY}, findCopied:'', findSoon:false,
       platSlug:null, platData:null, platErr:'', platLoading:false,

@@ -79,8 +79,12 @@ def _platform_rows() -> list[dict]:
 
 @app.get("/catalog/platforms")
 async def catalog_platforms() -> dict:
-    """Open: the platform shelves of the endpoint catalog, busiest first."""
-    return {"platforms": _platform_rows(), "generated_from": "catalog"}
+    """Open: the platform shelves of the endpoint catalog, busiest first, and the display name of
+    every vendor on them (the /search page's pile is one tile per vendor). Vendors come from the
+    public browse rows only, so a routed row's "treg" is never one."""
+    services = {e["provider"] for e in catalog_store.load().endpoints if catalog_store.browsable(e)}
+    names = {s: _provider_display(s) for s in sorted(services)}
+    return {"platforms": _platform_rows(), "providers": names, "generated_from": "catalog"}
 
 
 @app.get("/catalog/platforms/{slug}")

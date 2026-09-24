@@ -18,4 +18,5 @@ export default {
     return n;
   },
   findCandidatePlatforms(){ return [...new Set(this.find.candidates.map(c=>c.platform).filter(Boolean))]; },
+  findCandidateVendors(){ return [...new Set(this.find.candidates.map(c=>c.provider).filter(Boolean))]; },
 }

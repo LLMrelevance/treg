@@ -6,7 +6,7 @@ export default {
     async loadPlatforms(){
       if(this.plats.loaded || this.plats.loading) return;
       this.plats.loading=true;
-      try{ const d=await this.api('/catalog/platforms'); this.plats.list=(d&&d.platforms)||[]; this.plats.loaded=true; }
+      try{ const d=await this.api('/catalog/platforms'); this.plats.list=(d&&d.platforms)||[]; this.plats.providers=(d&&d.providers)||{}; this.plats.loaded=true; }
       catch(e){ this.plats.list=[]; }
       finally{ this.plats.loading=false; } },
 // Platform pages are hash routes (/app#platform/<slug>): unlike /app/marketplace/<service> there

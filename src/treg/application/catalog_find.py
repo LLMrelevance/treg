@@ -203,7 +203,8 @@ async def stream(query: str, provider_display) -> AsyncIterator[dict]:
     cat = catalog_store.load()
     cands = catalog_store.candidates(query, cat, max(1, int(get_settings().find_candidates)))
     yield {"event": "candidates",
-           "candidates": [{"id": ep["id"], "platform": ep.get("platform") or ""} for ep, _ in cands]}
+           "candidates": [{"id": ep["id"], "platform": ep.get("platform") or "", "provider": ep["provider"]}
+                          for ep, _ in cands]}
     judged = await judge(query, cands, cat, provider_display)
     yield {"event": "judged", "verdict": judged.verdict, "read": len(cands),
            "high": float(get_settings().search_judge_high),
