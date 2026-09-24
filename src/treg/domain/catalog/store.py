@@ -267,9 +267,20 @@ def load(*, refresh: bool = False, directory: Path | None = None) -> Catalog:
     return _CACHE
 
 
+class _Loader(yaml.SafeLoader):
+    """SafeLoader that keeps timestamps as the strings they were written as. The validator accepts
+    `checked: 2026-09-01` unquoted, and a `date` object in a served row breaks every plain
+    `json.dumps` of it (the /catalog/find stream did exactly that on the video-gen rows)."""
+
+
+_Loader.yaml_implicit_resolvers = {
+    ch: [(tag, rx) for tag, rx in rs if tag != "tag:yaml.org,2002:timestamp"]
+    for ch, rs in yaml.SafeLoader.yaml_implicit_resolvers.items()}
+
+
 def _read_yaml(path: Path) -> dict:
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=_Loader)  # noqa: S506 - SafeLoader subclass
     except (OSError, yaml.YAMLError):
         return {}
     return data if isinstance(data, dict) else {}

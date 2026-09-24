@@ -19,6 +19,15 @@ from treg.domain.catalog import store as cs
 from treg import oauth_providers as P
 
 
+def test_loaded_rows_are_plain_json(tmp_path):
+    """An unquoted `checked: 2026-09-01` is valid catalog data; the loader must keep it a string,
+    because /catalog/find streams rows with a plain `json.dumps` and a `date` there killed it."""
+    p = tmp_path / "x.yaml"
+    p.write_text("cost:\n  checked: 2026-09-01\n", encoding="utf-8")
+    assert cs._read_yaml(p)["cost"]["checked"] == "2026-09-01"
+    json.dumps(cs.load().endpoints)
+
+
 def test_tavily_surface_keeps_only_safe_synchronous_data_tools():
     cat = cs.load()
     rows = {ep["id"]: ep for ep in cat.for_provider("tavily")}
