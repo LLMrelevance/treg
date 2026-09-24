@@ -256,6 +256,7 @@ export default {
       <div class="sp-panel-h">
         <span v-if="find.verdict==='strong'" class="sp-title">Best fit for <b>{{find.q}}</b></span>
         <span v-else-if="find.verdict==='closest'" class="sp-title warn">No strong fit for <b>{{find.q}}</b>. Closest matches:</span>
+        <span v-else-if="find.verdict==='name'" class="sp-title">Tools for <b>{{find.q}}</b></span>
         <span v-else class="sp-title">Keyword matches for <b>{{find.q}}</b>. Matching by meaning is unavailable right now.</span>
         <span class="sp-actions">
           <button class="sp-share" type="button" @click="findShare()">{{findCopied==='share'?'Link copied':'Share'}}</button>

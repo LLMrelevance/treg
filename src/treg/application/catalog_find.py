@@ -9,6 +9,10 @@ relevance judge (`infra.judge`, TypeSafe's Jev, one Noul per candidate in one re
 the same `search_judge_keep` / `search_judge_high` cuts. What differs is the audience: the dashboard's
 Catalog page and the public /search page, both anonymous-capable, so the route is rate limited here.
 
+A person also types bare names ("google", "semrush") into the same box. That is not a job, and no
+endpoint "accomplishes" it, so the same judge request asks one more question - is `task` only a
+name? - and a name is answered with the platform or provider it names, under its own verdict.
+
 Two phases, because the recall is instant and the judge is not: `stream` yields the candidates
 first and the judged rows when they arrive, and the pages animate the wait on the first event. The
 judge abstains rather than fails (see `infra.judge`); an abstaining judge falls back to the keyword
@@ -37,6 +41,32 @@ STRONG = "strong"      # at least one row at or over `search_judge_high`
 CLOSEST = "closest"    # rows kept, none strong - shown as "closest matches", not as an answer
 NONE = "none"          # the judge read every candidate and kept nothing
 KEYWORD = "keyword"    # the judge abstained; the rows are the keyword page, unjudged
+NAME = "name"          # the query only names a platform or provider; the rows are what it offers, unjudged
+
+MAX_NAME_PLATFORMS = 12
+MAX_NAME_ROWS_PER_PLATFORM = 40
+
+# What a fit means, attached to every candidate question. Without it the judge scored a bare name
+# ("google") at 0.6+ against every Google endpoint; the `false` side makes a name fit nothing, and
+# the NAME question below answers it instead.
+FIT_CRITERIA = {
+    "true": "The endpoint returns the data or performs the action the task asks for, or performs "
+            "one essential step of it.",
+    "false": "The endpoint only shares words or a platform with the task, or returns different data "
+             "than the task needs. Also false when the task only names a product, company or "
+             "platform without saying what to get or do.",
+}
+NAME_QUESTION = {
+    "type": "noul",
+    "instructions": "`task` is only the name of a product, company, platform or data source, "
+                    "without saying what data to get or what to do.",
+    "criteria": {
+        "true": "A bare name such as 'google', 'semrush' or 'Google Search Console': the person "
+                "wants to see what is available there.",
+        "false": "The text names data, a result or an action, even in two words and even alongside "
+                 "a platform, such as 'backlinks', 'tiktok ads' or 'verify email'.",
+    },
+}
 
 
 def configured() -> bool:
@@ -81,23 +111,83 @@ class Judged:
     judgement: judge_infra.Judgement
 
 
-async def judge(query: str, cands: list[tuple[dict, float]], cat: catalog_store.Catalog) -> Judged:
+def name_rows(query: str, cat: catalog_store.Catalog, provider_display) -> list[dict]:
+    """What a bare name offers: the endpoints on the platforms whose name or slug contains it (the
+    Catalog box's platform filter); else, when the name is a provider's, that provider's endpoints.
+    Platform first, because "tiktok" means the platform, not the one provider that happens to be
+    called TikTok. Browse endpoints only, like the platform shelves.
+
+    Ordered so the first lines read as jobs: inside a platform, catalogued jobs before uncatalogued
+    endpoints (Tag Manager's raw API surface), the jobs most providers sell first."""
+    q = query.strip().lower()
+    if not q:
+        return []
+    shown = [e for e in cat.endpoints if e["kind"] not in catalog_store.HIDDEN_KINDS and e["kind"] != "routed"]
+    sellers: dict[str, int] = {}
+    for e in shown:
+        if e["capability"]:
+            sellers[e["capability"]] = sellers.get(e["capability"], 0) + 1
+
+    def jobs_first(eps: list[dict]) -> list[dict]:   # stable: ties keep the catalog's order
+        return sorted(eps, key=lambda e: (not e["capability"], -sellers.get(e["capability"], 0)))
+
+    on: dict[str, list[dict]] = {}
+    for e in shown:
+        on.setdefault(e["platform"], []).append(e)
+    slugs = [slug for slug, plat in cat.platforms.items()
+             if on.get(slug) and q in f"{plat['label']} {slug}".lower()]
+    if slugs:
+        # The platform of exactly that name, then those the name starts ("tiktok" -> TikTok Shop)
+        # before one that merely mentions it ("Douyin (TikTok China)"); then the Catalog shelves'
+        # own featured rank, then the most jobs.
+        def rank(slug: str) -> tuple:
+            plat, short = cat.platforms[slug], _short(cat.platforms[slug]["label"])
+            featured = plat.get("featured")
+            jobs = len({e["capability"] for e in on[slug] if e["capability"]})
+            return (q not in (short, slug), not (short.startswith(q) or slug.startswith(q)),
+                    featured is None, featured or 0, -jobs, slug)
+        slugs = sorted(slugs, key=rank)[:MAX_NAME_PLATFORMS]
+        return [e for slug in slugs for e in jobs_first(on[slug])[:MAX_NAME_ROWS_PER_PLATFORM]]
+    return jobs_first([e for e in shown if q in (e["provider"].lower(), provider_display(e["provider"]).lower())])
+
+
+def _short(label: str) -> str:
+    """A platform label without its gloss: "Google Analytics (GA4)" -> "google analytics"."""
+    return label.split(" — ")[0].split(" (")[0].strip().lower()
+
+
+def names_a_platform(query: str, cat: catalog_store.Catalog) -> bool:
+    """The query is exactly a platform's name or slug ("google ads", "tiktok-shop")."""
+    q = " ".join(query.lower().split())
+    return any(q in (_short(p["label"]), slug, slug.replace("-", " ")) for slug, p in cat.platforms.items())
+
+
+async def judge(query: str, cands: list[tuple[dict, float]], cat: catalog_store.Catalog,
+                provider_display) -> Judged:
     """Judge the recall and decide the verdict. Never raises: an abstaining judge yields the
     keyword page (possibly empty) under the KEYWORD verdict. Rows are best fit first: this page is
     an answer to one job, so unlike the experiment's `interleave.bucketed` it does not keep the
-    lexical order inside a bucket."""
+    lexical order inside a bucket. A bare name with no strong fit (the judge reads it as one, or
+    it is exactly a platform's name) is answered with what that name offers when the catalog has it."""
     s = get_settings()
     views = [judge_infra.candidate_view(ep, cat.capabilities.get(ep.get("capability") or "", ""))
              for ep, _ in cands]
     j = await judge_infra.judge(query, views, api_key=s.typesafe_api_key, model=s.typesafe_model,
-                                url=s.typesafe_url, timeout_s=float(s.find_timeout_s))
+                                url=s.typesafe_url, timeout_s=float(s.find_timeout_s),
+                                criteria=FIT_CRITERIA, extra={"name": NAME_QUESTION})
     if j.probs is None:
         page, _, _ = catalog_store.rank_band(query, cat, 25)
         return Judged(KEYWORD, [(ep, None) for ep, _ in page], j)
     keep, high = float(s.search_judge_keep), float(s.search_judge_high)
     scored = sorted(zip((ep for ep, _ in cands), j.probs), key=lambda t: -t[1])
+    strong = bool(scored) and scored[0][1] >= high
+    is_name = (j.extra or {}).get("name", 0.0) >= float(s.find_name_min) or names_a_platform(query, cat)
+    if not strong and is_name:
+        named = name_rows(query, cat, provider_display)
+        if named:
+            return Judged(NAME, [(ep, None) for ep in named], j)
     kept = [(ep, p) for ep, p in scored if p >= keep]
-    verdict = STRONG if scored and scored[0][1] >= high else CLOSEST if kept else NONE
+    verdict = STRONG if strong else CLOSEST if kept else NONE
     return Judged(verdict, kept, j)
 
 
@@ -109,7 +199,7 @@ async def stream(query: str, provider_display) -> AsyncIterator[dict]:
     cands = catalog_store.candidates(query, cat, max(1, int(get_settings().find_candidates)))
     yield {"event": "candidates",
            "candidates": [{"id": ep["id"], "platform": ep.get("platform") or ""} for ep, _ in cands]}
-    judged = await judge(query, cands, cat)
+    judged = await judge(query, cands, cat, provider_display)
     yield {"event": "judged", "verdict": judged.verdict, "read": len(cands),
            "high": float(get_settings().search_judge_high),
            "rows": [_row(ep, cat, provider_display, p) for ep, p in judged.rows]}
@@ -123,12 +213,18 @@ def _log(query: str, *, source: str, baseline_total: int, cands: list[tuple[dict
     tables the MCP experiment and the keyword route already write, so the misses land in one
     report. Fire-and-forget, like every audit write."""
     j = judged.judgement
+    if judged.verdict == NAME:   # the rows shown are the name's, unjudged; keep what the judge said
+        keep = float(get_settings().search_judge_keep)
+        judged_rows = [[ep["id"], round(p, 3)] for (ep, _), p in zip(cands, j.probs or []) if p >= keep]
+    else:
+        judged_rows = [[ep["id"], round(p, 3)] for ep, p in judged.rows] if j.probs is not None else None
+    owner = "name" if judged.verdict == NAME else "baseline"
     audit.record_search(
         query=query, source=source, org_id=None, user_email=None,
         mode="find", arm="judged",
         baseline_ids=[ep["id"] for ep, _ in cands],
-        judged=[[ep["id"], round(p, 3)] for ep, p in judged.rows] if j.probs is not None else None,
-        shown=[[ep["id"], "judged" if p is not None else "baseline"] for ep, p in judged.rows],
+        judged=judged_rows,
+        shown=[[ep["id"], "judged" if p is not None else owner] for ep, p in judged.rows],
         baseline_total=int(baseline_total), differs=False,
         judge_ms=j.ms, judge_tokens_in=j.tokens_in, judge_tokens_out=j.tokens_out, judge_error=j.error)
     if judged.verdict == NONE or (judged.verdict == KEYWORD and not judged.rows):

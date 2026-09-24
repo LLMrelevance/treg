@@ -13,8 +13,12 @@ export function isJobQuery(text){
   return t.split(/\s+/).filter(Boolean).length>=4 || /\?$/.test(t);
 }
 
+// An answer the judge did not score row by row: its order is the server's. `keyword` is the lexical
+// page of an abstaining judge; `name` is what a bare name ("google", "semrush") offers.
+export function unjudged(verdict){ return verdict==='keyword' || verdict==='name'; }
+
 // Group items under a key, into each group's `field` list; a group's fit is its best member's, and groups sort best first unless
-// the answer is unjudged (keyword order is the server's). Shared by the Catalog list (per job) and
+// the answer is unjudged. Shared by the Catalog list (per job) and
 // the /search cards (per platform).
 export function groupBest(items, verdict, keyOf, make, field){
   const by=new Map();
@@ -26,7 +30,7 @@ export function groupBest(items, verdict, keyOf, make, field){
     if(it.p!=null && (g.p==null || it.p>g.p)) g.p=it.p;
   }
   const out=[...by.values()];
-  if(verdict!=='keyword') out.sort((a,b)=>(b.p||0)-(a.p||0));
+  if(!unjudged(verdict)) out.sort((a,b)=>(b.p||0)-(a.p||0));
   return out;
 }
 
@@ -114,8 +118,8 @@ export default {
     setTimeout(()=>{ if(this.findCopied===key) this.findCopied=''; }, 1600);
   },
 
-  // A judged job under the server's strong cut draws lighter; keyword rows carry no fit to judge.
-  findWeak(g){ return this.find.verdict!=='keyword' && (g.p==null || g.p<this.find.high); },
+  // A judged job under the server's strong cut draws lighter; unjudged rows carry no fit to judge.
+  findWeak(g){ return !unjudged(this.find.verdict) && (g.p==null || g.p<this.find.high); },
 
   // The cheapest line of a job, priced the way every other catalog price is (`capCheapest`).
   findPrice(g){ return this.capCheapest(g.rows)?.label || ''; },
