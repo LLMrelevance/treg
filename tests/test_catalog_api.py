@@ -173,7 +173,7 @@ async def test_platforms_lists_the_curated_shelves_busiest_first(clients: AsyncC
     counts = [p["endpoints"] for p in body["platforms"]]
     assert counts == sorted(counts, reverse=True)
     # every vendor on a shelf is named once, for the /search pile; treg's routed rows are not a vendor
-    assert set(body["providers"]) <= {s for p in body["platforms"] for s in p["providers"]}
+    assert set(body["providers"]) == {s for p in body["platforms"] for s in p["providers"]}
     assert body["providers"]["dataforseo"] == "DataForSEO" and "treg" not in body["providers"]
 
 

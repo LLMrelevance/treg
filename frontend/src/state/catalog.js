@@ -266,7 +266,7 @@ mkOauth(service){ const p=this.providers.find(x=>x.service===service); return !!
     // every provider on a public shelf would render as its bare slug.
     provName(service){ const p=this.providers.find(x=>x.service===service); if(p) return p.display_name;
       const c=(this.platData&&this.platData.providers||{})[service];
-      return (c&&c.display_name) || service; },
+      return (c&&c.display_name) || this.plats.providers[service] || service; },
 // Provider-wide facts, served once per provider on the platform response rather than copied
     // onto every row.
     provFact(service, key){ const p=(this.platData&&this.platData.providers||{})[service]; return (p&&p[key])||''; },

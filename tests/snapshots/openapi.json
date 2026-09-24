@@ -5355,7 +5355,7 @@
     },
     "/catalog/platforms": {
       "get": {
-        "description": "Open: the platform shelves of the endpoint catalog, busiest first.",
+        "description": "Open: the platform shelves of the endpoint catalog, busiest first, and the display name of\nevery vendor on them (the /search page's pile is one tile per vendor).",
         "operationId": "catalog_platforms_catalog_platforms_get",
         "responses": {
           "200": {

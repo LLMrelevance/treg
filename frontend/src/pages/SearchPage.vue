@@ -33,13 +33,14 @@ export default {
     // a slug can be both ("tiktok-ads"). A tile opens its platform, a vendor its busiest platform.
     vendors(){
       const home={};
-      for(const p of this.platforms) for(const s of p.providers||[])            // busiest platform first
-        if(!home[s] && this.plats.providers[s]) home[s]=p.slug;                    // named vendors only
-      return Object.keys(home).sort().map(slug=>({slug, label:this.plats.providers[slug]||slug, home:home[slug]}));
+      for(const p of this.platforms) for(const s of p.providers||[]) home[s]=home[s]||p.slug;   // busiest platform first
+      return Object.keys(home).sort().map(slug=>({slug, label:this.provName(slug), home:home[slug]}));
     },
+    // `bad` is the tile's platLogoBad key, shared with every other place that draws that logo.
     tiles(){
-      return [...this.platforms.map(p=>({key:'p:'+p.slug, vendor:false, slug:p.slug, label:this.platShort(p.label), home:p.slug})),
-              ...this.vendors.map(v=>({key:'v:'+v.slug, vendor:true, ...v}))];
+      return [...this.platforms.map(p=>({key:'p:'+p.slug, slug:p.slug, label:this.platShort(p.label), home:p.slug,
+                                          src:'/logos/platforms/'+p.slug+'.svg', bad:p.slug})),
+              ...this.vendors.map(v=>({...v, key:'v:'+v.slug, src:'/logos/'+v.slug+'.svg', bad:'v:'+v.slug}))];
     },
     // On a platform answer (a bare name) no vendor lands; the vendors on those platforms stay lit.
     litVendors(){ return this.byVendor ? new Set() : new Set(this.find.rows.map(r=>'v:'+r.provider)); },
@@ -47,9 +48,9 @@ export default {
     // vendor's own logo, listing the jobs that vendor sells here. A bare name ("google") asks what
     // is on those platforms, so it is answered by platform, each card listing its jobs.
     byVendor(){ return this.find.verdict!=='name'; },
-    // Where tiles land: a vendor card takes its vendor's tile in the logo place and, on the first
-    // card naming that platform (`lands`), the platform's tile beside the platform name; later
-    // cards show a still copy. A platform card takes the platform's tile in the logo place.
+    // Where tiles land (pile keys): `logo`, the card's logo place, takes the vendor's tile on a
+    // vendor card and the platform's on a platform card; `mark`, beside the platform name, takes
+    // the platform's tile on the first vendor card naming it. Later cards show a still copy.
     cards(){
       if(this.find.phase!=='done') return [];
       const byVendor=this.byVendor, seen=new Set();
@@ -57,9 +58,9 @@ export default {
         const platform_label=this.platShort(r.platform_label||r.platform);
         return {slug, platform:r.platform, platform_label, label:byVendor ? r.provider_display||r.provider : platform_label};
       }, 'rows').slice(0,12).map(c=>{
-        const card={...c, jobs:jobGroups(c.rows), lands:!seen.has(c.platform)};
+        const mark=byVendor && !seen.has(c.platform) ? 'p:'+c.platform : null;
         seen.add(c.platform);
-        return card;
+        return {...c, jobs:jobGroups(c.rows), logo:byVendor ? 'v:'+c.slug : 'p:'+c.platform, mark};
       });
     },
     reading(){
@@ -146,21 +147,21 @@ export default {
     },
     // The scan light moves several times a second while the judge reads: set on the element, not
     // through a reactive field, so it does not re-render every tile on every step.
-    scanTo(slug){
+    scanTo(key){
       this.els[this.scanned]?.classList.remove('scan');
-      this.scanned=slug;
-      this.els[slug]?.classList.add('scan');
+      this.scanned=key;
+      this.els[key]?.classList.add('scan');
     },
     // The answer panel scrolls its landed tiles along; one re-seat per frame, however fast it scrolls.
     onPanelScroll(){
       if(this.scrollRaf) return;
       this.scrollRaf=requestAnimationFrame(()=>{ this.scrollRaf=0; this.place(false); });
     },
-    tileRef(slug, el){
-      if(!el){ delete this.els[slug]; return; }
-      if(this.els[slug]===el) return;
-      this.els[slug]=el;
-      const pose=this.pile?.poseOf(slug);
+    tileRef(key, el){
+      if(!el){ delete this.els[key]; return; }
+      if(this.els[key]===el) return;
+      this.els[key]=el;
+      const pose=this.pile?.poseOf(key);
       if(pose){ el.style.transform=poseTransform(pose, this.size); el.style.visibility='visible'; }
     },
     // Tiles in the pile can be picked up and thrown; a press that barely moves is a click and
@@ -208,20 +209,22 @@ export default {
       }
       this.$nextTick(()=>this.place(false));
     },
-    // The answer arrived: each fitting platform's tile leaves the pile from where it lies and flies
-    // to the logo slot of its card.
+    // The answer arrived: each fitting tile leaves the pile from where it lies and flies to its
+    // place on a card (`cards`: logo and mark).
     land(){
       const slots=this.measureSlots(), flying=[];
       // Every tile to its start pose first, one layout for all of them, then every flight at once.
-      this.cards.forEach((c,i)=>{ for(const slug of this.byVendor ? ['v:'+c.slug, c.lands && 'p:'+c.platform] : ['p:'+c.platform]){
-        const el=this.els[slug]; if(!slug || !el || !slots[slug] || this.landed.includes(slug)) continue;
-        const pose=this.pile.remove(slug);
-        const from=pose || {x:slots[slug].x, y:this.$refs.stage.clientHeight, angle:0};
-        el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
-        el.style.visibility='visible';
-        flying.push([el, i]);
-        this.landed.push(slug);
-      } });
+      this.cards.forEach((c,i)=>{
+        for(const key of [c.logo, c.mark]){
+          const el=this.els[key]; if(!key || !el || !slots[key] || this.landed.includes(key)) continue;
+          const pose=this.pile.remove(key);
+          const from=pose || {x:slots[key].x, y:this.$refs.stage.clientHeight, angle:0};
+          el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
+          el.style.visibility='visible';
+          flying.push([el, i]);
+          this.landed.push(key);
+        }
+      });
       if(flying.length) this.$refs.stage.getBoundingClientRect();
       for(const [el, i] of flying){
         el.style.transition=this.reduced ? 'none' : LAND;
@@ -234,13 +237,13 @@ export default {
     place(animated, slots=this.measureSlots()){
       const stage=this.$refs.stage; if(!stage) return;
       const panel=this.$refs.panel?.getBoundingClientRect(), sb=stage.getBoundingClientRect();
-      for(const slug of this.landed){
-        const el=this.els[slug], s=slots[slug]; if(!el || !s) continue;
+      for(const key of this.landed){
+        const el=this.els[key], s=slots[key]; if(!el || !s) continue;
         if(!animated){ el.style.transition='none'; el.style.transitionDelay='0s'; }
         el.style.transform=`translate(${s.x}px,${s.y}px) scale(${s.w/this.size})`;
         const inView=!panel || (s.y+sb.top>=panel.top-4 && s.y+sb.top+s.w<=panel.bottom+4);
         el.style.visibility=inView ? 'visible' : 'hidden';
-        this.slotAt[slug]=s;
+        this.slotAt[key]=s;
       }
     },
     measureSlots(){
@@ -251,10 +254,10 @@ export default {
     },
     // A new question: the last answer's tiles fall back into the pile from where they sat.
     dropLanded(){
-      for(const slug of this.landed){
-        const el=this.els[slug], s=this.slotAt[slug];
+      for(const key of this.landed){
+        const el=this.els[key], s=this.slotAt[key];
         if(el){ el.style.transition='none'; el.style.transitionDelay='0s'; }
-        this.pile.add(slug, s ? s.x : undefined, s ? s.y : undefined);
+        this.pile.add(key, s ? s.x : undefined, s ? s.y : undefined);
       }
       this.landed=[];
     },
@@ -312,11 +315,11 @@ export default {
           <!-- A vendor card: the vendor's tile lands in the logo place, and its platform is named
                under it. A platform card (a bare name): the platform's logo. -->
           <header>
-            <span class="sp-slot sp-slot-lg" :data-slot="byVendor ? 'v:'+c.slug : 'p:'+c.platform" aria-hidden="true"></span>
+            <span class="sp-slot sp-slot-lg" :data-slot="c.logo" aria-hidden="true"></span>
             <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)">
               <span class="sp-vendor">{{c.label}}</span>
               <small v-if="byVendor">
-                <span v-if="c.lands" class="sp-slot" :data-slot="'p:'+c.platform" aria-hidden="true"></span>
+                <span v-if="c.mark" class="sp-slot" :data-slot="c.mark" aria-hidden="true"></span>
                 <span v-else class="sp-slot sp-mark" aria-hidden="true">
                   <img v-if="!platLogoBad[c.platform]" :src="'/logos/platforms/'+c.platform+'.svg'" alt="" @error="platLogoBad[c.platform]=true">
                   <span v-else class="sp-i" :style="{background:platTileBg(c.platform)}">{{platInitial({label:c.platform_label, slug:c.platform})}}</span>
@@ -359,7 +362,7 @@ export default {
   <div class="sp-floor" :style="{height:floor+'px'}" aria-hidden="true"></div>
   <button v-for="p in tiles" :key="p.key" :ref="el=>tileRef(p.key, el)" class="sp-tile" :class="tileClass(p)"
           :style="{width:size+'px', height:size+'px'}" type="button" tabindex="-1" aria-hidden="true" :title="p.label" @pointerdown="press(p, $event)">
-    <img v-if="!platLogoBad[p.key]" :src="p.vendor ? '/logos/'+p.slug+'.svg' : '/logos/platforms/'+p.slug+'.svg'" alt="" draggable="false" @error="platLogoBad[p.key]=true">
+    <img v-if="!platLogoBad[p.bad]" :src="p.src" alt="" draggable="false" @error="platLogoBad[p.bad]=true">
     <span v-else class="sp-i" :style="{background:platTileBg(p.slug)}">{{platInitial(p)}}</span>
   </button>
 </div>
@@ -421,9 +424,6 @@ html.sp-lock,html.sp-lock body{overflow:hidden;overscroll-behavior:none}
 .sp-mark{flex:none;box-sizing:border-box;border:1px solid var(--l-line);background:#fff;display:grid;place-items:center;overflow:hidden;border-radius:22%}
 .sp-mark img{width:58%;height:58%;object-fit:contain}
 .sp-mark .sp-i{width:100%;height:100%;display:grid;place-items:center;color:#fff;font-weight:600;font-size:9px}
-.sp-logo{width:40px;height:40px;border-radius:10px}
-.sp-logo img{width:64%;height:64%}
-.sp-logo .sp-i{font-size:inherit}
 .sp-slot{flex:none;width:18px;height:18px}
 .sp-slot-lg{width:40px;height:40px}
 .sp-plat{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit;color:var(--l-ink);cursor:pointer;
