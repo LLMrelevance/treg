@@ -25,11 +25,28 @@ export default {
   data(){ return { text:'', examples:EXAMPLES, size:48, floor:220, reduced:false, landed:[], dragging:null, flung:null } },
   computed: {
     platforms(){ return this.plats.list.filter(p=>(p.category||'Other')!=='Other'); },
-    // One card per platform the answer landed on, best fit first; each lists its jobs.
+    // A described job is answered by vendor: one card per vendor, best fit first, under the
+    // vendor's own logo, listing the jobs that vendor sells here. A bare name ("google") asks what
+    // is on those platforms, so it is answered by platform, each card listing its jobs.
+    byVendor(){ return this.find.verdict!=='name'; },
+    // Every card names one platform; the first card on a platform is where that platform's tile
+    // lands (`lands`), later ones show a still copy of it.
     cards(){
       if(this.find.phase!=='done') return [];
-      return groupBest(this.findGroups, this.find.verdict, g=>g.platform,
-        (g, slug)=>({slug, label:this.platShort(g.platform_label||g.platform)}), 'groups').slice(0,12);
+      const jobsOf=rows=>groupBest(rows, this.find.verdict, r=>(r.capability||r.id)+'|'+r.platform,
+        (r, key)=>({key, label:r.capability_description||r.name, platform:r.platform}), 'rows');
+      const cards=this.byVendor
+        ? groupBest(this.find.rows, this.find.verdict, r=>r.provider,
+            (r, slug)=>({slug, label:r.provider_display||r.provider, platform:r.platform,
+              platform_label:this.platShort(r.platform_label||r.platform)}), 'rows')
+        : groupBest(this.find.rows, this.find.verdict, r=>r.platform,
+            (r, slug)=>({slug, label:this.platShort(r.platform_label||r.platform), platform:slug}), 'rows');
+      const seen=new Set();
+      return cards.slice(0,12).map(c=>{
+        const card={...c, jobs:jobsOf(c.rows), lands:!seen.has(c.platform)};
+        seen.add(c.platform);
+        return card;
+      });
     },
     reading(){ return this.findBusy ? new Set(this.findCandidatePlatforms) : new Set(); },
     readingList(){ return this.platforms.map(p=>p.slug).filter(s=>this.reading.has(s)); },
@@ -180,13 +197,14 @@ export default {
       const slots=this.measureSlots(), flying=[];
       // Every tile to its start pose first, one layout for all of them, then every flight at once.
       this.cards.forEach((c,i)=>{
-        const el=this.els[c.slug]; if(!el || !slots[c.slug] || this.landed.includes(c.slug)) return;
-        const pose=this.pile.remove(c.slug);
-        const from=pose || {x:slots[c.slug].x, y:this.$refs.stage.clientHeight, angle:0};
+        const slug=c.platform;
+        const el=this.els[slug]; if(!c.lands || !el || !slots[slug] || this.landed.includes(slug)) return;
+        const pose=this.pile.remove(slug);
+        const from=pose || {x:slots[slug].x, y:this.$refs.stage.clientHeight, angle:0};
         el.style.transition='none'; el.style.transform=poseTransform(from, this.size);
         el.style.visibility='visible';
         flying.push([el, i]);
-        this.landed.push(c.slug);
+        this.landed.push(slug);
       });
       if(flying.length) this.$refs.stage.getBoundingClientRect();
       for(const [el, i] of flying){
@@ -228,6 +246,12 @@ export default {
       return {read:this.reading.has(p.slug), landed:this.landed.includes(p.slug), held:this.dragging===p.slug || this.flung===p.slug,
         dim:(this.findBusy && !this.reading.has(p.slug)) || (this.find.phase==='done' && this.cards.length && !this.landed.includes(p.slug))};
     },
+    providerCount(g){ return new Set(g.rows.map(r=>r.provider)).size; },
+    // A later vendor card on a platform whose tile already landed on an earlier card.
+    stillTile(slug){
+      const p=this.platforms.find(x=>x.slug===slug);
+      return p || {slug, label:slug};
+    },
     pct(p){ return p==null ? '' : Math.round(p*100)+'%'; },
   },
 }
@@ -268,19 +292,34 @@ export default {
       </div>
       <div class="sp-cards">
         <article v-for="c in cards" :key="c.slug" class="sp-card" :class="{weak:findWeak(c)}">
-          <header>
-            <span class="sp-slot" :data-slot="c.slug" aria-hidden="true"></span>
-            <button class="sp-plat" type="button" @click="findGoDashboard(c.slug)">{{c.label}}</button>
+          <header v-if="!byVendor">
+            <span class="sp-slot sp-slot-lg" :data-slot="c.platform" aria-hidden="true"></span>
+            <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)"><span class="sp-vendor">{{c.label}}</span></button>
+          </header>
+          <header v-else>
+            <span class="sp-logo" aria-hidden="true">
+              <img v-if="!platLogoBad['v:'+c.slug]" :src="'/logos/'+c.slug+'.svg'" alt="" @error="platLogoBad['v:'+c.slug]=true">
+              <span v-else class="sp-i" :style="{background:platTileBg(c.slug)}">{{c.label.slice(0,1).toUpperCase()}}</span>
+            </span>
+            <button class="sp-plat" type="button" @click="findGoDashboard(c.platform)">
+              <span class="sp-vendor">{{c.label}}</span>
+              <small>
+                <span v-if="c.lands" class="sp-slot" :data-slot="c.platform" aria-hidden="true"></span>
+                <span v-else class="sp-slot sp-still" aria-hidden="true">
+                  <img v-if="!platLogoBad[c.platform]" :src="'/logos/platforms/'+c.platform+'.svg'" alt="" @error="platLogoBad[c.platform]=true">
+                  <span v-else class="sp-i" :style="{background:platTileBg(c.platform)}">{{platInitial(stillTile(c.platform))}}</span>
+                </span>{{c.platform_label}}</small></button>
             <span v-if="c.p!=null" class="sp-fit">{{pct(c.p)}}</span>
           </header>
           <ul>
-            <li v-for="g in c.groups.slice(0,3)" :key="g.key">
+            <li v-for="g in c.jobs.slice(0,3)" :key="g.key">
               <button type="button" @click="findGoDashboard(g.platform)" :title="g.rows.map(r=>r.id).join(', ')">
                 <span class="sp-job">{{g.label}}</span>
-                <span class="sp-m">{{g.rows.length}} provider{{g.rows.length===1?'':'s'}}<template v-if="findPrice(g)"> · {{findPrice(g)}}</template></span>
+                <span class="sp-m"><template v-if="!byVendor">{{providerCount(g)}} provider{{providerCount(g)===1?'':'s'}}</template><template v-if="!byVendor && findPrice(g)"> · </template>{{findPrice(g)}}</span>
               </button>
             </li>
           </ul>
+          <span v-if="c.jobs.length>3" class="sp-more">+{{c.jobs.length-3}} more</span>
         </article>
       </div>
     </div>
@@ -367,9 +406,21 @@ html.sp-lock,html.sp-lock body{overflow:hidden;overscroll-behavior:none}
 .sp-card:hover{box-shadow:var(--l-shadow-lg)}
 @keyframes sp-in{from{opacity:0}}
 .sp-card header{display:flex;align-items:center;gap:10px}
-.sp-slot{flex:none;width:40px;height:40px}
-.sp-plat{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit;font-size:15px;font-weight:550;color:var(--l-ink);cursor:pointer}
-.sp-plat:hover{text-decoration:underline;text-underline-offset:3px}
+.sp-logo{flex:none;width:40px;height:40px;box-sizing:border-box;border-radius:10px;border:1px solid var(--l-line);background:#fff;
+  display:grid;place-items:center;overflow:hidden}
+.sp-logo img{width:64%;height:64%;object-fit:contain}
+.sp-logo .sp-i{width:100%;height:100%;display:grid;place-items:center;color:#fff;font-weight:600}
+.sp-slot{flex:none;width:18px;height:18px}
+.sp-slot-lg{width:40px;height:40px}
+.sp-plat{flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit;color:var(--l-ink);cursor:pointer;
+  display:flex;flex-direction:column;gap:1px}
+.sp-vendor{font-size:15px;font-weight:550;overflow-wrap:anywhere}
+.sp-plat small{font-size:12px;color:var(--l-muted);display:flex;align-items:center;gap:6px}
+.sp-plat:hover .sp-vendor{text-decoration:underline;text-underline-offset:3px}
+.sp-still{box-sizing:border-box;border-radius:22%;border:1px solid var(--l-line);background:#fff;display:grid;place-items:center;overflow:hidden}
+.sp-still img{width:58%;height:58%;object-fit:contain}
+.sp-still .sp-i{width:100%;height:100%;display:grid;place-items:center;color:#fff;font-weight:600;font-size:9px}
+.sp-more{font-size:12px;color:var(--l-muted)}
 .sp-fit{font-family:var(--mono);font-size:11.5px;padding:2px 9px;border-radius:999px;background:var(--l-inverse);color:var(--l-inverse-ink);font-variant-numeric:tabular-nums}
 .sp-card.weak .sp-fit{background:none;color:var(--l-muted);border:1px solid var(--l-line2)}
 .sp-card ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}

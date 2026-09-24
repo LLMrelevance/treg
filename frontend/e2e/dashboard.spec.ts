@@ -180,9 +180,10 @@ test('the public search page lands the fitting platforms in their cards', async 
   await page.goto('/search')
   await expect(page.getByRole('heading', { name: /What does your agent/ })).toBeVisible()
   await expect(page.locator('.sp-tile').first()).toBeVisible()
+  const example = await page.getByLabel('Describe the job').getAttribute('placeholder')
   await page.getByLabel('Describe the job').press('Enter')                          // empty: the placeholder is the query
-  await expect(page.getByLabel('Describe the job')).toHaveValue(/Find the emails of CTOs/)
-  await expect(page).toHaveURL(/\/search\?q=Find/)
+  await expect(page.getByLabel('Describe the job')).toHaveValue(example || '')
+  await expect(page).toHaveURL(/\/search\?q=./)
   await page.getByLabel('Describe the job').fill('why is my blog losing google traffic')
   await page.getByLabel('Describe the job').press('Enter')
   await expect(page.getByRole('button', { name: 'Google Search Console' })).toBeVisible()
