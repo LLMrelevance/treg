@@ -256,6 +256,11 @@ on by default), cheapest first, within `X-Treg-Route-Max-Cost` (default $1 per c
 attempt settles at its real price and misses on per-success providers are free. `X-Treg-Route-Waterfall: 0`
 stops at the first miss. `X-Treg-Route-Prefer` / `X-Treg-Route-Exclude` name providers. A filter the serving provider could not apply is named in `X-Treg-Ignored-Filters` (and `_treg.ignored_filters`); `X-Treg-Route-Strict-Filters: 1` refuses such a call with a 422 (unbilled) instead. Vendor endpoints are still relayed verbatim; only `treg.*` rows model an API.
 
+When a routed child is asynchronous, treg submits and polls it internally for up to 60 seconds. If
+it is still processing, the route returns HTTP 202 with `_treg.outcome: "pending"`, the child call
+reference and poll descriptor, `reserved_micro`, and `charged_micro: null`. That attempt stops the
+waterfall; it is not safe to start another billable provider while the first may still complete.
+
 ## Calling
 
 | Command | Options | What it does |

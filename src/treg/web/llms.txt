@@ -240,6 +240,10 @@ apply a filter you sent, the answer says so in `X-Treg-Ignored-Filters` and `_tr
 (post-filter the rows, or say why they are off); send `X-Treg-Route-Strict-Filters: 1` to be refused
 with a 422 (nothing charged) instead of getting the looser answer. `catalog_get` on the routed id
 shows the ranked plan and prices before you spend.
+An async child is submitted and polled internally for up to 60 seconds. If it is still running,
+treg returns HTTP 202 with `_treg.outcome: pending`, its call reference and poll descriptor,
+`reserved_micro`, and `charged_micro: null`; do not retry or start another provider, because the
+existing task may still complete and charge.
 A found contact is not a confirmed one: an email or phone find is the provider's best match, and
 only `output.verified: true` means it checked the mailbox. Otherwise the answer carries
 `_treg.advice` naming the verify step (`treg.people.email.verify`, a fraction of a cent) — run it

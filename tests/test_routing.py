@@ -1394,7 +1394,7 @@ async def test_lusha_is_the_last_rung_of_the_phone_waterfall_and_settles_on_its_
     get_settings.cache_clear()
     routed = "treg.people.phone.find"
     plan = (await clients.get(f"/catalog/endpoints/{routed}")).json()["routing"]["plan"]
-    assert plan[-1]["endpoint_id"] == "lusha.people.phone.find" and len(plan) == 12, [c["endpoint_id"] for c in plan]
+    assert plan[-1]["endpoint_id"] == "lusha.people.phone.find" and len(plan) == 13, [c["endpoint_id"] for c in plan]
     def misses():
         return {"aviato": [(404, {"message": "Not Found"})], "tomba": [(200, {"data": {"e164_format": None}})],
                 "leadmagic": [(200, {"mobile_number": None, "credits_consumed": 0})],

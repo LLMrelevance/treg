@@ -175,6 +175,10 @@ Notes:
     still sent to the others, and the answer names it in `X-Treg-Ignored-Filters` / `_treg.ignored_filters`
     — post-filter, or send `X-Treg-Route-Strict-Filters: 1` to get a 422 (unbilled) instead of a looser
     answer. `catalog_get treg.people.email.find` shows the plan and prices.
+    An async child is submitted and polled internally for up to 60 seconds. If it is still running,
+    treg returns HTTP 202 with `_treg.outcome: pending`, its call reference and poll descriptor,
+    `reserved_micro`, and `charged_micro: null`; do not retry or start another provider, because the
+    existing task may still complete and charge.
   - **A found contact is not a confirmed one.** An email or phone find returns the provider's best
     match; only `output.verified: true` means it checked the mailbox. When it is not, the answer
     carries `_treg.advice` naming the verify step (`treg.people.email.verify`, a fraction of a cent)

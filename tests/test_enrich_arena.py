@@ -78,6 +78,65 @@ async def test_aiark_email_finder_enters_the_enrichment_arena(clients, monkeypat
     get_settings.cache_clear()
 
 
+async def test_wiza_async_email_finder_completes_inside_arena(clients, monkeypatch):
+    from treg.config import get_settings
+
+    monkeypatch.setenv("TREG_PLATFORM_KEY_WIZA", "PLATFORM-WIZA")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "wiza")
+    get_settings.cache_clear()
+    endpoint = arena.catalog_store.load().by_id["wiza.people.email.find"]
+    monkeypatch.setitem(endpoint["async"], "interval", 0.01)
+    seen = []
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "wiza": [
+            (200, {"data": {"id": 777, "status": "queued"}}),
+            (200, {"data": {"id": 777, "status": "finished", "name": "Test Person",
+                            "email": "test@example.com", "email_status": "valid",
+                            "credits": {"api_credits": {"total": 2}}}}),
+        ],
+    }, seen))
+    quote = await plan(clients, providers=["wiza"])
+    assert quote["providers"] == [{
+        "provider": "wiza", "endpoint_id": "wiza.people.email.find", "tier": "platform",
+        "price_type": "per_success", "estimate_micro": 75_000,
+    }]
+    result = await finish(clients, quote)
+    attempt = result["results"][0]
+    assert attempt["state"] == "hit"
+    assert attempt["output"]["email"] == "test@example.com"
+    assert attempt["reserved_micro"] == 75_000
+    assert attempt["charged_micro"] == 50_000
+    assert [call[1] for call in seen] == ["POST", "GET"]
+    get_settings.cache_clear()
+
+
+def test_wiza_async_finders_are_visible_in_public_arena_tasks():
+    tasks = {task["id"]: task for task in arena.public_tasks()}
+    assert "wiza" in tasks["people.email.find"]["providers"]
+    assert "wiza" in tasks["people.phone.find"]["providers"]
+
+
+async def test_wiza_arena_timeout_is_shown_as_pending_with_reservation(clients, monkeypatch):
+    from treg.config import get_settings
+
+    monkeypatch.setenv("TREG_PLATFORM_KEY_WIZA", "PLATFORM-WIZA")
+    monkeypatch.setenv("TREG_PLATFORM_PROVIDERS", "wiza")
+    monkeypatch.setattr(arena, "RUN_SECONDS", 0.1)
+    get_settings.cache_clear()
+    seen = []
+    monkeypatch.setattr(service, "relay", _relay_by_provider({
+        "wiza": [(200, {"data": {"id": 778, "status": "queued"}})],
+    }, seen))
+    result = await finish(clients, await plan(clients, mode="waterfall", providers=["wiza"]))
+    attempt = result["results"][0]
+    assert attempt["state"] == "pending"
+    assert attempt["reserved_micro"] == 75_000
+    assert attempt["charged_micro"] is None and result["charge_pending"] is True
+    assert attempt["call_ref"] and attempt["task_id"] == "778"
+    assert len(seen) == 1
+    get_settings.cache_clear()
+
+
 def test_limadata_verified_adapters_enter_the_enrichment_arena():
     seen = {}
     for task in arena.public_tasks():

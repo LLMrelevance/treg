@@ -492,7 +492,9 @@ def _load_routing(directory: Path, by_id: dict[str, dict]):
     from .routing.contracts import load_routing
 
     def _example(ep: dict):
-        name = ep.get("example_file")
+        # Async routing adapts the terminal poll document, not the submission acknowledgement.
+        # The ordinary example remains the public "what this endpoint returns immediately" body.
+        name = ep.get("terminal_example_file") if ep.get("async") else ep.get("example_file")
         if not name:
             return None
         try:
@@ -718,6 +720,7 @@ def _normalize(raw: dict, provider: str, directory: Path) -> dict:
         "superseded_by": str(raw.get("superseded_by") or "").strip(),
         "docs_url": raw.get("docs_url") or "",
         "example_file": _example_file(raw, directory),
+        "terminal_example_file": _declared_example_file(raw.get("terminal_example_response"), directory),
     }
 
 
@@ -728,6 +731,12 @@ def _example_file(raw: dict, directory: Path) -> str | None:
     data file must never be able to point the server at an arbitrary path.
     """
     declared = raw.get("example_response") or f"{EXAMPLES_DIRNAME}/{raw['id']}.json"
+    return _declared_example_file(declared, directory)
+
+
+def _declared_example_file(declared: object, directory: Path) -> str | None:
+    if not declared:
+        return None
     name = Path(str(declared)).name
     if not name.endswith(".json"):
         return None
